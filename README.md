@@ -26,6 +26,7 @@ Usage details are documented on my site.
 - `Panorama Stickers`: Place, scale, and rotate sticker images onto an ERP canvas and output a composited conditioning panorama.
 - `Panorama Cutout`: Extract a framed perspective view from an ERP image using a saved camera/frame state.
 - `Panorama Preview`: Show an interactive panorama preview inside ComfyUI without duplicating the default image preview.
+- `Panorama Seam Prep`: Shift an ERP seam into the center and generate hard / blurred vertical seam masks for seam-focused inpainting.
 
 ## Workflow
 
