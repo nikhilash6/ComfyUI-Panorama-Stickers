@@ -122,22 +122,36 @@ def _load_diffusers_runtime(progress_cb=None):
             pipe = pipe.to(device)
 
         lora_source = str(config.LORA_SOURCE).strip()
+        lora_weight_name = str(getattr(config, "LORA_WEIGHT_NAME", "") or "").strip()
         lora_adapter = str(config.LORA_ADAPTER).strip() or "pano_demo"
         if lora_source:
             if "\n" in lora_source or "\r" in lora_source:
                 raise RuntimeError(
                     "LORA_SOURCE is malformed. Use a single-line Hugging Face repo ID or a local directory."
                 )
+            load_kwargs = {"adapter_name": lora_adapter}
+            if lora_weight_name:
+                load_kwargs["weight_name"] = lora_weight_name
             try:
-                pipe.load_lora_weights(lora_source, adapter_name=lora_adapter, local_files_only=local_only)
+                pipe.load_lora_weights(lora_source, local_files_only=local_only, **load_kwargs)
             except TypeError:
                 try:
-                    pipe.load_lora_weights(lora_source, adapter_name=lora_adapter)
+                    pipe.load_lora_weights(lora_source, **load_kwargs)
                 except Exception as exc:
+                    if "PEFT backend is required" in str(exc):
+                        raise RuntimeError(
+                            "PEFT backend is required to load LoRA weights. "
+                            "Install the pinned demo requirements, including peft."
+                        ) from exc
                     raise RuntimeError(
                         f"Failed to load LoRA weights from '{lora_source}'."
                     ) from exc
             except Exception as exc:
+                if "PEFT backend is required" in str(exc):
+                    raise RuntimeError(
+                        "PEFT backend is required to load LoRA weights. "
+                        "Install the pinned demo requirements, including peft."
+                    ) from exc
                 raise RuntimeError(
                     f"Failed to load LoRA weights from '{lora_source}'."
                 ) from exc
@@ -147,6 +161,7 @@ def _load_diffusers_runtime(progress_cb=None):
             "torch": torch,
             "device": device,
             "lora_source": lora_source,
+            "lora_weight_name": lora_weight_name,
             "lora_adapter": lora_adapter,
         }
         return _DIFFUSERS_RUNTIME

@@ -6,8 +6,10 @@ from __future__ import annotations
 # diffusers-format model directory, but not a single .safetensors file.
 MODEL_ID = "black-forest-labs/FLUX.2-klein-base-4B"
 
-# Leave empty until your public LoRA repo exists, or set a repo ID / local path.
-LORA_SOURCE = ""
+# Use a Hugging Face repo ID or local directory. Set LORA_WEIGHT_NAME when the
+# repo contains multiple files or the filename is not the default adapter name.
+LORA_SOURCE = "nomadoor/flux-2-klein-4B-360-erp-outpaint-lora"
+LORA_WEIGHT_NAME = "flux-2-klein-4B-360-erp-outpaint-lora_V1.safetensors"
 LORA_ADAPTER = "pano_demo"
 
 # Set True only when MODEL_ID/LORA_SOURCE point to local cached paths.

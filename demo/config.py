@@ -14,7 +14,8 @@ DEFAULT_LORA_STRENGTH = 0.9
 # Default to the public Hugging Face repo. Weights are cached by huggingface_hub
 # outside this git repo on first use.
 MODEL_ID = "black-forest-labs/FLUX.2-klein-base-4B"
-LORA_SOURCE = ""
+LORA_SOURCE = "nomadoor/flux-2-klein-4B-360-erp-outpaint-lora"
+LORA_WEIGHT_NAME = "flux-2-klein-4B-360-erp-outpaint-lora_V1.safetensors"
 LORA_ADAPTER = "pano_demo"
 LOCAL_FILES_ONLY = False
 
