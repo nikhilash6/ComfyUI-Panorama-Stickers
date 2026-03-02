@@ -26,7 +26,7 @@ Usage details are documented here:
 
 ## Demo
 
-- <video controls src="https://i.gyazo.com/748e50cd59976f45acabd7cf39d45bc6.mp4" title="Demo video"></video>
+- [Watch the demo video (MP4)](https://i.gyazo.com/748e50cd59976f45acabd7cf39d45bc6.mp4)
 
 ## Nodes
 
