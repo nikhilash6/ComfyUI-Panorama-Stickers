@@ -26,7 +26,7 @@ Usage details are documented here:
 
 ## Demo
 
-- [Watch the demo video (MP4)](https://i.gyazo.com/748e50cd59976f45acabd7cf39d45bc6.mp4)
+https://github.com/user-attachments/assets/bf74e953-8ceb-4c7f-afa2-1c805f12c7af
 
 ## Nodes
 
