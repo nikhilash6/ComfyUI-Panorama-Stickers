@@ -37,8 +37,8 @@ Usage details are documented here:
 
 ## Workflow
 
-- [flux-2-klein-4B-360-erp-outpaint.json](./flux-2-klein-4B-360-erp-outpaint.json)
-- [flux-2-klein-9B-360-erp-outpaint.json](./flux-2-klein-9B-360-erp-outpaint.json)
+- [flux-2-klein-4B-360-erp-outpaint.json](./example_workflows/flux-2-klein-4B-360-erp-outpaint.json)
+- [flux-2-klein-9B-360-erp-outpaint.json](./example_workflows/flux-2-klein-9B-360-erp-outpaint.json)
 
 ## License
 
