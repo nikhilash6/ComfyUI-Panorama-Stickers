@@ -21,6 +21,10 @@ Put procedures, commands, and checklists in README/docs/ (or per-folder docs).
 4) **Repo boundaries**
 - `ops/` is managed separately. Do not modify or depend on it unless explicitly instructed.
 
+5) **Node schema**
+- Prefer **ComfyUI V3 node schema** (`io.ComfyNode` / `io.Schema`) for any node with UI or dynamic input behavior.
+- Do not add new legacy `INPUT_TYPES` nodes unless there is a documented compatibility reason.
+
 ## Stop & ask before proceeding
 
 - Changing **node ids**, **port meaning**, or **parameter formats**.
