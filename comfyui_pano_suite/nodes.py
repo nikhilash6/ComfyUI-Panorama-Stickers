@@ -4,6 +4,7 @@ import logging
 import numpy as np
 import torch
 import torch.nn.functional as F
+from comfy_api.latest import io
 
 try:
     import nodes
@@ -11,7 +12,12 @@ except ImportError:
     nodes = None
 
 from .core.cutout import cutout_from_erp
-from .core.math import calculate_output_dimensions, calculate_dimensions_from_megapixels, finite_float, finite_int
+from .core.math import (
+    calculate_dimensions_from_megapixels,
+    calculate_output_dimensions,
+    finite_float,
+    finite_int,
+)
 from .core.state import merge_state
 from .core.stickers import compose_stickers_to_erp
 
@@ -20,53 +26,46 @@ def _save_input_preview(images, key="pano_input_images"):
     if nodes is None or images is None:
         return {}
     try:
-        # PreviewImage().save_images(images) returns {"ui": {"images": [...]}}
         res = nodes.PreviewImage().save_images(images)
         if "ui" in res and "images" in res["ui"]:
             return {key: res["ui"]["images"]}
     except Exception:
-        logging.getLogger(__name__).exception(f"Failed to save preview image for {key}")
+        logging.getLogger(__name__).exception("Failed to save preview image for %s", key)
     return {}
 
 
-class PanoramaStickersNode:
-    CATEGORY = "Panorama Suite"
-    FUNCTION = "run"
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("cond_erp",)
-    OUTPUT_NODE = True
+class PanoramaStickersNode(io.ComfyNode):
     MAX_OUTPUT_SIDE = 4096
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "output_preset": (
-                    ["1024 x 512", "2048 x 1024", "4096 x 2048"],
-                    {"default": "2048 x 1024"},
+    def define_schema(cls):
+        return io.Schema(
+            node_id="PanoramaStickers",
+            display_name="Panorama Stickers",
+            category="Panorama Suite",
+            inputs=[
+                io.Combo.Input(
+                    "output_preset",
+                    options=["1024 x 512", "2048 x 1024", "4096 x 2048"],
+                    default="2048 x 1024",
                 ),
-                "bg_color": ("STRING", {"default": "#00ff00", "multiline": False}),
-                "state_json": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": False,
-                        "dynamicPrompts": False,
-                    },
+                io.String.Input("bg_color", default="#00ff00", multiline=False),
+                io.String.Input(
+                    "state_json",
+                    default="",
+                    multiline=False,
+                    dynamic_prompts=False,
                 ),
-            },
-            "optional": {
-                "bg_erp": ("IMAGE",),
-            },
-            "hidden": {
-                "unique_id": "UNIQUE_ID",
-            },
-        }
+                io.Image.Input("bg_erp", optional=True),
+            ],
+            outputs=[io.Image.Output("cond_erp", display_name="cond_erp")],
+            hidden=[io.Hidden.unique_id],
+            is_output_node=True,
+        )
 
     @staticmethod
     def _parse_output_preset(v, max_val=4096):
         if isinstance(v, str):
-            # Accept labels like "2048 x 1024" and raw numeric strings.
             head = v.split("x", 1)[0].strip()
             val = int(float(head))
         else:
@@ -88,15 +87,13 @@ class PanoramaStickersNode:
             return "#00ff00"
         return f"#{s.lower()}"
 
-    def run(self, output_preset, bg_color, state_json, unique_id=None, bg_erp=None):
-        out_w = self._parse_output_preset(output_preset, max_val=self.MAX_OUTPUT_SIDE)
-        bg_hex = self._normalize_hex_color(bg_color)
+    @classmethod
+    def execute(cls, output_preset, bg_color, state_json, bg_erp=None):
+        out_w = cls._parse_output_preset(output_preset, max_val=cls.MAX_OUTPUT_SIDE)
+        bg_hex = cls._normalize_hex_color(bg_color)
         state = merge_state(state_in=None, internal_state=state_json, fallback_preset=out_w, fallback_bg=bg_hex)
         state["output_preset"] = out_w
         state["bg_color"] = bg_hex
-
-        w = out_w
-        h = w // 2
 
         bg_np = None
         if bg_erp is not None:
@@ -104,53 +101,42 @@ class PanoramaStickersNode:
 
         out = compose_stickers_to_erp(
             state=state,
-            output_w=w,
-            output_h=h,
+            output_w=out_w,
+            output_h=out_w // 2,
             bg_erp=bg_np,
             base_dir=Path.cwd(),
             quality="export",
         )
 
         out_t = torch.from_numpy(out)[None, ...]
-
-        ui_ret = {}
-        if bg_erp is not None:
-            ui_ret = _save_input_preview(bg_erp)
-
-        return {"ui": ui_ret, "result": (out_t,)}
+        ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
+        return io.NodeOutput(out_t, ui=ui_ret)
 
 
-class PanoramaCutoutNode:
-    CATEGORY = "Panorama Suite"
-    FUNCTION = "run"
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("rect_image",)
-    OUTPUT_NODE = True
+class PanoramaCutoutNode(io.ComfyNode):
     MAX_OUTPUT_SIDE = 4096
     DEFAULT_LONG_SIDE = 1024
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "erp_image": ("IMAGE",),
-                "state_json": (
-                    "STRING",
-                    {
-                        "default": "",
-                        "multiline": True,
-                        "dynamicPrompts": False,
-                    },
+    def define_schema(cls):
+        return io.Schema(
+            node_id="PanoramaCutout",
+            display_name="Panorama Cutout",
+            category="Panorama Suite",
+            inputs=[
+                io.Image.Input("erp_image"),
+                io.String.Input(
+                    "state_json",
+                    default="",
+                    multiline=True,
+                    dynamic_prompts=False,
                 ),
-                "output_megapixels": (
-                    "FLOAT",
-                    {"default": 1.0, "min": 0.01, "step": 0.05},
-                ),
-            },
-            "hidden": {
-                "unique_id": "UNIQUE_ID",
-            },
-        }
+                io.Float.Input("output_megapixels", default=1.0, min=0.01, step=0.05),
+            ],
+            outputs=[io.Image.Output("rect_image", display_name="rect_image")],
+            hidden=[io.Hidden.unique_id],
+            is_output_node=True,
+        )
 
     @classmethod
     def _derive_output_size_from_fov(cls, hfov_val, vfov_val):
@@ -161,13 +147,8 @@ class PanoramaCutoutNode:
             max_side=cls.MAX_OUTPUT_SIDE,
         )
 
-    def run(
-        self,
-        erp_image,
-        state_json,
-        output_megapixels=1.0,
-        unique_id=None,
-    ):
+    @classmethod
+    def execute(cls, erp_image, state_json, output_megapixels=1.0):
         output_megapixels = max(0.01, finite_float(output_megapixels, 1.0))
         state = merge_state(state_in=None, internal_state=state_json)
         shots = state.get("shots", []) if isinstance(state, dict) else []
@@ -189,18 +170,14 @@ class PanoramaCutoutNode:
         ow_raw = finite_int(shot.get("out_w", 1024), 1024)
         oh_raw = finite_int(shot.get("out_h", 1024), 1024)
 
-        # Logic: If out_w/out_h are explicitly customized (non-default/non-square/non-zero), use them.
-        # Otherwise, derive from megapixels target.
-        # Default in JSON is often 1024x1024.
-        use_megapixels = (ow_raw <= 0 or oh_raw <= 0 or (ow_raw == 1024 and oh_raw == 1024))
-
+        use_megapixels = ow_raw <= 0 or oh_raw <= 0 or (ow_raw == 1024 and oh_raw == 1024)
         if use_megapixels:
             ow, oh = calculate_dimensions_from_megapixels(
-                output_megapixels, hfov, vfov, max_side=self.MAX_OUTPUT_SIDE
+                output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE
             )
         else:
-            ow = int(np.clip(ow_raw, 8, self.MAX_OUTPUT_SIDE))
-            oh = int(np.clip(oh_raw, 8, self.MAX_OUTPUT_SIDE))
+            ow = int(np.clip(ow_raw, 8, cls.MAX_OUTPUT_SIDE))
+            oh = int(np.clip(oh_raw, 8, cls.MAX_OUTPUT_SIDE))
 
         src = None
         try:
@@ -227,17 +204,14 @@ class PanoramaCutoutNode:
             elif c > 3:
                 src = src[..., :3]
 
-        ui_ret = {}
-        if erp_image is not None:
-            ui_ret = _save_input_preview(erp_image)
+        ui_ret = _save_input_preview(erp_image) if erp_image is not None else {}
 
         try:
             out = cutout_from_erp(src, yaw, pitch, hfov, vfov, roll, ow, oh)
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
             out_t = torch.from_numpy(out)[None, ...]
-
-            return {"ui": ui_ret, "result": (out_t,)}
+            return io.NodeOutput(out_t, ui=ui_ret)
         except Exception as ex:
             print(f"[PanoramaCutout] run failed, fallback passthrough: {ex}")
             try:
@@ -246,37 +220,33 @@ class PanoramaCutoutNode:
                     t = t.permute(0, 3, 1, 2)
                     t = F.interpolate(t, size=(oh, ow), mode="bilinear", align_corners=False)
                     t = t.permute(0, 2, 3, 1).clamp(0.0, 1.0)
-                    return {"ui": ui_ret, "result": (t[:1],)}
+                    return io.NodeOutput(t[:1], ui=ui_ret)
             except Exception as ex2:
                 print(f"[PanoramaCutout] fallback resize failed: {ex2}")
-            return {"ui": ui_ret, "result": (torch.zeros((1, oh, ow, 3), dtype=torch.float32),)}
+            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), ui=ui_ret)
 
 
-class PanoramaPreviewNode:
-    CATEGORY = "Panorama Suite"
-    FUNCTION = "run"
-    RETURN_TYPES = ()
-    OUTPUT_NODE = True
+class PanoramaPreviewNode(io.ComfyNode):
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="PanoramaPreview",
+            display_name="Panorama Preview",
+            category="Panorama Suite",
+            inputs=[io.Image.Input("erp_image")],
+            outputs=[],
+            is_output_node=True,
+        )
 
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "erp_image": ("IMAGE",),
-            }
-        }
-
-    def run(self, erp_image):
+    def execute(cls, erp_image):
         ui_ret = {}
         if erp_image is not None:
-            # We use "pano_input_images" to pass the temp preview info to our frontend logic.
-            # We do NOT copy this to "images" to avoid the standard ComfyUI preview widget
-            # from double-rendering the image below our custom interactive preview.
             ui_ret = _save_input_preview(erp_image)
-        return {"ui": ui_ret}
+        return io.NodeOutput(ui=ui_ret)
 
 
-class PanoramaSeamPrepNode:
+class PanoramaSeamPrepNode(io.ComfyNode):
     """
     Prepare an ERP image for seam-focused inpainting.
 
@@ -292,21 +262,30 @@ class PanoramaSeamPrepNode:
     Positive values move the seam band right, negative values move it left.
     """
 
-    CATEGORY = "Panorama Suite"
-    FUNCTION = "run"
-    RETURN_TYPES = ("IMAGE", "MASK", "MASK")
-    RETURN_NAMES = ("image", "mask", "mask_blurred")
-
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "image": ("IMAGE",),
-                "seam_width_px": ("INT", {"default": 64, "min": 1, "max": 2048, "step": 1}),
-                "seam_center_offset_px": ("INT", {"default": 0, "min": -2048, "max": 2048, "step": 1}),
-                "mask_blur_px": ("INT", {"default": 10, "min": 0, "max": 256, "step": 1}),
-            }
-        }
+    def define_schema(cls):
+        return io.Schema(
+            node_id="PanoramaSeamPrep",
+            display_name="Panorama Seam Prep",
+            category="Panorama Suite",
+            description=(
+                "Prepare an ERP image for seam-focused inpainting. "
+                "Expected IMAGE input shape is [B,H,W,C]. "
+                "Outputs are image [B,H,W,C], mask [B,H,W], and blurred mask [B,H,W]. "
+                "Positive seam_center_offset_px moves the seam band right; negative moves it left."
+            ),
+            inputs=[
+                io.Image.Input("image"),
+                io.Int.Input("seam_width_px", default=64, min=1, max=2048, step=1),
+                io.Int.Input("seam_center_offset_px", default=0, min=-2048, max=2048, step=1),
+                io.Int.Input("mask_blur_px", default=10, min=0, max=256, step=1),
+            ],
+            outputs=[
+                io.Image.Output("image", display_name="image"),
+                io.Mask.Output("mask", display_name="mask"),
+                io.Mask.Output("mask_blurred", display_name="mask_blurred"),
+            ],
+        )
 
     @staticmethod
     def _gaussian_kernel_1d(radius: int, dtype: torch.dtype, device: torch.device) -> torch.Tensor:
@@ -336,11 +315,12 @@ class PanoramaSeamPrepNode:
         work = work.view(batch, height, width)
         return work.clamp(0.0, 1.0)
 
-    def run(self, image, seam_width_px=64, seam_center_offset_px=0, mask_blur_px=0):
+    @classmethod
+    def execute(cls, image, seam_width_px=64, seam_center_offset_px=0, mask_blur_px=0):
         if image is None or not hasattr(image, "shape"):
             empty_img = torch.zeros((1, 1, 1, 3), dtype=torch.float32)
             empty_mask = torch.zeros((1, 1, 1), dtype=torch.float32)
-            return (empty_img, empty_mask, empty_mask)
+            return io.NodeOutput(empty_img, empty_mask, empty_mask)
 
         img = image.contiguous().to(dtype=torch.float32)
         if img.ndim == 3:
@@ -350,9 +330,13 @@ class PanoramaSeamPrepNode:
 
         batch, height, width, channels = img.shape
         if width < 1 or height < 1:
-            empty_img = torch.zeros((max(batch, 1), max(height, 1), max(width, 1), max(channels, 3)), dtype=img.dtype, device=img.device)
+            empty_img = torch.zeros(
+                (max(batch, 1), max(height, 1), max(width, 1), max(channels, 3)),
+                dtype=img.dtype,
+                device=img.device,
+            )
             empty_mask = torch.zeros((max(batch, 1), max(height, 1), max(width, 1)), dtype=img.dtype, device=img.device)
-            return (empty_img, empty_mask, empty_mask)
+            return io.NodeOutput(empty_img, empty_mask, empty_mask)
 
         seam_width_px = max(1, int(seam_width_px))
         seam_center_offset_px = int(seam_center_offset_px)
@@ -368,9 +352,9 @@ class PanoramaSeamPrepNode:
         x = torch.arange(width, dtype=img.dtype, device=img.device)
         band = ((x >= (center_x - half_width)) & (x < (center_x + half_width))).to(dtype=img.dtype)
         mask = band.view(1, 1, width).expand(batch, height, width).contiguous()
-        mask_blurred = self._blur_mask(mask, mask_blur_px)
+        mask_blurred = cls._blur_mask(mask, mask_blur_px)
 
-        return (prepared, mask, mask_blurred)
+        return io.NodeOutput(prepared, mask, mask_blurred)
 
 
 NODE_CLASS_MAPPINGS = {
