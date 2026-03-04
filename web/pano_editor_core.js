@@ -4924,6 +4924,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     setDropCue(false);
     window.removeEventListener("keydown", onEscClose, true);
     window.removeEventListener("keydown", onDeleteKey, true);
+    window.removeEventListener("keydown", onUndoRedoKey, true);
     window.removeEventListener("dragenter", onWindowDragEnter, true);
     window.removeEventListener("dragover", onWindowDragOver, true);
     window.removeEventListener("dragleave", onWindowDragLeave, true);
@@ -4966,10 +4967,24 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (!selected) return;
     deleteSelected();
     ev.preventDefault();
-    ev.stopPropagation();
+    ev.stopImmediatePropagation();
+  };
+  const onUndoRedoKey = (ev) => {
+    if (readOnly) return;
+    if (!ev.ctrlKey && !ev.metaKey) return;
+    const key = String(ev.key || "").toLowerCase();
+    const code = String(ev.code || "");
+    if (key !== "z" && code !== "KeyZ") return;
+    const t = ev.target;
+    const tag = (t?.tagName || "").toUpperCase();
+    if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+    restoreHistory(ev.shiftKey ? 1 : -1);
+    ev.preventDefault();
+    ev.stopImmediatePropagation();
   };
   window.addEventListener("keydown", onEscClose, true);
   window.addEventListener("keydown", onDeleteKey, true);
+  window.addEventListener("keydown", onUndoRedoKey, true);
   if (overlay) {
     overlay.addEventListener("pointerdown", (ev) => {
       if (ev.target === overlay) closeEditor();
