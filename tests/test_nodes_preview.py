@@ -2,9 +2,88 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 
 class TestNodesPreview(unittest.TestCase):
     def setUp(self):
+        class _NodeOutput:
+            def __init__(self, *result, ui=None):
+                self.result = result
+                self.ui = ui or {}
+
+        class _Port:
+            def __init__(self, kind, name, optional=False, **kwargs):
+                self.kind = kind
+                self.name = name
+                self.optional = optional
+                self.kwargs = kwargs
+
+        class _PortFactory:
+            def __init__(self, kind):
+                self.kind = kind
+
+            def Input(self, name, optional=False, **kwargs):
+                return _Port(self.kind, name, optional=optional, **kwargs)
+
+            def Output(self, name, **kwargs):
+                return _Port(self.kind, name, optional=False, **kwargs)
+
+        class _Schema:
+            def __init__(self, **kwargs):
+                self.__dict__.update(kwargs)
+                self.inputs = list(kwargs.get("inputs", []))
+                self.outputs = list(kwargs.get("outputs", []))
+                self.hidden = list(kwargs.get("hidden", []))
+                self.is_output_node = bool(kwargs.get("is_output_node", False))
+
+        class _ComfyNode:
+            OUTPUT_NODE = False
+            RETURN_TYPES = ()
+
+            def __init_subclass__(cls, **kwargs):
+                super().__init_subclass__(**kwargs)
+                schema = cls.define_schema() if hasattr(cls, "define_schema") else None
+                cls._schema = schema
+                cls.OUTPUT_NODE = bool(getattr(schema, "is_output_node", False))
+                cls.RETURN_TYPES = tuple(getattr(port, "kind", "") for port in getattr(schema, "outputs", []))
+
+            @classmethod
+            def INPUT_TYPES(cls):
+                schema = getattr(cls, "_schema", None)
+                required = {}
+                optional = {}
+                for port in getattr(schema, "inputs", []):
+                    target = optional if getattr(port, "optional", False) else required
+                    target[port.name] = (port.kind,)
+                out = {}
+                if required:
+                    out["required"] = required
+                if optional:
+                    out["optional"] = optional
+                return out
+
+            def run(self, **kwargs):
+                out = self.execute(**kwargs)
+                if isinstance(out, _NodeOutput):
+                    return {"ui": out.ui, "result": out.result}
+                return {"ui": {}, "result": out if isinstance(out, tuple) else (out,)}
+
+        io_module = SimpleNamespace(
+            ComfyNode=_ComfyNode,
+            Schema=_Schema,
+            NodeOutput=_NodeOutput,
+            Combo=_PortFactory("COMBO"),
+            String=_PortFactory("STRING"),
+            Image=_PortFactory("IMAGE"),
+            Float=_PortFactory("FLOAT"),
+            Int=_PortFactory("INT"),
+            Mask=_PortFactory("MASK"),
+            Hidden=SimpleNamespace(unique_id="UNIQUE_ID"),
+        )
+        comfy_api_module = ModuleType("comfy_api")
+        comfy_api_latest_module = ModuleType("comfy_api.latest")
+        comfy_api_latest_module.io = io_module
+
         # Prepare mocks
         self.mock_torch = MagicMock()
         self.mock_torch.from_numpy = MagicMock(return_value=MagicMock())
@@ -31,7 +110,9 @@ class TestNodesPreview(unittest.TestCase):
             "PIL": self.mock_pil,
             "PIL.Image": self.mock_pil_image,
             "cv2": self.mock_cv2,
-            "nodes": self.mock_nodes
+            "nodes": self.mock_nodes,
+            "comfy_api": comfy_api_module,
+            "comfy_api.latest": comfy_api_latest_module,
         }
 
         # Start the patcher
@@ -198,6 +279,16 @@ class TestNodesPreview(unittest.TestCase):
         repo_root = Path(__file__).resolve().parent.parent
         editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
         assert "Without node preview, let LiteGraph size the node from widgets only." in editor_js
+
+    def test_external_input_preview_contract_strings(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        nodes_py = (repo_root / "comfyui_pano_suite" / "nodes.py").read_text(encoding="utf-8")
+        assert 'pano_sticker_input_images' in editor_js
+        assert 'getLinkedInputImage(node, ["sticker_image"])' not in editor_js
+        assert 'pano_sticker_input_images' in nodes_py
+        assert 'pano_sticker_input_pose' in nodes_py
+        assert 'sticker_state_json' in nodes_py
 
 if __name__ == '__main__':
     unittest.main()

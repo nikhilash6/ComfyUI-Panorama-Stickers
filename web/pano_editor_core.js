@@ -395,6 +395,9 @@ const attachStickersNodePreview = () => {};
 const isPanoramaPreviewNodeName = () => false;
 
 const STATE_WIDGET = "state_json";
+const EXTERNAL_STICKER_ID = "sticker_image_1";
+const EXTERNAL_STICKER_SOURCE_KIND = "external_image";
+const EXTERNAL_STICKER_PREVIEW_KEY = "pano_sticker_input_images";
 const ENABLE_STICKERS_NODE_PREVIEW = false;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -412,6 +415,7 @@ const ICON = {
   send_back: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 4v8'/><path d='m4.4 10.4 1.6 1.6 1.6-1.6'/><path d='M9.5 11h1.2M9.5 8h2.2M9.5 5h3.1'/></svg>",
   aspect: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.866 14.7041C13.9131 14.5727 12.9574 14.4687 12 14.3923V12.8876C12.8347 12.9523 13.6683 13.0373 14.4999 13.1426L14.5 9.00003H16L15.9999 14L15.9999 14.8605L15.1475 14.7429L14.866 14.7041ZM16 7.00003L16 2.49996L16 1.6394L15.1475 1.75699L14.866 1.79581C13.9131 1.92725 12.9574 2.03119 12 2.10765V3.61228C12.8347 3.54757 13.6683 3.46256 14.5 3.35727L14.5 7.00003H16ZM9.99998 2.22729V3.72844C8.66715 3.77999 7.33282 3.77999 5.99998 3.72844V2.22729C7.33279 2.28037 8.66718 2.28037 9.99998 2.22729ZM9.99998 14.2726V12.7715C8.66715 12.7199 7.33282 12.7199 5.99998 12.7715V14.2726C7.33279 14.2195 8.66718 14.2195 9.99998 14.2726ZM3.99998 14.3923C3.04258 14.4687 2.08683 14.5727 1.13391 14.7041L0.85242 14.7429L-0.0000610352 14.8605L-0.0000578761 14L-0.0000396322 9.00003H1.49996L1.49995 13.1426C2.33162 13.0373 3.16521 12.9523 3.99998 12.8876V14.3923ZM1.49997 7.00003L1.49998 3.35727C2.33164 3.46256 3.16522 3.54757 3.99998 3.61228V2.10765C3.0426 2.03119 2.08686 1.92725 1.13395 1.79581L0.852462 1.75699L-0.0000127554 1.6394L-0.0000159144 2.49995L-0.0000323345 7.00003H1.49997Z' fill='currentColor'/></svg>",
   rotate_90: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6.21967 4.71967L5.68934 5.25L6.75 6.31066L7.28033 5.78033L9.25 3.81066V13.5C9.25 13.6381 9.13807 13.75 9 13.75H2.75H2V15.25H2.75H9C9.9665 15.25 10.75 14.4665 10.75 13.5V3.81066L12.7197 5.78033L13.25 6.31066L14.3107 5.25L13.7803 4.71967L10.5303 1.46967C10.2374 1.17678 9.76256 1.17678 9.46967 1.46967L6.21967 4.71967Z' fill='currentColor'/></svg>",
+  back_initial: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3 14V2.5' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='M4.5 3.5h6.2l-1.6 2.2 1.6 2.2H4.5z' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='M12.8 12.2H7.2' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='m8.9 10.6-1.7 1.6 1.7 1.6' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/></svg>",
   delete: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.8 4.4h10.4'/><path d='m5.8 4.4.6-1.4h3.2l.6 1.4'/><path d='M4.5 4.4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8'/><path d='M6.7 6.5v4.7M9.3 6.5v4.7'/></svg>",
   reset: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M8 3.2a4.8 4.8 0 1 1-4.8 4.8'/><path d='M3.2 3.2v3.6h3.6'/></svg>",
   eye: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M4.02168 4.76932C6.11619 2.33698 9.88374 2.33698 11.9783 4.76932L14.7602 7.99999L11.9783 11.2307C9.88374 13.663 6.1162 13.663 4.02168 11.2307L1.23971 7.99999L4.02168 4.76932ZM13.1149 3.79054C10.422 0.663244 5.57797 0.663247 2.88503 3.79054L-0.318359 7.5106V8.48938L2.88503 12.2094C5.57797 15.3367 10.422 15.3367 13.1149 12.2094L16.3183 8.48938V7.5106L13.1149 3.79054ZM6.49997 7.99999C6.49997 7.17157 7.17154 6.49999 7.99997 6.49999C8.82839 6.49999 9.49997 7.17157 9.49997 7.99999C9.49997 8.82842 8.82839 9.49999 7.99997 9.49999C7.17154 9.49999 6.49997 8.82842 6.49997 7.99999ZM7.99997 4.99999C6.34311 4.99999 4.99997 6.34314 4.99997 7.99999C4.99997 9.65685 6.34311 11 7.99997 11C9.65682 11 11 9.65685 11 7.99999C11 6.34314 9.65682 4.99999 7.99997 4.99999Z' fill='currentColor'/></svg>",
@@ -630,6 +634,8 @@ function cloneStickerList(raw) {
     if (!item || typeof item !== "object") return item;
     const next = { ...item };
     if (next.crop && typeof next.crop === "object") next.crop = { ...next.crop };
+    if (next.initial_pose && typeof next.initial_pose === "object") next.initial_pose = { ...next.initial_pose };
+    next.visible = next.visible !== false;
     return next;
   });
 }
@@ -1770,11 +1776,328 @@ function createNodeBackedEditor(node, type, options = {}) {
   // Coordinate sanity: front-facing sticker should have top edge above bottom edge.
   const __sanity = stickerCornerOrderSanity();
   if (!__sanity) {
-    console.warn("[PanoramaSuite] corner order sanity check failed.");
+    panoEditorDebug("corner-order.sanity-failed");
   }
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
   function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
+  function getNextStickerZIndex() {
+    const stickers = Array.isArray(state.stickers) ? state.stickers : [];
+    return stickers.reduce((acc, item) => {
+      const next = Number(item?.z_index);
+      return Math.max(acc, Number.isFinite(next) ? next : 0);
+    }, -1) + 1;
+  }
+  function isExternalSticker(item) {
+    if (!item || typeof item !== "object") return false;
+    return String(item.id || "") === EXTERNAL_STICKER_ID
+      || String(item.source_kind || "") === EXTERNAL_STICKER_SOURCE_KIND;
+  }
+  function isStickerHidden(item) {
+    return !!(item && typeof item === "object" && item.visible === false);
+  }
+  function getStickerDisplayAlpha(item) {
+    if (isExternalSticker(item) && isStickerHidden(item)) return 0.2;
+    return 1;
+  }
+  function restoreSelectedToInitialPose() {
+    if (readOnly || type !== "stickers") return;
+    const selected = getSelected();
+    if (!selected || !isExternalSticker(selected)) return;
+    const initial = selected.initial_pose;
+    if (!initial || typeof initial !== "object") return;
+    selected.yaw_deg = Number(initial.yaw_deg ?? selected.yaw_deg ?? 0);
+    selected.pitch_deg = Number(initial.pitch_deg ?? selected.pitch_deg ?? 0);
+    selected.hFOV_deg = Number(initial.hFOV_deg ?? selected.hFOV_deg ?? 30);
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      requestDraw();
+    });
+    if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      selected.vFOV_deg = computeStickerVFov(
+        Number(initial.hFOV_deg ?? selected.hFOV_deg ?? 30),
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+    } else {
+      selected.vFOV_deg = Number(initial.vFOV_deg ?? selected.vFOV_deg ?? 30);
+    }
+    selected.rot_deg = Number(initial.rot_deg ?? selected.rot_deg ?? 0);
+    pushHistory();
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    requestDraw();
+  }
+  function getRestorePoseForSticker(item) {
+    if (!item || !isExternalSticker(item)) return null;
+    const initial = item.initial_pose;
+    if (!initial || typeof initial !== "object") return null;
+    const pose = {
+      yaw_deg: Number(initial.yaw_deg ?? item.yaw_deg ?? 0),
+      pitch_deg: Number(initial.pitch_deg ?? item.pitch_deg ?? 0),
+      hFOV_deg: Number(initial.hFOV_deg ?? item.hFOV_deg ?? 30),
+      vFOV_deg: Number(initial.vFOV_deg ?? item.vFOV_deg ?? 30),
+      rot_deg: Number(initial.rot_deg ?? item.rot_deg ?? 0),
+    };
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      requestDraw();
+    });
+    if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      pose.vFOV_deg = computeStickerVFov(
+        pose.hFOV_deg,
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+    }
+    return pose;
+  }
+  function canRestoreSelectedToInitial() {
+    const selected = getSelected();
+    if (!selected || !isExternalSticker(selected)) return false;
+    const restorePose = getRestorePoseForSticker(selected);
+    if (!restorePose) return false;
+    const close = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) <= 1e-4;
+    return !(
+      close(selected.yaw_deg, restorePose.yaw_deg)
+      && close(selected.pitch_deg, restorePose.pitch_deg)
+      && close(selected.hFOV_deg, restorePose.hFOV_deg)
+      && close(selected.vFOV_deg, restorePose.vFOV_deg)
+      && close(selected.rot_deg, restorePose.rot_deg)
+    );
+  }
+  function getNodeUiList(key) {
+    const outputs = lookupNodeOutputEntry(node?.id);
+    if (Array.isArray(outputs?.ui?.[key])) return outputs.ui[key];
+    if (Array.isArray(outputs?.[key])) return outputs[key];
+    return [];
+  }
+  function getNodeUiValue(key) {
+    const outputs = lookupNodeOutputEntry(node?.id);
+    if (outputs?.ui && Object.prototype.hasOwnProperty.call(outputs.ui, key)) return outputs.ui[key];
+    if (outputs && Object.prototype.hasOwnProperty.call(outputs, key)) return outputs[key];
+    return null;
+  }
+  function normalizeInputPoseValue(value, debugValue = null) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0];
+      if (first && typeof first === "object" && !Array.isArray(first)) return first;
+    }
+    if (Array.isArray(debugValue) && debugValue.length > 0) {
+      const parsed = debugValue[0]?.parsed_state;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          yaw_deg: Number(parsed.yaw_deg || 0),
+          pitch_deg: Number(parsed.pitch_deg || 0),
+          hFOV_deg: Number(parsed.hFOV_deg || 30),
+          rot_deg: Number(parsed.roll_deg || 0),
+        };
+      }
+    }
+    return null;
+  }
+  function getStickerUiImage(key, onLoad = null) {
+    const list = getNodeUiList(key);
+    const first = Array.isArray(list) && list.length ? list[0] : null;
+    const src = imageSourceFromCandidate(first);
+    if (!src) return null;
+    const cacheKey = `__ui__${key}`;
+    const cached = imageCache.get(cacheKey);
+    if (cached && cached.__panoSrc === src) return cached;
+    const img = new Image();
+    img.__panoSrc = src;
+    img.onload = () => {
+      if (typeof onLoad === "function") onLoad(img);
+      else requestDraw();
+    };
+    img.src = src;
+    imageCache.set(cacheKey, img);
+    return img;
+  }
+  function hashStringSimple(text) {
+    const s = String(text || "");
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return String(h >>> 0);
+  }
+  function computeStickerVFov(hFovDeg, width, height) {
+    const w = Math.max(1, Number(width || 1));
+    const h = Math.max(1, Number(height || 1));
+    const hf = clamp(Number(hFovDeg || 30), 0.1, 179) * DEG2RAD;
+    const vf = 2 * Math.atan(Math.tan(hf * 0.5) * (h / w));
+    return clamp(vf * RAD2DEG, 0.1, 179);
+  }
+  function parseLinkedStickerState(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (String(parsed.kind || "") !== "pano_sticker_state") return null;
+      const versionValue = parsed.version;
+      let version = null;
+      if (typeof versionValue === "number" && Number.isInteger(versionValue)) {
+        version = versionValue;
+      } else if (typeof versionValue === "string" && /^\d+$/.test(versionValue)) {
+        version = Number.parseInt(versionValue, 10);
+      }
+      if (version !== 1) return null;
+      const pose = parsed.pose;
+      if (!pose || typeof pose !== "object") return null;
+      const yawRaw = Number(pose.yaw_deg);
+      const pitchRaw = Number(pose.pitch_deg);
+      const rollRaw = Number(pose.roll_deg);
+      const hRaw = Number(pose.hFOV_deg);
+      if (![yawRaw, pitchRaw, rollRaw, hRaw].every((v) => Number.isFinite(v))) return null;
+      let yaw = ((yawRaw + 180) % 360 + 360) % 360 - 180;
+      if (Object.is(yaw, -0)) yaw = 0;
+      const out = {
+        yaw_deg: yaw,
+        pitch_deg: clamp(pitchRaw, -89.9, 89.9),
+        roll_deg: rollRaw,
+        hFOV_deg: clamp(hRaw, 0.1, 179),
+      };
+      const sourceAspect = Number(parsed.source_aspect);
+      if (Number.isFinite(sourceAspect) && sourceAspect > 0) out.source_aspect = sourceAspect;
+      return out;
+    } catch {
+      return null;
+    }
+  }
+  function getLinkedStringInputValue(inputName) {
+    const input = Array.isArray(node?.inputs)
+      ? node.inputs.find((entry) => String(entry?.name || "") === String(inputName))
+      : null;
+    const linkId = input?.link;
+    if (linkId != null) {
+      const linkInfo = getGraphLinkById(node.graph, linkId);
+      const { originId, originSlot } = resolveOriginFromLinkInfo(linkInfo);
+      const outputs = lookupNodeOutputEntry(originId);
+      const groups = [
+        outputs?.output,
+        outputs?.result,
+        outputs?.data?.output,
+        outputs?.data?.result,
+        outputs?.ui?.output,
+        outputs?.ui?.result,
+      ];
+      for (const group of groups) {
+        if (!Array.isArray(group)) continue;
+        const idx = Number(originSlot || 0);
+        const val = group[idx];
+        if (typeof val === "string" && val.trim()) return val;
+      }
+    }
+    return String(getWidget(node, inputName)?.value || "");
+  }
+  function buildExternalInitialPose(inputPose, stateRaw, previewImg) {
+    const parsed = (inputPose && typeof inputPose === "object")
+      ? {
+        yaw_deg: Number(inputPose.yaw_deg || 0),
+        pitch_deg: Number(inputPose.pitch_deg || 0),
+        roll_deg: Number(inputPose.rot_deg ?? inputPose.roll_deg ?? 0),
+        hFOV_deg: Number(inputPose.hFOV_deg || 30),
+      }
+      : parseLinkedStickerState(stateRaw);
+    if (parsed) {
+      const width = Number(previewImg?.naturalWidth || previewImg?.width || parsed.source_aspect || 1);
+      const height = Number(previewImg?.naturalHeight || previewImg?.height || 1);
+      return {
+        yaw_deg: Number(parsed.yaw_deg || 0),
+        pitch_deg: Number(parsed.pitch_deg || 0),
+        hFOV_deg: Number(parsed.hFOV_deg || 30),
+        vFOV_deg: computeStickerVFov(parsed.hFOV_deg, width, height),
+        rot_deg: Number(parsed.roll_deg || 0),
+      };
+    }
+    const width = Number(previewImg?.naturalWidth || previewImg?.width || 1);
+    const height = Number(previewImg?.naturalHeight || previewImg?.height || 1);
+    return {
+      yaw_deg: Number(editor.viewYaw || 0),
+      pitch_deg: Number(editor.viewPitch || 0),
+      hFOV_deg: 30,
+      vFOV_deg: computeStickerVFov(30, width, height),
+      rot_deg: 0,
+    };
+  }
+  function reconcileExternalStickerFromInputs(reason = "sync") {
+    if (type !== "stickers" || readOnly) return;
+    const input = Array.isArray(node?.inputs)
+      ? node.inputs.find((entry) => String(entry?.name || "") === "sticker_image")
+      : null;
+    const linkId = input?.link ?? null;
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      node.__panoExternalStickerSync?.("image-loaded");
+    });
+    const inputPose = normalizeInputPoseValue(getNodeUiValue("pano_sticker_input_pose"), null);
+    const stateRaw = getLinkedStringInputValue("sticker_state");
+    const stateHash = inputPose && typeof inputPose === "object"
+      ? hashStringSimple(JSON.stringify(inputPose))
+      : hashStringSimple(stateRaw);
+    const stickers = Array.isArray(state.stickers) ? state.stickers : (state.stickers = []);
+    const existingIndex = stickers.findIndex((item) => String(item?.id || "") === EXTERNAL_STICKER_ID);
+    if (linkId == null) {
+      if (existingIndex >= 0) {
+        stickers.splice(existingIndex, 1);
+        if (editor.selectedId === EXTERNAL_STICKER_ID) {
+          editor.selectedId = null;
+          state.active.selected_sticker_id = null;
+        }
+        commitAndRefreshNode();
+        updateSidePanel();
+        updateSelectionMenu();
+        requestDraw();
+      }
+      return;
+    }
+    const maxZ = stickers.reduce((acc, item) => Math.max(acc, Number(item?.z_index || 0)), -1);
+    let target = existingIndex >= 0 ? stickers[existingIndex] : null;
+    const sourceChanged = !target
+      || Number(target.source_link_id ?? -1) !== Number(linkId)
+      || String(target.source_state_hash || "") !== stateHash;
+    if (!target) {
+      target = {
+        id: EXTERNAL_STICKER_ID,
+        source_kind: EXTERNAL_STICKER_SOURCE_KIND,
+      };
+      stickers.push(target);
+    }
+    target.id = EXTERNAL_STICKER_ID;
+    target.source_kind = EXTERNAL_STICKER_SOURCE_KIND;
+    target.source_link_id = Number(linkId);
+    target.source_state_hash = stateHash;
+    target.visible = target.visible !== false;
+    let stateChanged = false;
+    if (sourceChanged) {
+      const pose = buildExternalInitialPose(inputPose, stateRaw, previewImg);
+      Object.assign(target, pose, {
+        initial_pose: { ...pose },
+        visible: true,
+        z_index: maxZ + 1,
+      });
+      stateChanged = true;
+    } else if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      const nextVFov = computeStickerVFov(
+        Number(target.hFOV_deg || 30),
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+      if (Math.abs(Number(target.vFOV_deg || 0) - nextVFov) > 1e-6) {
+        target.vFOV_deg = nextVFov;
+        stateChanged = true;
+      }
+    }
+    if (stateChanged) {
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+    }
+    requestDraw();
+    void reason;
+  }
   function applyInitialCutoutFocus() {
     if (type !== "cutout") return;
     const shots = getList();
@@ -1861,7 +2184,15 @@ function createNodeBackedEditor(node, type, options = {}) {
     return { x: 0, y: ry, w: rw, h: rh };
   }
 
-  function getStickerImage(assetId) {
+  function getStickerImage(stickerOrAssetId) {
+    if (stickerOrAssetId && typeof stickerOrAssetId === "object" && isExternalSticker(stickerOrAssetId)) {
+      return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+        node.__panoExternalStickerSync?.("image-loaded");
+      });
+    }
+    const assetId = (stickerOrAssetId && typeof stickerOrAssetId === "object")
+      ? String(stickerOrAssetId.asset_id || "")
+      : String(stickerOrAssetId || "");
     if (!assetId) return null;
     const cached = imageCache.get(assetId);
     if (cached) return cached;
@@ -1995,6 +2326,27 @@ function createNodeBackedEditor(node, type, options = {}) {
     const wrapped = getWrappedErpCanvas(img);
     if (!wrapped) return;
     const q = String(state.ui_settings?.preview_quality || "balanced");
+    const cacheKey = [
+      String(img.src || ""),
+      iw,
+      ih,
+      canvas.width,
+      canvas.height,
+      q,
+      Number(editor.viewYaw || 0).toFixed(4),
+      Number(editor.viewPitch || 0).toFixed(4),
+      Number(editor.viewFov || 100).toFixed(4),
+    ].join("|");
+    const cached = node.__panoPanoBackgroundCache;
+    if (cached?.canvas && cached.key === cacheKey) {
+      ctx.drawImage(cached.canvas, 0, 0);
+      return;
+    }
+    const bgCanvas = document.createElement("canvas");
+    bgCanvas.width = canvas.width;
+    bgCanvas.height = canvas.height;
+    const bgCtx = bgCanvas.getContext("2d");
+    if (!bgCtx) return;
     const Nu = q === "high" ? 44 : (q === "draft" ? 24 : 32);
     const Nv = q === "high" ? 28 : (q === "draft" ? 14 : 20);
     const verts = Array.from({ length: Nv + 1 }, () => Array(Nu + 1).fill(null));
@@ -2015,8 +2367,8 @@ function createNodeBackedEditor(node, type, options = {}) {
       }
     }
 
-    ctx.save();
-    ctx.globalAlpha = 0.94;
+    bgCtx.save();
+    bgCtx.globalAlpha = 0.94;
     for (let j = 0; j < Nv; j += 1) {
       for (let i = 0; i < Nu; i += 1) {
         const p00 = verts[j][i];
@@ -2035,11 +2387,13 @@ function createNodeBackedEditor(node, type, options = {}) {
             if (s.x < iw * 0.5) s.x += iw;
           });
         }
-        drawImageTri(wrapped, s00, s10, s11, p00, p10, p11);
-        drawImageTri(wrapped, s00, s11, s01, p00, p11, p01);
+        drawImageTriTo(bgCtx, wrapped, s00, s10, s11, p00, p10, p11);
+        drawImageTriTo(bgCtx, wrapped, s00, s11, s01, p00, p11, p01);
       }
     }
-    ctx.restore();
+    bgCtx.restore();
+    node.__panoPanoBackgroundCache = { key: cacheKey, canvas: bgCanvas };
+    ctx.drawImage(bgCanvas, 0, 0);
   }
 
   function pruneUnusedAssets() {
@@ -2129,7 +2483,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     return stickerDirFromFrame(frame, x, y);
   }
 
-  function drawImageTri(img, s0, s1, s2, d0, d1, d2) {
+  function drawImageTriTo(targetCtx, img, s0, s1, s2, d0, d1, d2) {
     const denom = (s0.x * (s1.y - s2.y)) + (s1.x * (s2.y - s0.y)) + (s2.x * (s0.y - s1.y));
     if (Math.abs(denom) < 1e-6) return;
 
@@ -2141,16 +2495,20 @@ function createNodeBackedEditor(node, type, options = {}) {
     const f = ((d0.y * (s1.x * s2.y - s2.x * s1.y)) + (d1.y * (s2.x * s0.y - s0.x * s2.y)) + (d2.y * (s0.x * s1.y - s1.x * s0.y))) / denom;
 
     const [e0, e1, e2] = expandTri(d0, d1, d2, 0.45);
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(e0.x, e0.y);
-    ctx.lineTo(e1.x, e1.y);
-    ctx.lineTo(e2.x, e2.y);
-    ctx.closePath();
-    ctx.clip();
-    ctx.setTransform(a, d, b, e, c, f);
-    ctx.drawImage(img, 0, 0);
-    ctx.restore();
+    targetCtx.save();
+    targetCtx.beginPath();
+    targetCtx.moveTo(e0.x, e0.y);
+    targetCtx.lineTo(e1.x, e1.y);
+    targetCtx.lineTo(e2.x, e2.y);
+    targetCtx.closePath();
+    targetCtx.clip();
+    targetCtx.setTransform(a, d, b, e, c, f);
+    targetCtx.drawImage(img, 0, 0);
+    targetCtx.restore();
+  }
+
+  function drawImageTri(img, s0, s1, s2, d0, d1, d2) {
+    drawImageTriTo(ctx, img, s0, s1, s2, d0, d1, d2);
   }
 
   function getMeshDivisions() {
@@ -2475,14 +2833,18 @@ function createNodeBackedEditor(node, type, options = {}) {
       let meshDrawn = false;
 
       if (type === "stickers") {
-        const img = getStickerImage(item.asset_id);
+        const img = getStickerImage(item);
+        const alpha = getStickerDisplayAlpha(item);
         if (img && (img.complete || img.width)) {
-          meshDrawn = drawStickerMesh(item, img);
+          meshDrawn = drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha);
         } else if (g.visible) {
+          const prevAlpha = ctx.globalAlpha;
+          ctx.globalAlpha = alpha;
           ctx.fillStyle = "rgba(255,255,255,0.08)";
           ctx.beginPath(); ctx.moveTo(g.corners[0].x, g.corners[0].y);
           for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
           ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = prevAlpha;
           meshDrawn = true;
         }
       } else if (!g.visible) {
@@ -2491,7 +2853,10 @@ function createNodeBackedEditor(node, type, options = {}) {
 
       if (type === "stickers") {
         if (!meshDrawn) continue;
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = getStickerDisplayAlpha(item);
         drawStickerBoundary(item, selected);
+        ctx.globalAlpha = prevAlpha;
       } else {
         ctx.fillStyle = selected ? "rgba(0, 112, 243, 0.24)" : "rgba(255, 255, 255, 0.12)";
         ctx.beginPath();
@@ -2509,10 +2874,11 @@ function createNodeBackedEditor(node, type, options = {}) {
       }
 
       if (selected && g.visible) {
-        ctx.fillStyle = "#0070f3";
+        const accent = (type === "stickers" && isExternalSticker(item)) ? "#f59e0b" : "#0070f3";
+        ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
         if (type === "cutout") {
-          ctx.strokeStyle = "#0070f3";
+          ctx.strokeStyle = accent;
           ctx.lineCap = "round";
           ctx.lineWidth = 4;
           g.edgeMidpoints.forEach((m) => {
@@ -2535,7 +2901,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         ctx.moveTo(g.rotateStemBase.x, g.rotateStemBase.y);
         ctx.lineTo(g.rotateHandle.x, g.rotateHandle.y);
         ctx.stroke();
-        ctx.fillStyle = "#0070f3";
+        ctx.fillStyle = accent;
         ctx.beginPath(); ctx.arc(g.rotateHandle.x, g.rotateHandle.y, 10, 0, Math.PI * 2); ctx.fill();
       }
     }
@@ -3046,7 +3412,10 @@ function createNodeBackedEditor(node, type, options = {}) {
       const pop = targetRow.querySelector(".pano-picker-pop");
       const items = [{ id: "", label: "No image" }];
       list.forEach((item, i) => {
-        const label = `${i + 1}. ${String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id)}`;
+        const baseLabel = isExternalSticker(item)
+          ? String(item.id || EXTERNAL_STICKER_ID)
+          : String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id);
+        const label = `${i + 1}. ${baseLabel}${isExternalSticker(item) && isStickerHidden(item) ? " (hidden)" : ""}`;
         items.push({ id: item.id, label });
       });
       const currentId = selected?.id || "";
@@ -3418,7 +3787,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         hFOV_deg: 30,
         vFOV_deg: clamp(30 * ar, 1, 179),
         rot_deg: 0,
-        z_index: state.stickers.length,
+        z_index: getNextStickerZIndex(),
       });
       editor.selectedId = id;
       state.active.selected_sticker_id = id;
@@ -3579,11 +3948,12 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (type !== "stickers") return;
     const selected = getSelected();
     if (!selected) return;
+    if (isExternalSticker(selected)) return;
     const copy = JSON.parse(JSON.stringify(selected));
     copy.id = uid(type === "stickers" ? "st" : "sh");
     copy.yaw_deg = wrapYaw((copy.yaw_deg || 0) + 8);
     if (type === "stickers") {
-      copy.z_index = state.stickers.length;
+      copy.z_index = getNextStickerZIndex();
       state.stickers.push(copy);
       state.active.selected_sticker_id = copy.id;
     } else {
@@ -3601,6 +3971,15 @@ function createNodeBackedEditor(node, type, options = {}) {
     const selected = getSelected();
     if (!selected) return;
     if (type === "stickers") {
+      if (isExternalSticker(selected)) {
+        selected.visible = isStickerHidden(selected);
+        pushHistory();
+        commitAndRefreshNode();
+        updateSidePanel();
+        updateSelectionMenu();
+        requestDraw();
+        return;
+      }
       state.stickers = state.stickers.filter((s) => s.id !== selected.id);
       pruneUnusedAssets();
       editor.selectedId = state.stickers[0]?.id || null;
@@ -3820,15 +4199,18 @@ function createNodeBackedEditor(node, type, options = {}) {
       return;
     }
     const menuMode = type === "stickers"
-      ? "stickers"
+      ? `stickers:${isExternalSticker(selected) ? "external" : "normal"}`
       : `cutout:${editor.cutoutAspectOpen ? "open" : "closed"}`;
     if (editor.menuMode !== menuMode) {
       if (type === "stickers") {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
-          <button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>
-          <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
+          ${isExternalSticker(selected) ? "" : `<button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>`}
+          ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
+          ${isExternalSticker(selected)
+            ? `<button class="pano-btn pano-btn-icon" data-action="toggle-visible" aria-label="Hide" data-tip="Hide input image">${ICON.eye_dashed}</button>`
+            : `<button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>`}
         `;
       } else {
         const activeAspect = getCutoutAspectLabel(selected);
@@ -3849,6 +4231,22 @@ function createNodeBackedEditor(node, type, options = {}) {
       editor.menuMode = menuMode;
       editor.menuSize.measured = false;
       installTooltipHandlers(selectionMenu);
+    }
+    if (type === "stickers" && isExternalSticker(selected)) {
+      const backBtn = selectionMenu.querySelector("[data-action='back-initial']");
+      if (backBtn) {
+        const enabled = canRestoreSelectedToInitial();
+        backBtn.disabled = !enabled;
+        backBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
+        backBtn.setAttribute("data-tip", enabled ? "Back to initial position" : "Already at initial position");
+      }
+      const toggleBtn = selectionMenu.querySelector("[data-action='toggle-visible']");
+      if (toggleBtn) {
+        const hidden = isStickerHidden(selected);
+        toggleBtn.innerHTML = hidden ? ICON.eye : ICON.eye_dashed;
+        toggleBtn.setAttribute("aria-label", hidden ? "Show" : "Hide");
+        toggleBtn.setAttribute("data-tip", hidden ? "Show input image" : "Hide input image");
+      }
     }
     const geom = objectGeom(selected);
     if (!geom?.visible) {
@@ -4471,12 +4869,46 @@ function createNodeBackedEditor(node, type, options = {}) {
       duplicateSelected();
       return;
     }
+    if (action === "back-initial") {
+      restoreSelectedToInitialPose();
+      return;
+    }
+    if (action === "toggle-visible") {
+      deleteSelected();
+      return;
+    }
     if (action === "delete") {
       deleteSelected();
       return;
     }
     requestDraw();
   });
+
+  const modalPrevOnExecuted = node.onExecuted;
+  const modalPrevOnConnectionsChange = node.onConnectionsChange;
+  let modalOnExecuted = null;
+  let modalOnConnectionsChange = null;
+  let modalExternalStickerSync = null;
+  if (!readOnly && type === "stickers") {
+    modalExternalStickerSync = (reason = "sync") => {
+      reconcileExternalStickerFromInputs(reason);
+    };
+    node.__panoExternalStickerSync = modalExternalStickerSync;
+    modalOnExecuted = function onPanoEditorExecuted(...args) {
+      if (typeof modalPrevOnExecuted === "function") {
+        modalPrevOnExecuted.apply(this, args);
+      }
+      this.__panoExternalStickerSync?.("executed");
+    };
+    node.onExecuted = modalOnExecuted;
+    modalOnConnectionsChange = function onPanoEditorConnectionsChange(...args) {
+      if (typeof modalPrevOnConnectionsChange === "function") {
+        modalPrevOnConnectionsChange.apply(this, args);
+      }
+      this.__panoExternalStickerSync?.("connections");
+    };
+    node.onConnectionsChange = modalOnConnectionsChange;
+  }
 
   const closeEditor = () => {
     if (document.fullscreenElement === fullscreenTarget) {
@@ -4496,6 +4928,11 @@ function createNodeBackedEditor(node, type, options = {}) {
     window.removeEventListener("dragover", onWindowDragOver, true);
     window.removeEventListener("dragleave", onWindowDragLeave, true);
     window.removeEventListener("drop", onWindowDrop, true);
+    if (!readOnly && type === "stickers") {
+      if (node.onExecuted === modalOnExecuted) node.onExecuted = modalPrevOnExecuted;
+      if (node.onConnectionsChange === modalOnConnectionsChange) node.onConnectionsChange = modalPrevOnConnectionsChange;
+      if (node.__panoExternalStickerSync === modalExternalStickerSync) node.__panoExternalStickerSync = null;
+    }
     if (!embedded) {
       overlay?.remove();
     } else if (destroyOnClose) {
@@ -4541,6 +4978,9 @@ function createNodeBackedEditor(node, type, options = {}) {
 
   installTooltipHandlers(root);
   applyInitialCutoutFocus();
+  if (!readOnly && type === "stickers") {
+    reconcileExternalStickerFromInputs("open");
+  }
   void migrateLegacyEmbeddedAssets();
   pushHistory();
   updateSidePanel();
@@ -4593,14 +5033,12 @@ function createHostedNode(type, config = {}) {
 }
 
 export function createEmbeddedEditor(hostOrNode, typeOrConfig, maybeOptions = {}) {
-  try {
-    console.log("[PANO_EDITOR_CORE] createEmbeddedEditor:start", {
-      mode: typeof typeOrConfig === "string" ? "node" : "host",
-      type: typeof typeOrConfig === "string"
-        ? typeOrConfig
-        : String(typeOrConfig?.type || "stickers"),
-    });
-  } catch {}
+  panoEditorDebug("embedded-editor.start", {
+    mode: typeof typeOrConfig === "string" ? "node" : "host",
+    type: typeof typeOrConfig === "string"
+      ? typeOrConfig
+      : String(typeOrConfig?.type || "stickers"),
+  });
   if (typeof typeOrConfig === "string") {
     return createNodeBackedEditor(hostOrNode, typeOrConfig, maybeOptions);
   }
@@ -4629,12 +5067,10 @@ export function createEmbeddedEditor(hostOrNode, typeOrConfig, maybeOptions = {}
     const initialParsed = parseState(String(stateWidget.value || "")) || parseState("{}") || {};
     config.onStateChange(initialParsed, { source: "init" });
   }
-  try {
-    console.log("[PANO_EDITOR_CORE] createEmbeddedEditor:ready", {
-      type,
-      hasRoot: !!instance.root,
-    });
-  } catch {}
+  panoEditorDebug("embedded-editor.ready", {
+    type,
+    hasRoot: !!instance.root,
+  });
 
   return {
     root: instance.root,

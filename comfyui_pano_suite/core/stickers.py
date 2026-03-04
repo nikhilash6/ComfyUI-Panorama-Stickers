@@ -164,10 +164,27 @@ def compose_stickers_to_erp(
     stickers_sorted = sorted(stickers, key=lambda s: float(s.get("z_index", 0)))
 
     for st in stickers_sorted:
-        asset_id = st.get("asset_id")
-        if asset_id not in assets:
+        if st.get("visible", True) is False:
             continue
-        img = _load_asset_rgba(assets[asset_id], base_dir=base_dir)
+        runtime_img = st.get("image_rgba")
+        if isinstance(runtime_img, np.ndarray):
+            img = np.clip(runtime_img.astype(np.float32), 0.0, 1.0)
+            if img.ndim != 3 or img.shape[0] <= 0 or img.shape[1] <= 0:
+                continue
+            if img.shape[-1] < 4:
+                if img.shape[-1] < 3:
+                    continue
+                alpha = np.ones((img.shape[0], img.shape[1], 1), dtype=np.float32)
+                img = np.concatenate([img[..., :3], alpha], axis=-1)
+            elif img.shape[-1] > 4:
+                img = img[..., :4]
+        else:
+            asset_id = st.get("asset_id")
+            if asset_id not in assets:
+                continue
+            img = _load_asset_rgba(assets[asset_id], base_dir=base_dir)
+            if img is None:
+                continue
         if img is None:
             continue
 
