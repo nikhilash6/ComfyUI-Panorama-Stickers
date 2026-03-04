@@ -1545,6 +1545,62 @@ function showEditor(node, type, options = {}) {
       return null;
     }
   }
+  function buildCanonicalCutoutStickerState(item) {
+    const widthRaw = Number(item?.out_w);
+    const heightRaw = Number(item?.out_h);
+    const width = Math.max(1, Number.isFinite(widthRaw) ? widthRaw : 1024);
+    const height = Math.max(1, Number.isFinite(heightRaw) ? heightRaw : 1024);
+    const yawRaw = Number(item?.yaw_deg);
+    const pitchRaw = Number(item?.pitch_deg);
+    const rollRaw = Number(item?.roll_deg ?? item?.rot_deg);
+    const hFovRaw = Number(item?.hFOV_deg);
+    return {
+      kind: "pano_sticker_state",
+      version: 1,
+      pose: {
+        yaw_deg: wrapYaw(Number.isFinite(yawRaw) ? yawRaw : 0),
+        pitch_deg: clamp(Number.isFinite(pitchRaw) ? pitchRaw : 0, -89.9, 89.9),
+        roll_deg: Number.isFinite(rollRaw) ? rollRaw : 0,
+        hFOV_deg: clamp(Number.isFinite(hFovRaw) ? hFovRaw : 90, 0.1, 179),
+      },
+      source_aspect: width / height,
+    };
+  }
+  function buildCanonicalSelectedStickerState(item) {
+    if (!item || typeof item !== "object") return buildCanonicalCutoutStickerState(null);
+    const yawRaw = Number(item?.yaw_deg);
+    const pitchRaw = Number(item?.pitch_deg);
+    const rollRaw = Number(item?.roll_deg ?? item?.rot_deg);
+    const hFovRaw = Number(item?.hFOV_deg);
+    const vFovRaw = Number(item?.vFOV_deg);
+    let sourceAspect = 1;
+    if (Number.isFinite(hFovRaw) && Number.isFinite(vFovRaw)) {
+      const hf = clamp(hFovRaw, 0.1, 179) * DEG2RAD;
+      const vf = clamp(vFovRaw, 0.1, 179) * DEG2RAD;
+      const tanV = Math.tan(vf * 0.5);
+      if (Math.abs(tanV) > 1e-6) {
+        const ratio = Math.tan(hf * 0.5) / tanV;
+        if (Number.isFinite(ratio) && ratio > 0) sourceAspect = ratio;
+      }
+    }
+    if (item?.asset_id && state?.assets?.[item.asset_id]) {
+      const asset = state.assets[item.asset_id];
+      const width = Number(asset?.w || 0);
+      const height = Number(asset?.h || 0);
+      if (width > 0 && height > 0) sourceAspect = width / height;
+    }
+    return {
+      kind: "pano_sticker_state",
+      version: 1,
+      pose: {
+        yaw_deg: wrapYaw(Number.isFinite(yawRaw) ? yawRaw : 0),
+        pitch_deg: clamp(Number.isFinite(pitchRaw) ? pitchRaw : 0, -89.9, 89.9),
+        roll_deg: Number.isFinite(rollRaw) ? rollRaw : 0,
+        hFOV_deg: clamp(Number.isFinite(hFovRaw) ? hFovRaw : 30, 0.1, 179),
+      },
+      source_aspect: sourceAspect,
+    };
+  }
   function getLinkedStringInputValue(inputName) {
     const input = Array.isArray(node?.inputs)
       ? node.inputs.find((entry) => String(entry?.name || "") === String(inputName))
@@ -3000,21 +3056,9 @@ function showEditor(node, type, options = {}) {
     copyInline.disabled = !enabled;
     copyInline.onclick = async () => {
       if (!enabled) return;
-      const lite = {
-        ...state,
-        assets: Object.fromEntries(
-          Object.entries(state.assets || {}).map(([k, v]) => [k, {
-            type: v?.type || "comfy_image",
-            w: Number(v?.w || 0),
-            h: Number(v?.h || 0),
-            name: String(v?.name || ""),
-            filename: String(v?.filename || ""),
-            subfolder: String(v?.subfolder || ""),
-            storage: String(v?.storage || ""),
-          }]),
-        ),
-      };
-      const text = JSON.stringify(lite);
+      const text = JSON.stringify(type === "cutout"
+        ? buildCanonicalCutoutStickerState(effective)
+        : buildCanonicalSelectedStickerState(selected));
       try {
         await navigator.clipboard.writeText(text);
         const label = copyInline.querySelector("span");
