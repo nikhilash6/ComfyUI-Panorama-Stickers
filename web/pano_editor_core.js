@@ -3938,6 +3938,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (type !== "stickers") return;
     const selected = getSelected();
     if (!selected) return;
+    if (isExternalSticker(selected)) return;
     const copy = JSON.parse(JSON.stringify(selected));
     copy.id = uid(type === "stickers" ? "st" : "sh");
     copy.yaw_deg = wrapYaw((copy.yaw_deg || 0) + 8);
@@ -4195,7 +4196,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
-          <button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>
+          ${isExternalSticker(selected) ? "" : `<button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>`}
           ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
           ${isExternalSticker(selected)
             ? `<button class="pano-btn pano-btn-icon" data-action="toggle-visible" aria-label="Hide" data-tip="Hide input image">${ICON.eye_dashed}</button>`
@@ -4875,22 +4876,28 @@ function createNodeBackedEditor(node, type, options = {}) {
 
   const modalPrevOnExecuted = node.onExecuted;
   const modalPrevOnConnectionsChange = node.onConnectionsChange;
+  let modalOnExecuted = null;
+  let modalOnConnectionsChange = null;
+  let modalExternalStickerSync = null;
   if (!readOnly && type === "stickers") {
-    node.__panoExternalStickerSync = (reason = "sync") => {
+    modalExternalStickerSync = (reason = "sync") => {
       reconcileExternalStickerFromInputs(reason);
     };
-    node.onExecuted = function onPanoEditorExecuted(...args) {
+    node.__panoExternalStickerSync = modalExternalStickerSync;
+    modalOnExecuted = function onPanoEditorExecuted(...args) {
       if (typeof modalPrevOnExecuted === "function") {
         modalPrevOnExecuted.apply(this, args);
       }
       this.__panoExternalStickerSync?.("executed");
     };
-    node.onConnectionsChange = function onPanoEditorConnectionsChange(...args) {
+    node.onExecuted = modalOnExecuted;
+    modalOnConnectionsChange = function onPanoEditorConnectionsChange(...args) {
       if (typeof modalPrevOnConnectionsChange === "function") {
         modalPrevOnConnectionsChange.apply(this, args);
       }
       this.__panoExternalStickerSync?.("connections");
     };
+    node.onConnectionsChange = modalOnConnectionsChange;
   }
 
   const closeEditor = () => {
@@ -4912,9 +4919,9 @@ function createNodeBackedEditor(node, type, options = {}) {
     window.removeEventListener("dragleave", onWindowDragLeave, true);
     window.removeEventListener("drop", onWindowDrop, true);
     if (!readOnly && type === "stickers") {
-      node.onExecuted = modalPrevOnExecuted;
-      node.onConnectionsChange = modalPrevOnConnectionsChange;
-      node.__panoExternalStickerSync = null;
+      if (node.onExecuted === modalOnExecuted) node.onExecuted = modalPrevOnExecuted;
+      if (node.onConnectionsChange === modalOnConnectionsChange) node.onConnectionsChange = modalPrevOnConnectionsChange;
+      if (node.__panoExternalStickerSync === modalExternalStickerSync) node.__panoExternalStickerSync = null;
     }
     if (!embedded) {
       overlay?.remove();

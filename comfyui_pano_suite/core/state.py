@@ -90,7 +90,19 @@ def parse_sticker_state(state_raw: str | None) -> dict | None:
         return None
     if str(parsed.get("kind") or "") != "pano_sticker_state":
         return None
-    if int(parsed.get("version") or 0) != 1:
+    version_value = parsed.get("version")
+    if isinstance(version_value, bool):
+        return None
+    if isinstance(version_value, int):
+        version = version_value
+    elif isinstance(version_value, str) and version_value.isdigit():
+        try:
+            version = int(version_value)
+        except ValueError:
+            return None
+    else:
+        return None
+    if version != 1:
         return None
     pose = parsed.get("pose")
     if not isinstance(pose, dict):

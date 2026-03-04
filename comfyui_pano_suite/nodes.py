@@ -121,6 +121,43 @@ def _pose_from_sticker_state(parsed_state: dict | None, image_w: int, image_h: i
     }
 
 
+def _build_runtime_external_sticker(
+    sticker: dict | None,
+    *,
+    external_id: str,
+    slot_key: str,
+    payload_state_hash: str,
+    parsed_pose: dict | None,
+    image_rgba: np.ndarray,
+    image_w: int,
+    image_h: int,
+    z_index: int = 0,
+) -> dict:
+    runtime_sticker = dict(sticker) if isinstance(sticker, dict) else {
+        "id": external_id,
+        "source_kind": "external_image",
+        "slot_key": str(slot_key or "1"),
+        "visible": True,
+        "z_index": int(z_index),
+        "yaw_deg": 0.0,
+        "pitch_deg": 0.0,
+        "hFOV_deg": 30.0,
+        "rot_deg": 0.0,
+    }
+    if parsed_pose is not None and str(runtime_sticker.get("source_state_hash", "")) != payload_state_hash:
+        runtime_sticker.update(parsed_pose)
+    else:
+        runtime_sticker["vFOV_deg"] = _vfov_from_hfov(
+            runtime_sticker.get("hFOV_deg", 30.0),
+            image_w,
+            image_h,
+        )
+    runtime_sticker["image_rgba"] = image_rgba
+    runtime_sticker["source_state_hash"] = payload_state_hash
+    runtime_sticker["slot_key"] = str(slot_key or "1")
+    return runtime_sticker
+
+
 def _build_sticker_state_json(shot: dict, frame_w: int, frame_h: int) -> str:
     width = max(1, int(frame_w))
     height = max(1, int(frame_h))
@@ -244,21 +281,37 @@ class PanoramaStickersNode(io.ComfyNode):
                 external_pose_ui = dict(parsed_pose)
 
             external_id = _external_sticker_id(payload.get("slot_key"))
+            matched_existing = False
             for idx, sticker in enumerate(render_stickers):
                 if str(sticker.get("id", "")) != external_id:
                     continue
-                runtime_sticker = dict(sticker)
-                if parsed_pose is not None and str(runtime_sticker.get("source_state_hash", "")) != payload_state_hash:
-                    runtime_sticker.update(parsed_pose)
-                else:
-                    runtime_sticker["vFOV_deg"] = _vfov_from_hfov(
-                        runtime_sticker.get("hFOV_deg", 30.0),
-                        image_w,
-                        image_h,
-                    )
-                runtime_sticker["image_rgba"] = image_rgba
+                runtime_sticker = _build_runtime_external_sticker(
+                    sticker,
+                    external_id=external_id,
+                    slot_key=str(payload.get("slot_key") or "1"),
+                    payload_state_hash=payload_state_hash,
+                    parsed_pose=parsed_pose,
+                    image_rgba=image_rgba,
+                    image_w=image_w,
+                    image_h=image_h,
+                    z_index=int(sticker.get("z_index", 0) or 0),
+                )
                 render_stickers[idx] = runtime_sticker
+                matched_existing = True
                 break
+            if not matched_existing:
+                next_z = max((int(st.get("z_index", 0) or 0) for st in render_stickers if isinstance(st, dict)), default=-1) + 1
+                render_stickers.append(_build_runtime_external_sticker(
+                    None,
+                    external_id=external_id,
+                    slot_key=str(payload.get("slot_key") or "1"),
+                    payload_state_hash=payload_state_hash,
+                    parsed_pose=parsed_pose,
+                    image_rgba=image_rgba,
+                    image_w=image_w,
+                    image_h=image_h,
+                    z_index=next_z,
+                ))
 
         render_state = dict(state)
         render_state["stickers"] = render_stickers
