@@ -1968,8 +1968,10 @@ function createNodeBackedEditor(node, type, options = {}) {
     }
   }
   function buildCanonicalCutoutStickerState(item) {
-    const width = Math.max(1, Number(item?.out_w || 1024));
-    const height = Math.max(1, Number(item?.out_h || 1024));
+    const widthRaw = Number(item?.out_w);
+    const heightRaw = Number(item?.out_h);
+    const width = Math.max(1, Number.isFinite(widthRaw) ? widthRaw : 1024);
+    const height = Math.max(1, Number.isFinite(heightRaw) ? heightRaw : 1024);
     const yawRaw = Number(item?.yaw_deg);
     const pitchRaw = Number(item?.pitch_deg);
     const rollRaw = Number(item?.roll_deg ?? item?.rot_deg);
