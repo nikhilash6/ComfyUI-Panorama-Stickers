@@ -11,6 +11,9 @@ import { createPanoInteractionController } from "./pano_interaction_controller.j
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
 
 const STATE_WIDGET = "state_json";
+const EXTERNAL_STICKER_ID = "external_1";
+const EXTERNAL_STICKER_SOURCE_KIND = "external_image";
+const EXTERNAL_STICKER_PREVIEW_KEY = "pano_sticker_input_images";
 const ENABLE_STICKERS_NODE_PREVIEW = false;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
@@ -246,6 +249,8 @@ function cloneStickerList(raw) {
     if (!item || typeof item !== "object") return item;
     const next = { ...item };
     if (next.crop && typeof next.crop === "object") next.crop = { ...next.crop };
+    if (next.initial_pose && typeof next.initial_pose === "object") next.initial_pose = { ...next.initial_pose };
+    next.visible = next.visible !== false;
     return next;
   });
 }
@@ -1353,6 +1358,254 @@ function showEditor(node, type, options = {}) {
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
   function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
+  function isExternalSticker(item) {
+    if (!item || typeof item !== "object") return false;
+    return String(item.id || "") === EXTERNAL_STICKER_ID
+      || String(item.source_kind || "") === EXTERNAL_STICKER_SOURCE_KIND;
+  }
+  function getNodeUiList(key) {
+    const outputs = lookupNodeOutputEntry(node?.id);
+    if (Array.isArray(outputs?.ui?.[key])) return outputs.ui[key];
+    if (Array.isArray(outputs?.[key])) return outputs[key];
+    return [];
+  }
+  function getNodeUiValue(key) {
+    const outputs = lookupNodeOutputEntry(node?.id);
+    if (outputs?.ui && Object.prototype.hasOwnProperty.call(outputs.ui, key)) return outputs.ui[key];
+    if (outputs && Object.prototype.hasOwnProperty.call(outputs, key)) return outputs[key];
+    return null;
+  }
+  function normalizeInputPoseValue(value, debugValue = null) {
+    if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    if (Array.isArray(value) && value.length > 0) {
+      const first = value[0];
+      if (first && typeof first === "object" && !Array.isArray(first)) return first;
+    }
+    if (Array.isArray(debugValue) && debugValue.length > 0) {
+      const parsed = debugValue[0]?.parsed_state;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          yaw_deg: Number(parsed.yaw_deg || 0),
+          pitch_deg: Number(parsed.pitch_deg || 0),
+          hFOV_deg: Number(parsed.hFOV_deg || 30),
+          rot_deg: Number(parsed.roll_deg || 0),
+        };
+      }
+    }
+    return null;
+  }
+  function getStickerUiImage(key, onLoad = null) {
+    const list = getNodeUiList(key);
+    const first = Array.isArray(list) && list.length ? list[0] : null;
+    const src = imageSourceFromCandidate(first);
+    if (!src) return null;
+    const cacheKey = `__ui__${key}`;
+    const cached = imageCache.get(cacheKey);
+    if (cached && cached.__panoSrc === src) return cached;
+    const img = new Image();
+    img.__panoSrc = src;
+    img.onload = () => {
+      if (typeof onLoad === "function") onLoad(img);
+      else requestDraw();
+    };
+    img.src = src;
+    imageCache.set(cacheKey, img);
+    return img;
+  }
+  function hashStringSimple(text) {
+    const s = String(text || "");
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return String(h >>> 0);
+  }
+  function computeStickerVFov(hFovDeg, width, height) {
+    const w = Math.max(1, Number(width || 1));
+    const h = Math.max(1, Number(height || 1));
+    const hf = clamp(Number(hFovDeg || 30), 0.1, 179) * DEG2RAD;
+    const vf = 2 * Math.atan(Math.tan(hf * 0.5) * (h / w));
+    return clamp(vf * RAD2DEG, 0.1, 179);
+  }
+  function parseLinkedStickerState(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return null;
+    try {
+      const parsed = JSON.parse(text);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (String(parsed.kind || "") !== "pano_sticker_state") return null;
+      if (Number(parsed.version || 0) !== 1) return null;
+      const pose = parsed.pose;
+      if (!pose || typeof pose !== "object") return null;
+      const yawRaw = Number(pose.yaw_deg);
+      const pitchRaw = Number(pose.pitch_deg);
+      const rollRaw = Number(pose.roll_deg);
+      const hRaw = Number(pose.hFOV_deg);
+      if (![yawRaw, pitchRaw, rollRaw, hRaw].every((v) => Number.isFinite(v))) return null;
+      let yaw = ((yawRaw + 180) % 360 + 360) % 360 - 180;
+      if (Object.is(yaw, -0)) yaw = 0;
+      const out = {
+        yaw_deg: yaw,
+        pitch_deg: clamp(pitchRaw, -89.9, 89.9),
+        roll_deg: rollRaw,
+        hFOV_deg: clamp(hRaw, 0.1, 179),
+      };
+      const sourceAspect = Number(parsed.source_aspect);
+      if (Number.isFinite(sourceAspect) && sourceAspect > 0) out.source_aspect = sourceAspect;
+      return out;
+    } catch {
+      return null;
+    }
+  }
+  function getLinkedStringInputValue(inputName) {
+    const input = Array.isArray(node?.inputs)
+      ? node.inputs.find((entry) => String(entry?.name || "") === String(inputName))
+      : null;
+    const linkId = input?.link;
+    if (linkId != null) {
+      const linkInfo = getGraphLinkById(node.graph, linkId);
+      const { originId, originSlot } = resolveOriginFromLinkInfo(linkInfo);
+      const outputs = lookupNodeOutputEntry(originId);
+      const groups = [
+        outputs?.output,
+        outputs?.result,
+        outputs?.data?.output,
+        outputs?.data?.result,
+        outputs?.ui?.output,
+        outputs?.ui?.result,
+      ];
+      for (const group of groups) {
+        if (!Array.isArray(group)) continue;
+        const idx = Number(originSlot || 0);
+        const val = group[idx];
+        if (typeof val === "string" && val.trim()) return val;
+      }
+    }
+    return String(getWidget(node, inputName)?.value || "");
+  }
+  function buildExternalInitialPose(inputPose, stateRaw, previewImg) {
+    const parsed = (inputPose && typeof inputPose === "object")
+      ? {
+        yaw_deg: Number(inputPose.yaw_deg || 0),
+        pitch_deg: Number(inputPose.pitch_deg || 0),
+        roll_deg: Number(inputPose.rot_deg ?? inputPose.roll_deg ?? 0),
+        hFOV_deg: Number(inputPose.hFOV_deg || 30),
+      }
+      : parseLinkedStickerState(stateRaw);
+    if (parsed) {
+      const width = Number(previewImg?.naturalWidth || previewImg?.width || parsed.source_aspect || 1);
+      const height = Number(previewImg?.naturalHeight || previewImg?.height || 1);
+      return {
+        yaw_deg: Number(parsed.yaw_deg || 0),
+        pitch_deg: Number(parsed.pitch_deg || 0),
+        hFOV_deg: Number(parsed.hFOV_deg || 30),
+        vFOV_deg: computeStickerVFov(parsed.hFOV_deg, width, height),
+        rot_deg: Number(parsed.roll_deg || 0),
+      };
+    }
+    const width = Number(previewImg?.naturalWidth || previewImg?.width || 1);
+    const height = Number(previewImg?.naturalHeight || previewImg?.height || 1);
+    return {
+      yaw_deg: Number(editor.viewYaw || 0),
+      pitch_deg: Number(editor.viewPitch || 0),
+      hFOV_deg: 30,
+      vFOV_deg: computeStickerVFov(30, width, height),
+      rot_deg: 0,
+    };
+  }
+  function reconcileExternalStickerFromInputs(reason = "sync") {
+    if (type !== "stickers" || readOnly) return;
+    const input = Array.isArray(node?.inputs)
+      ? node.inputs.find((entry) => String(entry?.name || "") === "sticker_image")
+      : null;
+    const linkId = input?.link ?? null;
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      node.__panoExternalStickerSync?.("image-loaded");
+    });
+    const inputDebug = getNodeUiValue("pano_sticker_input_debug");
+    const inputPose = normalizeInputPoseValue(getNodeUiValue("pano_sticker_input_pose"), inputDebug);
+    const stateRaw = getLinkedStringInputValue("sticker_state");
+    const stateHash = inputPose && typeof inputPose === "object"
+      ? hashStringSimple(JSON.stringify(inputPose))
+      : hashStringSimple(stateRaw);
+    const stickers = Array.isArray(state.stickers) ? state.stickers : (state.stickers = []);
+    const existingIndex = stickers.findIndex((item) => String(item?.id || "") === EXTERNAL_STICKER_ID);
+    if (linkId == null) {
+      if (existingIndex >= 0) {
+        stickers.splice(existingIndex, 1);
+        if (editor.selectedId === EXTERNAL_STICKER_ID) {
+          editor.selectedId = null;
+          state.active.selected_sticker_id = null;
+        }
+        commitAndRefreshNode();
+        updateSidePanel();
+        updateSelectionMenu();
+        requestDraw();
+      }
+      return;
+    }
+    const maxZ = stickers.reduce((acc, item) => Math.max(acc, Number(item?.z_index || 0)), -1);
+    let target = existingIndex >= 0 ? stickers[existingIndex] : null;
+    const sourceChanged = !target
+      || Number(target.source_link_id ?? -1) !== Number(linkId)
+      || String(target.source_state_hash || "") !== stateHash;
+    if (!target) {
+      target = {
+        id: EXTERNAL_STICKER_ID,
+        source_kind: EXTERNAL_STICKER_SOURCE_KIND,
+      };
+      stickers.push(target);
+    }
+    target.id = EXTERNAL_STICKER_ID;
+    target.source_kind = EXTERNAL_STICKER_SOURCE_KIND;
+    target.source_link_id = Number(linkId);
+    target.source_state_hash = stateHash;
+    target.visible = target.visible !== false;
+    if (sourceChanged) {
+      const pose = buildExternalInitialPose(inputPose, stateRaw, previewImg);
+      console.warn("[PanoramaStickers] external reconcile", {
+        reason,
+        linkId,
+        inputPose,
+        inputDebug,
+        stateRaw,
+        sourceChanged,
+        pose,
+      });
+      Object.assign(target, pose, {
+        initial_pose: { ...pose },
+        visible: true,
+        z_index: maxZ + 1,
+      });
+    } else if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      target.vFOV_deg = computeStickerVFov(
+        Number(target.hFOV_deg || 30),
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+      console.warn("[PanoramaStickers] external reconcile", {
+        reason,
+        linkId,
+        inputPose,
+        inputDebug,
+        stateRaw,
+        sourceChanged,
+        pose: {
+          yaw_deg: target.yaw_deg,
+          pitch_deg: target.pitch_deg,
+          hFOV_deg: target.hFOV_deg,
+          vFOV_deg: target.vFOV_deg,
+          rot_deg: target.rot_deg,
+        },
+      });
+    }
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    requestDraw();
+    void reason;
+  }
   function applyInitialCutoutFocus() {
     if (type !== "cutout") return;
     const shots = getList();
@@ -1439,7 +1692,15 @@ function showEditor(node, type, options = {}) {
     return { x: 0, y: ry, w: rw, h: rh };
   }
 
-  function getStickerImage(assetId) {
+  function getStickerImage(stickerOrAssetId) {
+    if (stickerOrAssetId && typeof stickerOrAssetId === "object" && isExternalSticker(stickerOrAssetId)) {
+      return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+        node.__panoExternalStickerSync?.("image-loaded");
+      });
+    }
+    const assetId = (stickerOrAssetId && typeof stickerOrAssetId === "object")
+      ? String(stickerOrAssetId.asset_id || "")
+      : String(stickerOrAssetId || "");
     if (!assetId) return null;
     const cached = imageCache.get(assetId);
     if (cached) return cached;
@@ -2016,7 +2277,7 @@ function showEditor(node, type, options = {}) {
       let meshDrawn = false;
 
       if (type === "stickers") {
-        const img = getStickerImage(item.asset_id);
+        const img = getStickerImage(item);
         if (img && (img.complete || img.width)) {
           meshDrawn = drawStickerMesh(item, img);
         } else if (g.visible) {
@@ -4015,6 +4276,26 @@ function showEditor(node, type, options = {}) {
     requestDraw();
   });
 
+  const modalPrevOnExecuted = node.onExecuted;
+  const modalPrevOnConnectionsChange = node.onConnectionsChange;
+  if (!readOnly && type === "stickers") {
+    node.__panoExternalStickerSync = (reason = "sync") => {
+      reconcileExternalStickerFromInputs(reason);
+    };
+    node.onExecuted = function onPanoEditorExecuted(...args) {
+      if (typeof modalPrevOnExecuted === "function") {
+        modalPrevOnExecuted.apply(this, args);
+      }
+      this.__panoExternalStickerSync?.("executed");
+    };
+    node.onConnectionsChange = function onPanoEditorConnectionsChange(...args) {
+      if (typeof modalPrevOnConnectionsChange === "function") {
+        modalPrevOnConnectionsChange.apply(this, args);
+      }
+      this.__panoExternalStickerSync?.("connections");
+    };
+  }
+
   const closeEditor = () => {
     if (document.fullscreenElement === overlay) {
       document.exitFullscreen?.().catch(() => { });
@@ -4033,6 +4314,11 @@ function showEditor(node, type, options = {}) {
     window.removeEventListener("dragover", onWindowDragOver, true);
     window.removeEventListener("dragleave", onWindowDragLeave, true);
     window.removeEventListener("drop", onWindowDrop, true);
+    if (!readOnly && type === "stickers") {
+      node.onExecuted = modalPrevOnExecuted;
+      node.onConnectionsChange = modalPrevOnConnectionsChange;
+      node.__panoExternalStickerSync = null;
+    }
     overlay.remove();
   };
   const onEscClose = (ev) => {
@@ -4071,6 +4357,9 @@ function showEditor(node, type, options = {}) {
 
   installTooltipHandlers(root);
   applyInitialCutoutFocus();
+  if (!readOnly && type === "stickers") {
+    reconcileExternalStickerFromInputs("open");
+  }
   void migrateLegacyEmbeddedAssets();
   pushHistory();
   updateSidePanel();

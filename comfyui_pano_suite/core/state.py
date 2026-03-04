@@ -1,4 +1,5 @@
 import json
+import math
 import uuid
 from copy import deepcopy
 
@@ -69,4 +70,59 @@ def parse_state(state_raw: str | None) -> dict | None:
 
 def dump_state(state: dict) -> str:
     return json.dumps(state, ensure_ascii=True, separators=(",", ":"))
+
+
+def _wrap_yaw(yaw_deg: float) -> float:
+    return ((float(yaw_deg) + 180.0) % 360.0) - 180.0
+
+
+def parse_sticker_state(state_raw: str | None) -> dict | None:
+    if not isinstance(state_raw, str):
+        return None
+    text = state_raw.strip()
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except Exception:
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    if str(parsed.get("kind") or "") != "pano_sticker_state":
+        return None
+    if int(parsed.get("version") or 0) != 1:
+        return None
+    pose = parsed.get("pose")
+    if not isinstance(pose, dict):
+        return None
+
+    try:
+        yaw_deg = _wrap_yaw(float(pose["yaw_deg"]))
+        pitch_deg = max(-89.9, min(89.9, float(pose["pitch_deg"])))
+        roll_deg = float(pose["roll_deg"])
+        h_fov_deg = max(0.1, min(179.0, float(pose["hFOV_deg"])))
+    except Exception:
+        return None
+
+    values = [yaw_deg, pitch_deg, roll_deg, h_fov_deg]
+    if not all(math.isfinite(v) for v in values):
+        return None
+
+    out = {
+        "yaw_deg": yaw_deg,
+        "pitch_deg": pitch_deg,
+        "roll_deg": roll_deg,
+        "hFOV_deg": h_fov_deg,
+    }
+
+    source_aspect = parsed.get("source_aspect", None)
+    if source_aspect is not None:
+        try:
+            source_aspect_val = float(source_aspect)
+        except Exception:
+            source_aspect_val = None
+        if source_aspect_val is not None and math.isfinite(source_aspect_val) and source_aspect_val > 0.0:
+            out["source_aspect"] = source_aspect_val
+
+    return out
 
