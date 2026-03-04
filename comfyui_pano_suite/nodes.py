@@ -219,15 +219,9 @@ class PanoramaStickersNode(io.ComfyNode):
                 render_stickers.append(dict(sticker))
 
         external_pose_ui = None
-        external_debug = []
         for payload in _iter_external_sticker_payloads(sticker_image=sticker_image, sticker_state=sticker_state):
             parsed_state = parse_sticker_state(payload.get("state_raw"))
             payload_state_hash = _hash_text(payload.get("state_raw"))
-            external_debug.append({
-                "slot_key": str(payload.get("slot_key", "")),
-                "state_raw": str(payload.get("state_raw") or ""),
-                "parsed_state": dict(parsed_state) if isinstance(parsed_state, dict) else None,
-            })
             if external_pose_ui is None and parsed_state is not None:
                 external_pose_ui = {
                     "yaw_deg": float(parsed_state.get("yaw_deg", 0.0)),
@@ -284,9 +278,6 @@ class PanoramaStickersNode(io.ComfyNode):
             ui_ret.update(_save_input_preview(sticker_image, key="pano_sticker_input_images"))
         if external_pose_ui is not None:
             ui_ret["pano_sticker_input_pose"] = [external_pose_ui]
-        if external_debug:
-            ui_ret["pano_sticker_input_debug"] = external_debug
-            print(f"[PanoramaStickers] external_input_debug={external_debug}")
         if warnings:
             ui_ret["pano_sticker_warnings"] = [str(w) for w in warnings]
         return io.NodeOutput(out_t, ui=ui_ret)

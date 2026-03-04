@@ -1523,8 +1523,7 @@ function showEditor(node, type, options = {}) {
     const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
       node.__panoExternalStickerSync?.("image-loaded");
     });
-    const inputDebug = getNodeUiValue("pano_sticker_input_debug");
-    const inputPose = normalizeInputPoseValue(getNodeUiValue("pano_sticker_input_pose"), inputDebug);
+    const inputPose = normalizeInputPoseValue(getNodeUiValue("pano_sticker_input_pose"), null);
     const stateRaw = getLinkedStringInputValue("sticker_state");
     const stateHash = inputPose && typeof inputPose === "object"
       ? hashStringSimple(JSON.stringify(inputPose))
@@ -1562,47 +1561,31 @@ function showEditor(node, type, options = {}) {
     target.source_link_id = Number(linkId);
     target.source_state_hash = stateHash;
     target.visible = target.visible !== false;
+    let stateChanged = false;
     if (sourceChanged) {
       const pose = buildExternalInitialPose(inputPose, stateRaw, previewImg);
-      console.warn("[PanoramaStickers] external reconcile", {
-        reason,
-        linkId,
-        inputPose,
-        inputDebug,
-        stateRaw,
-        sourceChanged,
-        pose,
-      });
       Object.assign(target, pose, {
         initial_pose: { ...pose },
         visible: true,
         z_index: maxZ + 1,
       });
+      stateChanged = true;
     } else if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
-      target.vFOV_deg = computeStickerVFov(
+      const nextVFov = computeStickerVFov(
         Number(target.hFOV_deg || 30),
         Number(previewImg.naturalWidth || previewImg.width || 1),
         Number(previewImg.naturalHeight || previewImg.height || 1),
       );
-      console.warn("[PanoramaStickers] external reconcile", {
-        reason,
-        linkId,
-        inputPose,
-        inputDebug,
-        stateRaw,
-        sourceChanged,
-        pose: {
-          yaw_deg: target.yaw_deg,
-          pitch_deg: target.pitch_deg,
-          hFOV_deg: target.hFOV_deg,
-          vFOV_deg: target.vFOV_deg,
-          rot_deg: target.rot_deg,
-        },
-      });
+      if (Math.abs(Number(target.vFOV_deg || 0) - nextVFov) > 1e-6) {
+        target.vFOV_deg = nextVFov;
+        stateChanged = true;
+      }
     }
-    commitAndRefreshNode();
-    updateSidePanel();
-    updateSelectionMenu();
+    if (stateChanged) {
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+    }
     requestDraw();
     void reason;
   }
