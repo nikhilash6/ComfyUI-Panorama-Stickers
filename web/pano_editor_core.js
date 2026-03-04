@@ -415,6 +415,7 @@ const ICON = {
   send_back: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 4v8'/><path d='m4.4 10.4 1.6 1.6 1.6-1.6'/><path d='M9.5 11h1.2M9.5 8h2.2M9.5 5h3.1'/></svg>",
   aspect: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.866 14.7041C13.9131 14.5727 12.9574 14.4687 12 14.3923V12.8876C12.8347 12.9523 13.6683 13.0373 14.4999 13.1426L14.5 9.00003H16L15.9999 14L15.9999 14.8605L15.1475 14.7429L14.866 14.7041ZM16 7.00003L16 2.49996L16 1.6394L15.1475 1.75699L14.866 1.79581C13.9131 1.92725 12.9574 2.03119 12 2.10765V3.61228C12.8347 3.54757 13.6683 3.46256 14.5 3.35727L14.5 7.00003H16ZM9.99998 2.22729V3.72844C8.66715 3.77999 7.33282 3.77999 5.99998 3.72844V2.22729C7.33279 2.28037 8.66718 2.28037 9.99998 2.22729ZM9.99998 14.2726V12.7715C8.66715 12.7199 7.33282 12.7199 5.99998 12.7715V14.2726C7.33279 14.2195 8.66718 14.2195 9.99998 14.2726ZM3.99998 14.3923C3.04258 14.4687 2.08683 14.5727 1.13391 14.7041L0.85242 14.7429L-0.0000610352 14.8605L-0.0000578761 14L-0.0000396322 9.00003H1.49996L1.49995 13.1426C2.33162 13.0373 3.16521 12.9523 3.99998 12.8876V14.3923ZM1.49997 7.00003L1.49998 3.35727C2.33164 3.46256 3.16522 3.54757 3.99998 3.61228V2.10765C3.0426 2.03119 2.08686 1.92725 1.13395 1.79581L0.852462 1.75699L-0.0000127554 1.6394L-0.0000159144 2.49995L-0.0000323345 7.00003H1.49997Z' fill='currentColor'/></svg>",
   rotate_90: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6.21967 4.71967L5.68934 5.25L6.75 6.31066L7.28033 5.78033L9.25 3.81066V13.5C9.25 13.6381 9.13807 13.75 9 13.75H2.75H2V15.25H2.75H9C9.9665 15.25 10.75 14.4665 10.75 13.5V3.81066L12.7197 5.78033L13.25 6.31066L14.3107 5.25L13.7803 4.71967L10.5303 1.46967C10.2374 1.17678 9.76256 1.17678 9.46967 1.46967L6.21967 4.71967Z' fill='currentColor'/></svg>",
+  back_initial: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3 14V2.5' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='M4.5 3.5h6.2l-1.6 2.2 1.6 2.2H4.5z' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='M12.8 12.2H7.2' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/><path d='m8.9 10.6-1.7 1.6 1.7 1.6' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/></svg>",
   delete: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.8 4.4h10.4'/><path d='m5.8 4.4.6-1.4h3.2l.6 1.4'/><path d='M4.5 4.4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8'/><path d='M6.7 6.5v4.7M9.3 6.5v4.7'/></svg>",
   reset: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M8 3.2a4.8 4.8 0 1 1-4.8 4.8'/><path d='M3.2 3.2v3.6h3.6'/></svg>",
   eye: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M4.02168 4.76932C6.11619 2.33698 9.88374 2.33698 11.9783 4.76932L14.7602 7.99999L11.9783 11.2307C9.88374 13.663 6.1162 13.663 4.02168 11.2307L1.23971 7.99999L4.02168 4.76932ZM13.1149 3.79054C10.422 0.663244 5.57797 0.663247 2.88503 3.79054L-0.318359 7.5106V8.48938L2.88503 12.2094C5.57797 15.3367 10.422 15.3367 13.1149 12.2094L16.3183 8.48938V7.5106L13.1149 3.79054ZM6.49997 7.99999C6.49997 7.17157 7.17154 6.49999 7.99997 6.49999C8.82839 6.49999 9.49997 7.17157 9.49997 7.99999C9.49997 8.82842 8.82839 9.49999 7.99997 9.49999C7.17154 9.49999 6.49997 8.82842 6.49997 7.99999ZM7.99997 4.99999C6.34311 4.99999 4.99997 6.34314 4.99997 7.99999C4.99997 9.65685 6.34311 11 7.99997 11C9.65682 11 11 9.65685 11 7.99999C11 6.34314 9.65682 4.99999 7.99997 4.99999Z' fill='currentColor'/></svg>",
@@ -1788,6 +1789,71 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (!item || typeof item !== "object") return false;
     return String(item.id || "") === EXTERNAL_STICKER_ID
       || String(item.source_kind || "") === EXTERNAL_STICKER_SOURCE_KIND;
+  }
+  function restoreSelectedToInitialPose() {
+    if (readOnly || type !== "stickers") return;
+    const selected = getSelected();
+    if (!selected || !isExternalSticker(selected)) return;
+    const initial = selected.initial_pose;
+    if (!initial || typeof initial !== "object") return;
+    selected.yaw_deg = Number(initial.yaw_deg ?? selected.yaw_deg ?? 0);
+    selected.pitch_deg = Number(initial.pitch_deg ?? selected.pitch_deg ?? 0);
+    selected.hFOV_deg = Number(initial.hFOV_deg ?? selected.hFOV_deg ?? 30);
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      requestDraw();
+    });
+    if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      selected.vFOV_deg = computeStickerVFov(
+        Number(initial.hFOV_deg ?? selected.hFOV_deg ?? 30),
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+    } else {
+      selected.vFOV_deg = Number(initial.vFOV_deg ?? selected.vFOV_deg ?? 30);
+    }
+    selected.rot_deg = Number(initial.rot_deg ?? selected.rot_deg ?? 0);
+    pushHistory();
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    requestDraw();
+  }
+  function getRestorePoseForSticker(item) {
+    if (!item || !isExternalSticker(item)) return null;
+    const initial = item.initial_pose;
+    if (!initial || typeof initial !== "object") return null;
+    const pose = {
+      yaw_deg: Number(initial.yaw_deg ?? item.yaw_deg ?? 0),
+      pitch_deg: Number(initial.pitch_deg ?? item.pitch_deg ?? 0),
+      hFOV_deg: Number(initial.hFOV_deg ?? item.hFOV_deg ?? 30),
+      vFOV_deg: Number(initial.vFOV_deg ?? item.vFOV_deg ?? 30),
+      rot_deg: Number(initial.rot_deg ?? item.rot_deg ?? 0),
+    };
+    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      requestDraw();
+    });
+    if (previewImg && (previewImg.complete || previewImg.naturalWidth || previewImg.width)) {
+      pose.vFOV_deg = computeStickerVFov(
+        pose.hFOV_deg,
+        Number(previewImg.naturalWidth || previewImg.width || 1),
+        Number(previewImg.naturalHeight || previewImg.height || 1),
+      );
+    }
+    return pose;
+  }
+  function canRestoreSelectedToInitial() {
+    const selected = getSelected();
+    if (!selected || !isExternalSticker(selected)) return false;
+    const restorePose = getRestorePoseForSticker(selected);
+    if (!restorePose) return false;
+    const close = (a, b) => Math.abs(Number(a || 0) - Number(b || 0)) <= 1e-4;
+    return !(
+      close(selected.yaw_deg, restorePose.yaw_deg)
+      && close(selected.pitch_deg, restorePose.pitch_deg)
+      && close(selected.hFOV_deg, restorePose.hFOV_deg)
+      && close(selected.vFOV_deg, restorePose.vFOV_deg)
+      && close(selected.rot_deg, restorePose.rot_deg)
+    );
   }
   function getNodeUiList(key) {
     const outputs = lookupNodeOutputEntry(node?.id);
@@ -4068,7 +4134,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       return;
     }
     const menuMode = type === "stickers"
-      ? "stickers"
+      ? `stickers:${isExternalSticker(selected) ? "external" : "normal"}`
       : `cutout:${editor.cutoutAspectOpen ? "open" : "closed"}`;
     if (editor.menuMode !== menuMode) {
       if (type === "stickers") {
@@ -4076,6 +4142,7 @@ function createNodeBackedEditor(node, type, options = {}) {
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
           <button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>
+          ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
           <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
         `;
       } else {
@@ -4097,6 +4164,15 @@ function createNodeBackedEditor(node, type, options = {}) {
       editor.menuMode = menuMode;
       editor.menuSize.measured = false;
       installTooltipHandlers(selectionMenu);
+    }
+    if (type === "stickers" && isExternalSticker(selected)) {
+      const backBtn = selectionMenu.querySelector("[data-action='back-initial']");
+      if (backBtn) {
+        const enabled = canRestoreSelectedToInitial();
+        backBtn.disabled = !enabled;
+        backBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
+        backBtn.setAttribute("data-tip", enabled ? "Back to initial position" : "Already at initial position");
+      }
     }
     const geom = objectGeom(selected);
     if (!geom?.visible) {
@@ -4717,6 +4793,10 @@ function createNodeBackedEditor(node, type, options = {}) {
     }
     if (action === "duplicate") {
       duplicateSelected();
+      return;
+    }
+    if (action === "back-initial") {
+      restoreSelectedToInitialPose();
       return;
     }
     if (action === "delete") {
