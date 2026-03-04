@@ -1361,7 +1361,10 @@ function showEditor(node, type, options = {}) {
   function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
   function getNextStickerZIndex() {
     const stickers = Array.isArray(state.stickers) ? state.stickers : [];
-    return stickers.reduce((acc, item) => Math.max(acc, Number(item?.z_index || 0)), -1) + 1;
+    return stickers.reduce((acc, item) => {
+      const next = Number(item?.z_index);
+      return Math.max(acc, Number.isFinite(next) ? next : 0);
+    }, -1) + 1;
   }
   function isExternalSticker(item) {
     if (!item || typeof item !== "object") return false;

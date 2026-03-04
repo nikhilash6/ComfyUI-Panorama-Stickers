@@ -89,6 +89,17 @@ def _single_image_to_numpy(image, warnings: list[str]) -> np.ndarray | None:
     return np.clip(img.astype(np.float32), 0.0, 1.0)
 
 
+def _first_image_tensor(image):
+    if image is None or not hasattr(image, "shape"):
+        return image
+    try:
+        if len(image.shape) >= 4 and int(image.shape[0]) > 1:
+            return image[:1]
+    except Exception:
+        return image
+    return image
+
+
 def _vfov_from_hfov(hfov_deg: float, image_w: int, image_h: int) -> float:
     width = max(1, int(image_w))
     height = max(1, int(image_h))
@@ -335,7 +346,7 @@ class PanoramaStickersNode(io.ComfyNode):
         out_t = torch.from_numpy(out)[None, ...]
         ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
         if sticker_image is not None:
-            ui_ret.update(_save_input_preview(sticker_image, key="pano_sticker_input_images"))
+            ui_ret.update(_save_input_preview(_first_image_tensor(sticker_image), key="pano_sticker_input_images"))
         if external_pose_ui is not None:
             ui_ret["pano_sticker_input_pose"] = [external_pose_ui]
         if warnings:
