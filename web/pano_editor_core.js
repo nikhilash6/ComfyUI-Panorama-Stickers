@@ -1934,7 +1934,14 @@ function createNodeBackedEditor(node, type, options = {}) {
       const parsed = JSON.parse(text);
       if (!parsed || typeof parsed !== "object") return null;
       if (String(parsed.kind || "") !== "pano_sticker_state") return null;
-      if (Number(parsed.version || 0) !== 1) return null;
+      const versionValue = parsed.version;
+      let version = null;
+      if (typeof versionValue === "number" && Number.isInteger(versionValue)) {
+        version = versionValue;
+      } else if (typeof versionValue === "string" && /^\d+$/.test(versionValue)) {
+        version = Number.parseInt(versionValue, 10);
+      }
+      if (version !== 1) return null;
       const pose = parsed.pose;
       if (!pose || typeof pose !== "object") return null;
       const yawRaw = Number(pose.yaw_deg);

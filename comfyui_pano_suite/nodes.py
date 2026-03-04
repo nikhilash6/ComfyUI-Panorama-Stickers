@@ -59,6 +59,13 @@ def _hash_text(value) -> str:
     return str(h)
 
 
+def _safe_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return int(default)
+
+
 def _single_image_to_numpy(image, warnings: list[str]) -> np.ndarray | None:
     if image is None or not hasattr(image, "detach"):
         return None
@@ -138,7 +145,7 @@ def _build_runtime_external_sticker(
         "source_kind": "external_image",
         "slot_key": str(slot_key or "1"),
         "visible": True,
-        "z_index": int(z_index),
+        "z_index": _safe_int(z_index, 0),
         "yaw_deg": 0.0,
         "pitch_deg": 0.0,
         "hFOV_deg": 30.0,
@@ -294,13 +301,13 @@ class PanoramaStickersNode(io.ComfyNode):
                     image_rgba=image_rgba,
                     image_w=image_w,
                     image_h=image_h,
-                    z_index=int(sticker.get("z_index", 0) or 0),
+                    z_index=_safe_int(sticker.get("z_index", 0), 0),
                 )
                 render_stickers[idx] = runtime_sticker
                 matched_existing = True
                 break
             if not matched_existing:
-                next_z = max((int(st.get("z_index", 0) or 0) for st in render_stickers if isinstance(st, dict)), default=-1) + 1
+                next_z = max((_safe_int(st.get("z_index", 0), 0) for st in render_stickers if isinstance(st, dict)), default=-1) + 1
                 render_stickers.append(_build_runtime_external_sticker(
                     None,
                     external_id=external_id,
