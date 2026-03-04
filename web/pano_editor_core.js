@@ -4967,7 +4967,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (!selected) return;
     deleteSelected();
     ev.preventDefault();
-    ev.stopPropagation();
+    ev.stopImmediatePropagation();
   };
   const onUndoRedoKey = (ev) => {
     if (readOnly) return;
@@ -4980,7 +4980,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
     restoreHistory(ev.shiftKey ? 1 : -1);
     ev.preventDefault();
-    ev.stopPropagation();
+    ev.stopImmediatePropagation();
   };
   window.addEventListener("keydown", onEscClose, true);
   window.addEventListener("keydown", onDeleteKey, true);
