@@ -47,7 +47,7 @@ def _iter_external_sticker_payloads(sticker_image=None, sticker_state=None):
 
 
 def _external_sticker_id(slot_key: str) -> str:
-    return f"external_{str(slot_key or '').strip() or '1'}"
+    return f"sticker_image_{str(slot_key or '').strip() or '1'}"
 
 
 def _hash_text(value) -> str:
@@ -305,7 +305,7 @@ class PanoramaCutoutNode(io.ComfyNode):
             ],
             outputs=[
                 io.Image.Output("rect_image", display_name="rect_image"),
-                io.String.Output("sticker_state_json", display_name="sticker_state_json"),
+                io.String.Output("sticker_state_json", display_name="sticker_state"),
             ],
             hidden=[io.Hidden.unique_id],
             is_output_node=True,

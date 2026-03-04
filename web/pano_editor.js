@@ -11,7 +11,7 @@ import { createPanoInteractionController } from "./pano_interaction_controller.j
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
 
 const STATE_WIDGET = "state_json";
-const EXTERNAL_STICKER_ID = "external_1";
+const EXTERNAL_STICKER_ID = "sticker_image_1";
 const EXTERNAL_STICKER_SOURCE_KIND = "external_image";
 const EXTERNAL_STICKER_PREVIEW_KEY = "pano_sticker_input_images";
 const ENABLE_STICKERS_NODE_PREVIEW = false;
@@ -1354,7 +1354,7 @@ function showEditor(node, type, options = {}) {
   // Coordinate sanity: front-facing sticker should have top edge above bottom edge.
   const __sanity = stickerCornerOrderSanity();
   if (!__sanity) {
-    console.warn("[PanoramaSuite] corner order sanity check failed.");
+    panoEditorDebug("corner-order.sanity-failed");
   }
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
@@ -1367,6 +1367,13 @@ function showEditor(node, type, options = {}) {
     if (!item || typeof item !== "object") return false;
     return String(item.id || "") === EXTERNAL_STICKER_ID
       || String(item.source_kind || "") === EXTERNAL_STICKER_SOURCE_KIND;
+  }
+  function isStickerHidden(item) {
+    return !!(item && typeof item === "object" && item.visible === false);
+  }
+  function getStickerDisplayAlpha(item) {
+    if (isExternalSticker(item) && isStickerHidden(item)) return 0.2;
+    return 1;
   }
   function restoreSelectedToInitialPose() {
     if (readOnly || type !== "stickers") return;
@@ -1850,6 +1857,27 @@ function showEditor(node, type, options = {}) {
     const wrapped = getWrappedErpCanvas(img);
     if (!wrapped) return;
     const q = String(state.ui_settings?.preview_quality || "balanced");
+    const cacheKey = [
+      String(img.src || ""),
+      iw,
+      ih,
+      canvas.width,
+      canvas.height,
+      q,
+      Number(editor.viewYaw || 0).toFixed(4),
+      Number(editor.viewPitch || 0).toFixed(4),
+      Number(editor.viewFov || 100).toFixed(4),
+    ].join("|");
+    const cached = node.__panoPanoBackgroundCache;
+    if (cached?.canvas && cached.key === cacheKey) {
+      ctx.drawImage(cached.canvas, 0, 0);
+      return;
+    }
+    const bgCanvas = document.createElement("canvas");
+    bgCanvas.width = canvas.width;
+    bgCanvas.height = canvas.height;
+    const bgCtx = bgCanvas.getContext("2d");
+    if (!bgCtx) return;
     const Nu = q === "high" ? 44 : (q === "draft" ? 24 : 32);
     const Nv = q === "high" ? 28 : (q === "draft" ? 14 : 20);
     const verts = Array.from({ length: Nv + 1 }, () => Array(Nu + 1).fill(null));
@@ -1870,8 +1898,8 @@ function showEditor(node, type, options = {}) {
       }
     }
 
-    ctx.save();
-    ctx.globalAlpha = 0.94;
+    bgCtx.save();
+    bgCtx.globalAlpha = 0.94;
     for (let j = 0; j < Nv; j += 1) {
       for (let i = 0; i < Nu; i += 1) {
         const p00 = verts[j][i];
@@ -1890,11 +1918,13 @@ function showEditor(node, type, options = {}) {
             if (s.x < iw * 0.5) s.x += iw;
           });
         }
-        drawImageTri(wrapped, s00, s10, s11, p00, p10, p11);
-        drawImageTri(wrapped, s00, s11, s01, p00, p11, p01);
+        drawImageTriTo(bgCtx, wrapped, s00, s10, s11, p00, p10, p11);
+        drawImageTriTo(bgCtx, wrapped, s00, s11, s01, p00, p11, p01);
       }
     }
-    ctx.restore();
+    bgCtx.restore();
+    node.__panoPanoBackgroundCache = { key: cacheKey, canvas: bgCanvas };
+    ctx.drawImage(bgCanvas, 0, 0);
   }
 
   function pruneUnusedAssets() {
@@ -1984,7 +2014,7 @@ function showEditor(node, type, options = {}) {
     return stickerDirFromFrame(frame, x, y);
   }
 
-  function drawImageTri(img, s0, s1, s2, d0, d1, d2) {
+  function drawImageTriTo(targetCtx, img, s0, s1, s2, d0, d1, d2) {
     const denom = (s0.x * (s1.y - s2.y)) + (s1.x * (s2.y - s0.y)) + (s2.x * (s0.y - s1.y));
     if (Math.abs(denom) < 1e-6) return;
 
@@ -1996,16 +2026,20 @@ function showEditor(node, type, options = {}) {
     const f = ((d0.y * (s1.x * s2.y - s2.x * s1.y)) + (d1.y * (s2.x * s0.y - s0.x * s2.y)) + (d2.y * (s0.x * s1.y - s1.x * s0.y))) / denom;
 
     const [e0, e1, e2] = expandTri(d0, d1, d2, 0.45);
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(e0.x, e0.y);
-    ctx.lineTo(e1.x, e1.y);
-    ctx.lineTo(e2.x, e2.y);
-    ctx.closePath();
-    ctx.clip();
-    ctx.setTransform(a, d, b, e, c, f);
-    ctx.drawImage(img, 0, 0);
-    ctx.restore();
+    targetCtx.save();
+    targetCtx.beginPath();
+    targetCtx.moveTo(e0.x, e0.y);
+    targetCtx.lineTo(e1.x, e1.y);
+    targetCtx.lineTo(e2.x, e2.y);
+    targetCtx.closePath();
+    targetCtx.clip();
+    targetCtx.setTransform(a, d, b, e, c, f);
+    targetCtx.drawImage(img, 0, 0);
+    targetCtx.restore();
+  }
+
+  function drawImageTri(img, s0, s1, s2, d0, d1, d2) {
+    drawImageTriTo(ctx, img, s0, s1, s2, d0, d1, d2);
   }
 
   function getMeshDivisions() {
@@ -2331,13 +2365,17 @@ function showEditor(node, type, options = {}) {
 
       if (type === "stickers") {
         const img = getStickerImage(item);
+        const alpha = getStickerDisplayAlpha(item);
         if (img && (img.complete || img.width)) {
-          meshDrawn = drawStickerMesh(item, img);
+          meshDrawn = drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha);
         } else if (g.visible) {
+          const prevAlpha = ctx.globalAlpha;
+          ctx.globalAlpha = alpha;
           ctx.fillStyle = "rgba(255,255,255,0.08)";
           ctx.beginPath(); ctx.moveTo(g.corners[0].x, g.corners[0].y);
           for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
           ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = prevAlpha;
           meshDrawn = true;
         }
       } else if (!g.visible) {
@@ -2346,7 +2384,10 @@ function showEditor(node, type, options = {}) {
 
       if (type === "stickers") {
         if (!meshDrawn) continue;
+        const prevAlpha = ctx.globalAlpha;
+        ctx.globalAlpha = getStickerDisplayAlpha(item);
         drawStickerBoundary(item, selected);
+        ctx.globalAlpha = prevAlpha;
       } else {
         ctx.fillStyle = selected ? "rgba(0, 112, 243, 0.24)" : "rgba(255, 255, 255, 0.12)";
         ctx.beginPath();
@@ -2364,10 +2405,11 @@ function showEditor(node, type, options = {}) {
       }
 
       if (selected && g.visible) {
-        ctx.fillStyle = "#0070f3";
+        const accent = (type === "stickers" && isExternalSticker(item)) ? "#f59e0b" : "#0070f3";
+        ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
         if (type === "cutout") {
-          ctx.strokeStyle = "#0070f3";
+          ctx.strokeStyle = accent;
           ctx.lineCap = "round";
           ctx.lineWidth = 4;
           g.edgeMidpoints.forEach((m) => {
@@ -2390,7 +2432,7 @@ function showEditor(node, type, options = {}) {
         ctx.moveTo(g.rotateStemBase.x, g.rotateStemBase.y);
         ctx.lineTo(g.rotateHandle.x, g.rotateHandle.y);
         ctx.stroke();
-        ctx.fillStyle = "#0070f3";
+        ctx.fillStyle = accent;
         ctx.beginPath(); ctx.arc(g.rotateHandle.x, g.rotateHandle.y, 10, 0, Math.PI * 2); ctx.fill();
       }
     }
@@ -2901,7 +2943,10 @@ function showEditor(node, type, options = {}) {
       const pop = targetRow.querySelector(".pano-picker-pop");
       const items = [{ id: "", label: "No image" }];
       list.forEach((item, i) => {
-        const label = `${i + 1}. ${String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id)}`;
+        const baseLabel = isExternalSticker(item)
+          ? String(item.id || EXTERNAL_STICKER_ID)
+          : String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id);
+        const label = `${i + 1}. ${baseLabel}${isExternalSticker(item) && isStickerHidden(item) ? " (hidden)" : ""}`;
         items.push({ id: item.id, label });
       });
       const currentId = selected?.id || "";
@@ -3453,6 +3498,15 @@ function showEditor(node, type, options = {}) {
     const selected = getSelected();
     if (!selected) return;
     if (type === "stickers") {
+      if (isExternalSticker(selected)) {
+        selected.visible = isStickerHidden(selected);
+        pushHistory();
+        commitAndRefreshNode();
+        updateSidePanel();
+        updateSelectionMenu();
+        requestDraw();
+        return;
+      }
       state.stickers = state.stickers.filter((s) => s.id !== selected.id);
       pruneUnusedAssets();
       editor.selectedId = state.stickers[0]?.id || null;
@@ -3681,7 +3735,9 @@ function showEditor(node, type, options = {}) {
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
           <button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>
           ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
-          <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
+          ${isExternalSticker(selected)
+            ? `<button class="pano-btn pano-btn-icon" data-action="toggle-visible" aria-label="Hide" data-tip="Hide input image">${ICON.eye_dashed}</button>`
+            : `<button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>`}
         `;
       } else {
         const activeAspect = getCutoutAspectLabel(selected);
@@ -3710,6 +3766,13 @@ function showEditor(node, type, options = {}) {
         backBtn.disabled = !enabled;
         backBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
         backBtn.setAttribute("data-tip", enabled ? "Back to initial position" : "Already at initial position");
+      }
+      const toggleBtn = selectionMenu.querySelector("[data-action='toggle-visible']");
+      if (toggleBtn) {
+        const hidden = isStickerHidden(selected);
+        toggleBtn.innerHTML = hidden ? ICON.eye : ICON.eye_dashed;
+        toggleBtn.setAttribute("aria-label", hidden ? "Show" : "Hide");
+        toggleBtn.setAttribute("data-tip", hidden ? "Show input image" : "Hide input image");
       }
     }
     const geom = objectGeom(selected);
@@ -4334,6 +4397,10 @@ function showEditor(node, type, options = {}) {
     }
     if (action === "back-initial") {
       restoreSelectedToInitialPose();
+      return;
+    }
+    if (action === "toggle-visible") {
+      deleteSelected();
       return;
     }
     if (action === "delete") {
