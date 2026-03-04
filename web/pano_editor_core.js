@@ -1780,6 +1780,10 @@ function createNodeBackedEditor(node, type, options = {}) {
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
   function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
+  function getNextStickerZIndex() {
+    const stickers = Array.isArray(state.stickers) ? state.stickers : [];
+    return stickers.reduce((acc, item) => Math.max(acc, Number(item?.z_index || 0)), -1) + 1;
+  }
   function isExternalSticker(item) {
     if (!item || typeof item !== "object") return false;
     return String(item.id || "") === EXTERNAL_STICKER_ID
@@ -3662,7 +3666,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         hFOV_deg: 30,
         vFOV_deg: clamp(30 * ar, 1, 179),
         rot_deg: 0,
-        z_index: state.stickers.length,
+        z_index: getNextStickerZIndex(),
       });
       editor.selectedId = id;
       state.active.selected_sticker_id = id;
@@ -3827,7 +3831,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     copy.id = uid(type === "stickers" ? "st" : "sh");
     copy.yaw_deg = wrapYaw((copy.yaw_deg || 0) + 8);
     if (type === "stickers") {
-      copy.z_index = state.stickers.length;
+      copy.z_index = getNextStickerZIndex();
       state.stickers.push(copy);
       state.active.selected_sticker_id = copy.id;
     } else {
