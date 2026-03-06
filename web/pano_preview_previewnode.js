@@ -14,20 +14,6 @@ const PREVIEW_MIN_HEIGHT = 140;
 const PREVIEW_MIN_WIDTH = 180;
 const LEGACY_TOP_OFFSET = 40;
 const LEGACY_MARGIN = 10;
-function debugEnabled() {
-  return window?.__PANO_PREVIEW_DEBUG__ === true
-    || String(window?.localStorage?.getItem("panoPreviewDebug") || "").trim() === "1";
-}
-
-function log(node, tag, payload = null) {
-  if (!debugEnabled()) return;
-  try {
-    if (payload == null) console.log(`[PANO_PREVIEW_NODE][${tag}]`, `node=${node?.id ?? "?"}`);
-    else console.log(`[PANO_PREVIEW_NODE][${tag}]`, `node=${node?.id ?? "?"}`, payload);
-  } catch {
-    // ignore
-  }
-}
 
 function normalizeExecutionId(value) {
   const raw = String(value ?? "").trim();
@@ -205,9 +191,8 @@ function drawPreview(node, ctx, width, height, view, img) {
   });
   if (!drawn) {
     drawErpBackground(node, ctx, { x: 0, y: 0, w: width, h: height }, basis, tanHalfY, img, STANDALONE_MESH_LOW);
+    drawGrid(ctx, width, height);
   }
-
-  drawGrid(ctx, width, height);
 }
 
 function isPointInRect(x, y, rect) {
@@ -372,15 +357,10 @@ class PreviewNodeRuntime {
       this.resizeObserver?.observe(this.root);
       this.bindDomInput(this.canvas, this.root);
       this.onResizeDom();
-      log(this.node, "route.attach", { route: "preview_node_dom" });
       this.logProbeFrames();
     } catch (err) {
       this.errorText = "Preview mount failed";
       this.installErrorForeground();
-      log(this.node, "route.attach", {
-        route: "preview_node_dom_error",
-        reason: String(err?.message || err || "unknown"),
-      });
     }
   }
 
@@ -418,7 +398,6 @@ class PreviewNodeRuntime {
       const before = Number(this.view?.fov || 100);
       const changed = this.controller.applyWheelEvent(ev);
       const after = Number(this.view?.fov || 100);
-      log(this.node, "wheel.dom", { before, after, changed });
       ev.preventDefault();
       ev.stopPropagation();
       ev.stopImmediatePropagation?.();
@@ -426,7 +405,6 @@ class PreviewNodeRuntime {
   }
 
   attachLegacy() {
-    log(this.node, "route.attach", { route: "preview_node_legacy" });
     const self = this;
     this.node.onDrawForeground = function (ctx) {
       const out = self.orig.onDrawForeground ? self.orig.onDrawForeground.apply(this, arguments) : undefined;
@@ -475,7 +453,6 @@ class PreviewNodeRuntime {
       const before = Number(self.view?.fov || 100);
       const changed = self.controller.applyWheel(Math.sign(raw));
       const after = Number(self.view?.fov || 100);
-      log(self.node, "wheel.legacy", { raw, before, after, changed });
       if (changed) this.setDirtyCanvas?.(true, false);
       e?.preventDefault?.();
       e?.stopPropagation?.();
@@ -593,13 +570,6 @@ class PreviewNodeRuntime {
     let frame = 0;
     const probe = () => {
       if (!this.root || !this.canvas || frame >= 3) return;
-      log(this.node, "probe.frame", {
-        frame,
-        rootW: Number(this.root.clientWidth || 0),
-        rootH: Number(this.root.clientHeight || 0),
-        canvasW: Number(this.canvas.clientWidth || 0),
-        canvasH: Number(this.canvas.clientHeight || 0),
-      });
       frame += 1;
       requestAnimationFrame(probe);
     };
@@ -636,7 +606,6 @@ class PreviewNodeRuntime {
     this.node.onResize = this.orig.onResize;
     this.node.onRemoved = this.orig.onRemoved;
     this.node.__panoPreviewNodeRuntime = null;
-    log(this.node, "teardown.done");
   }
 }
 

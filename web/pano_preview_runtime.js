@@ -1,7 +1,7 @@
 import * as appModule from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
-import { drawCutoutProjectionPreview, getCutoutShotParams } from "./pano_cutout_projection.js";
-import { renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
+import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
+import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import {
   createPanoInteractionController,
   PANO_DRAG_SENSITIVITY,
@@ -17,6 +17,7 @@ import {
 import { clamp, wrapYaw } from "./pano_math.js";
 import { isPanoramaPreviewNodeName } from "./pano_preview_identity.js";
 import {
+  buildCutoutViewParamsFromShot,
   buildPanoramaViewParamsFromRuntime,
   buildStickerSceneFromState,
   buildStickerTexturesFromState,
@@ -1368,8 +1369,8 @@ function getCutoutContainRect(baseRect, shot) {
   const h = Math.max(1, Number(baseRect?.h || 0));
   const fallback = { x: Number(baseRect?.x || 0), y: Number(baseRect?.y || 0), w, h };
   if (!shot) return { drawRect: fallback, targetAspect: null };
-  const params = getCutoutShotParams(shot);
-  const aspect = clamp(Number(params?.aspect || 1), 0.05, 20.0);
+  const view = buildCutoutViewParamsFromShot(shot);
+  const aspect = clamp(Number(view?.aspect || 1), 0.05, 20.0);
   return {
     drawRect: containRect(fallback, aspect),
     targetAspect: aspect,
@@ -2022,8 +2023,8 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     const ownAspect = ownOutReady
       ? clamp(Number((ownOut.naturalWidth || ownOut.width) / Math.max(1, Number(ownOut.naturalHeight || ownOut.height || 1))), 0.05, 20.0)
       : 1;
-    const params = shot ? getCutoutShotParams(shot) : null;
-    const aspect = clamp(Number(params?.aspect || ownAspect || 1), 0.05, 20.0);
+    const cutoutView = shot ? buildCutoutViewParamsFromShot(shot) : null;
+    const aspect = clamp(Number(cutoutView?.aspect || ownAspect || 1), 0.05, 20.0);
     const contain = containRect(rect, aspect);
     const uiScale = getNodeUiScale(canvas, rect);
 
@@ -2048,18 +2049,13 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
         hintText = "Open editor and add frame";
       }
     } else if (bgReady) {
-      const glDrawn = renderErpViewToContext2D({
+      const glDrawn = renderCutoutViewToContext2D({
         owner: node,
         cacheKey: "runtime_cutout_bg",
         ctx,
         rect: contain,
         img: bgImg,
-        mode: "cutout",
-        yawDeg: Number(shot?.yaw_deg || 0),
-        pitchDeg: Number(shot?.pitch_deg || 0),
-        rollDeg: Number(shot?.roll_deg || 0),
-        hFovDeg: Number(shot?.hFOV_deg || 90),
-        vFovDeg: Number(shot?.vFOV_deg || 60),
+        view: cutoutView,
       });
       const fallbackDrawn = !glDrawn && !!drawCutoutProjectionPreview(ctx, node, bgImg, contain, shot, "draft");
       const rawLiveDrawn = glDrawn || fallbackDrawn;
@@ -2068,7 +2064,7 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
         fallbackDrawn: !!fallbackDrawn,
         hasShot: !!shot,
       });
-      const liveDrawnValidated = rawLiveDrawn && hasValidCutoutStats(node);
+      const liveDrawnValidated = !!glDrawn || (!!fallbackDrawn && hasValidCutoutStats(node));
       if (liveDrawnValidated) {
       } else if (ownOutReady) {
         ctx.drawImage(ownOut, contain.x, contain.y, contain.w, contain.h);

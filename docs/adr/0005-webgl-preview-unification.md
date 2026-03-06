@@ -33,8 +33,13 @@ The renderer remains display-only. It is responsible for sampling ERP imagery
 into panorama, unwrap, and cutout viewports. It does not own paint semantics,
 input semantics, or state semantics.
 
+Phase 1 is intentionally narrow: WebGL owns image rendering only. Selection
+outlines, handles, guides, and text labels remain Canvas2D overlays in editor
+and preview code for now.
+
 CPU projection remains only as a fallback path where the WebGL renderer is not
-available or a call site still needs a temporary compatibility path.
+available. That fallback is expected to stay basic-edit-capable, but it is not
+a visual parity target.
 
 ## Consequences
 
@@ -47,12 +52,12 @@ Positive:
 
 Tradeoffs:
 
-- sticker overlay warping is still not fully GPU-native in this phase
-- some CPU fallback code remains in place for compatibility
+- interaction visuals still remain outside the GPU path in this phase
+- some CPU fallback code remains in place for compatibility and basic editing
 - WebGL support is now a normal dependency for best-quality preview rendering
 
 ## Follow-up
 
-- migrate sticker overlay projection onto a GPU path
 - remove remaining CPU projection fallbacks from normal rendering paths
+- consider moving selection/handles/guides/labels onto the GPU path in a later phase
 - extend the renderer to cover paint/mask overlays when the paint rewrite lands
