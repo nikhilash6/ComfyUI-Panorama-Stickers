@@ -95,7 +95,13 @@ function compileShader(gl, type, source) {
 
 function createProgram(gl, vertexSource, fragmentSource) {
   const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  let fragmentShader;
+  try {
+    fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  } catch (e) {
+    gl.deleteShader(vertexShader);
+    throw e;
+  }
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
@@ -708,7 +714,7 @@ export function createPanoGlRenderer() {
   function renderScene(input = {}) {
     if (!init()) return null;
     setViewport(input.width, input.height, input.dpr || 1);
-    setupFrame();
+    if (!setupFrame()) return null;
     if (input.backgroundSource) {
       setBackgroundErp(input.backgroundSource, input.backgroundRevision ?? "");
       drawBackground(input.view, input);
@@ -732,6 +738,7 @@ export function createPanoGlRenderer() {
       return { u: ((px / width) % 1 + 1) % 1, v: clamp(py / height, 0, 1) };
     }
     const angles = getViewAngles(params, width, height);
+    if (!angles) return null;
     const basis = cameraBasis(angles.yawDeg, angles.pitchDeg, angles.rollDeg);
     const nx = ((px - width * 0.5) / (width * 0.5)) * Math.tan(clamp(angles.hFovDeg, 1, 179) * DEG2RAD * 0.5);
     const ny = ((height * 0.5 - py) / (height * 0.5)) * Math.tan(clamp(angles.vFovDeg, 0.1, 179) * DEG2RAD * 0.5);
