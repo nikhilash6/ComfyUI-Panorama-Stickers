@@ -40,6 +40,19 @@ https://github.com/user-attachments/assets/bf74e953-8ceb-4c7f-afa2-1c805f12c7af
 - [flux-2-klein-4B-360-erp-outpaint.json](./example_workflows/flux-2-klein-4B-360-erp-outpaint.json)
 - [flux-2-klein-9B-360-erp-outpaint.json](./example_workflows/flux-2-klein-9B-360-erp-outpaint.json)
 
+## Changelog
+
+### 1.1.0
+
+- Switched panorama rendering to a WebGL-first pipeline.
+- Added support for compositing images produced by `Panorama Cutout` back into the panorama through the `Panorama Stickers` node.
+
+## ToDo
+
+- Enable painting directly inside the modal UI.
+- Merge the `Panorama Stickers` node and the `Panorama Cutout` node into a unified workflow.
+- Add integration with Hugin.
+
 ## License
 
 MIT
