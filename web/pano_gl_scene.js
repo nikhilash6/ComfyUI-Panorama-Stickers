@@ -109,7 +109,7 @@ export function buildCutoutViewParamsFromShot(shot) {
     mode: "cutout",
     yawDeg: Number(shot?.yaw_deg || 0),
     pitchDeg: Number(shot?.pitch_deg || 0),
-    rollDeg: Number(shot?.roll_deg || 0),
+    rollDeg: Number(params?.roll ?? shot?.roll_deg ?? shot?.rot_deg ?? 0),
     hFovDeg: clamp(Number(shot?.hFOV_deg || 90), 1, 179),
     vFovDeg: clamp(Number(shot?.vFOV_deg || 60), 1, 179),
     aspect: Number(params?.aspect || 1),

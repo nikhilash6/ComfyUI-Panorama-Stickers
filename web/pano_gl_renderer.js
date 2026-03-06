@@ -413,7 +413,7 @@ export function createPanoGlRenderer() {
       if (paintTexture) gl.deleteTexture(paintTexture);
       if (maskTexture) gl.deleteTexture(maskTexture);
       stickerTextureRegistry.forEach((entry) => {
-        if (entry?.texture) gl.deleteTexture(entry.texture);
+        disposeStickerTextureEntry(entry);
       });
       if (backgroundProgram) gl.deleteProgram(backgroundProgram);
       if (stickerProgram) gl.deleteProgram(stickerProgram);
@@ -536,6 +536,10 @@ export function createPanoGlRenderer() {
     return setLayerTexture("mask", maskTexture, source, revision, dirtyRects);
   }
 
+  function disposeStickerTextureEntry(entry) {
+    if (entry?.texture && gl) gl.deleteTexture(entry.texture);
+  }
+
   function ensureStickerTexture(input) {
     if (!gl || !input?.assetId || !input?.source) return null;
     const assetId = String(input.assetId);
@@ -566,9 +570,16 @@ export function createPanoGlRenderer() {
 
   function syncStickerTextures(textures = []) {
     if (!init()) return false;
+    const validAssetIds = new Set();
     textures.forEach((input) => {
       if (!input?.assetId || !input?.source) return;
+      validAssetIds.add(String(input.assetId));
       ensureStickerTexture(input);
+    });
+    stickerTextureRegistry.forEach((entry, assetId) => {
+      if (validAssetIds.has(assetId)) return;
+      disposeStickerTextureEntry(entry);
+      stickerTextureRegistry.delete(assetId);
     });
     return true;
   }

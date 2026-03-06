@@ -1,5 +1,7 @@
 import { createPanoGlRenderer } from "./pano_gl_renderer.js";
 
+const SHARED_RENDERER_KEY = "__shared_renderer";
+
 function getRendererCache(owner) {
   if (!owner) return null;
   if (!owner.__panoGlViewportCache) owner.__panoGlViewportCache = new Map();
@@ -9,11 +11,16 @@ function getRendererCache(owner) {
 function getRendererEntry(owner, key) {
   const cache = getRendererCache(owner);
   if (!cache) return null;
-  let entry = cache.get(key);
-  if (!entry) {
+  let shared = cache.get(SHARED_RENDERER_KEY);
+  if (!shared) {
     const renderer = createPanoGlRenderer();
     if (!renderer?.isSupported?.()) return null;
-    entry = { renderer };
+    shared = { renderer };
+    cache.set(SHARED_RENDERER_KEY, shared);
+  }
+  let entry = cache.get(key);
+  if (!entry) {
+    entry = { renderer: shared.renderer };
     cache.set(key, entry);
   }
   return entry;
