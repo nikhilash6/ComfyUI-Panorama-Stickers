@@ -1552,6 +1552,7 @@ function createNodeBackedEditor(node, type, options = {}) {
   node.graph?.setDirtyCanvas?.(true, true);
   app?.canvas?.setDirty?.(true, true);
   panoEditorDebug("modal.open", {
+    source: "pano_editor_core.js",
     nodeId: node?.id ?? null,
     type,
     readOnly,
@@ -5322,31 +5323,5 @@ function installStandalonePreviewInstance(node) {
   requestAnimationFrame(tryInstall);
 }
 
-if (app?.registerExtension) {
-  app.registerExtension({
-    name: "ComfyUI.PanoramaSuite.Editor",
-    beforeRegisterNodeDef(nodeType, nodeData) {
-      const name = String(nodeData?.name || "");
-      panoEditorDebug("register.node", {
-        nodeDataName: name,
-        nodeDataDisplayName: String(nodeData?.display_name || ""),
-        nodeTypeTitle: String(nodeType?.title || ""),
-        nodeTypeComfyClass: String(nodeType?.comfyClass || nodeType?.prototype?.comfyClass || ""),
-      });
-      if (name === "PanoramaStickers" || name === "Panorama Stickers") {
-        installEditorButton(nodeType, nodeData, "PanoramaStickers", "Open Stickers Editor");
-      }
-      if (name === "PanoramaCutout" || name === "Panorama Cutout") {
-        installEditorButton(nodeType, nodeData, "PanoramaCutout", "Open Cutout Editor");
-      }
-      if (isPanoramaPreviewNodeName(name)) {
-        installStandalonePreviewNode(nodeType);
-      }
-    },
-    nodeCreated(node) {
-      const name = String(node?.comfyClass || node?.type || node?.title || "");
-      if (!isPanoramaPreviewNodeName(name)) return;
-      installStandalonePreviewInstance(node);
-    },
-  });
-}
+// Legacy file intentionally does not register the active editor extension.
+// The modern WebGL-first path is registered from pano_editor.js only.

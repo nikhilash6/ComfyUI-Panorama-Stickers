@@ -1,6 +1,7 @@
 import * as appModule from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { drawCutoutProjectionPreview, getCutoutShotParams } from "./pano_cutout_projection.js";
+import { renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import {
   createPanoInteractionController,
   PANO_DRAG_SENSITIVITY,
@@ -15,6 +16,11 @@ import {
 } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw } from "./pano_math.js";
 import { isPanoramaPreviewNodeName } from "./pano_preview_identity.js";
+import {
+  buildPanoramaViewParamsFromRuntime,
+  buildStickerSceneFromState,
+  buildStickerTexturesFromState,
+} from "./pano_gl_scene.js";
 const { app } = appModule;
 
 function getAnimPreviewWidgetName() {
@@ -615,7 +621,7 @@ function listInputNames(node) {
   return inputs.map((i) => String(i?.name || "")).filter(Boolean);
 }
 
-function preferredImageInputsForNode(node, preferredInputNames = []) {
+export function preferredImageInputsForNode(node, preferredInputNames = []) {
   const names = listInputNames(node);
   const out = [];
   preferredInputNames.forEach((name) => {
@@ -1150,7 +1156,7 @@ function getLinkedInputImage(node, preferredInputNames = []) {
   return img;
 }
 
-function getLinkedInputImageForPreview(node, preferredInputNames = [], onLoad = null) {
+export function getLinkedInputImageForPreview(node, preferredInputNames = [], onLoad = null) {
   const img = getLinkedInputImage(node, preferredInputNames);
   if (!img) return null;
   if (typeof onLoad === "function") {
@@ -1516,6 +1522,17 @@ function getSortedStickers(node, state) {
   return sorted;
 }
 
+function buildRuntimePreviewScene(node, state) {
+  return buildStickerSceneFromState(state, {
+    selectedId: null,
+    hoveredId: null,
+  });
+}
+
+function buildRuntimePreviewTextures(node, state, scene) {
+  return buildStickerTexturesFromState(state, (assetId, asset) => getNodePreviewImage(node, assetId, asset), { scene });
+}
+
 function expandTri(d0, d1, d2, px = 0.45) {
   const cx = (d0.x + d1.x + d2.x) / 3;
   const cy = (d0.y + d1.y + d2.y) / 3;
@@ -1707,10 +1724,24 @@ function drawPanoramaPreview(node, ctx, interaction = null) {
   const moving = resizingNow || movingBase;
   const mesh = STANDALONE_MESH_LOW;
 
-  if (bgReady) {
-    drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgImg, mesh);
-  }
-
+  const scene = buildRuntimePreviewScene(node, state);
+  const textures = buildRuntimePreviewTextures(node, state, scene);
+  const view = buildPanoramaViewParamsFromRuntime(node.__panoPreviewView);
+  const drawn = bgReady ? renderSceneToContext2D({
+    owner: node,
+    cacheKey: "runtime_panorama_scene",
+    ctx,
+    rect,
+    backgroundSource: bgImg,
+    backgroundRevision: [
+      String(bgImg.currentSrc || bgImg.src || ""),
+      Number(bgImg.naturalWidth || bgImg.width || 0),
+      Number(bgImg.naturalHeight || bgImg.height || 0),
+    ].join("|"),
+    textures,
+    scene,
+    view,
+  }) : false;
   const stickerNu = moving ? 8 : 12;
   const stickerNv = moving ? 6 : 9;
   const stickers = getSortedStickers(node, state);
@@ -1721,7 +1752,11 @@ function drawPanoramaPreview(node, ctx, interaction = null) {
     drawPanoGrid(ctx, rect, viewBasis, tanHalfY, uiScale);
   }
 
-  if (stickers.length > 0) {
+  if (!drawn && bgReady) {
+    drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgImg, mesh);
+  }
+
+  if (!drawn && stickers.length > 0) {
     stickers.forEach((item) => drawSticker(ctx, node, rect, viewBasis, tanHalfY, state, item, stickerNu, stickerNv));
   }
   ctx.restore();
@@ -2013,7 +2048,26 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
         hintText = "Open editor and add frame";
       }
     } else if (bgReady) {
-      const rawLiveDrawn = !!drawCutoutProjectionPreview(ctx, node, bgImg, contain, shot, "draft");
+      const glDrawn = renderErpViewToContext2D({
+        owner: node,
+        cacheKey: "runtime_cutout_bg",
+        ctx,
+        rect: contain,
+        img: bgImg,
+        mode: "cutout",
+        yawDeg: Number(shot?.yaw_deg || 0),
+        pitchDeg: Number(shot?.pitch_deg || 0),
+        rollDeg: Number(shot?.roll_deg || 0),
+        hFovDeg: Number(shot?.hFOV_deg || 90),
+        vFovDeg: Number(shot?.vFOV_deg || 60),
+      });
+      const fallbackDrawn = !glDrawn && !!drawCutoutProjectionPreview(ctx, node, bgImg, contain, shot, "draft");
+      const rawLiveDrawn = glDrawn || fallbackDrawn;
+      panoPreviewLog(node, "cutout.path", {
+        glDrawn: !!glDrawn,
+        fallbackDrawn: !!fallbackDrawn,
+        hasShot: !!shot,
+      });
       const liveDrawnValidated = rawLiveDrawn && hasValidCutoutStats(node);
       if (liveDrawnValidated) {
       } else if (ownOutReady) {
@@ -2068,13 +2122,30 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     ctx.fillStyle = "#1a1a1e";
     ctx.fillRect(0, 0, surfW, surfH);
 
-    const resizingNow = isPreviewResizing(node);
-    const movingBase = interaction?.state ? (interaction.state.inertia.active || interaction.state.drag.active) : false;
-    const moving = resizingNow || movingBase;
-    const mesh = STANDALONE_MESH_LOW;
+    const scene = buildRuntimePreviewScene(node, state);
+    const textures = buildRuntimePreviewTextures(node, state, scene);
+    const view = buildPanoramaViewParamsFromRuntime(node.__panoPreviewView);
+    const drawn = bgReady ? renderSceneToContext2D({
+      owner: node,
+      cacheKey: "runtime_dom_scene",
+      ctx,
+      rect,
+      backgroundSource: bgImg,
+      backgroundRevision: [
+        String(bgImg.currentSrc || bgImg.src || ""),
+        Number(bgImg.naturalWidth || bgImg.width || 0),
+        Number(bgImg.naturalHeight || bgImg.height || 0),
+      ].join("|"),
+      textures,
+      scene,
+      view,
+    }) : false;
+    const stickers = scene.stickers;
 
-    if (bgReady) {
-      drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgImg, mesh);
+    if (bgReady && drawn) {
+      setRenderLoading(node, false, "");
+    } else if (bgReady) {
+      drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgImg, STANDALONE_MESH_LOW);
       setRenderLoading(node, false, "");
     } else {
       const loading = !!bgImg && !bgReady;
@@ -2084,16 +2155,16 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
       }
     }
 
-    // Dynamic sticker mesh quality
-    const stickerNu = moving ? 8 : 12;
-    const stickerNv = moving ? 6 : 9;
-
     // Always draw guide grid when no background or just to assist orientation
-    const stickers = getSortedStickers(node, state);
     if (!bgReady || stickers.length === 0) {
       drawPanoGrid(ctx, rect, viewBasis, tanHalfY, uiScale);
     }
-    if (stickers.length > 0) {
+    if (!drawn && stickers.length > 0) {
+      const resizingNow = isPreviewResizing(node);
+      const movingBase = interaction?.state ? (interaction.state.inertia.active || interaction.state.drag.active) : false;
+      const moving = resizingNow || movingBase;
+      const stickerNu = moving ? 8 : 12;
+      const stickerNv = moving ? 6 : 9;
       stickers.forEach((item) => drawSticker(ctx, node, rect, viewBasis, tanHalfY, state, item, stickerNu, stickerNv));
     } else if (!bgImg || !bgReady) {
       const hintPx = Math.max(14, Math.round(16 * uiScale));
@@ -2111,6 +2182,18 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
 
 export function drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, img, mesh = STANDALONE_MESH_BALANCED) {
   if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+  const view = node?.__panoPreviewView || { yaw: 0, pitch: 0, fov: 100 };
+  if (renderErpViewToContext2D({
+    owner: node,
+    cacheKey: "runtime_pano_bg",
+    ctx,
+    rect,
+    img,
+    mode: "panorama",
+    yawDeg: Number(view.yaw || 0),
+    pitchDeg: Number(view.pitch || 0),
+    fovDeg: Number(view.fov || 100),
+  })) return;
   const iw = Number(img.naturalWidth || img.width || 0);
   const ih = Number(img.naturalHeight || img.height || 0);
   if (iw <= 1 || ih <= 1) return;

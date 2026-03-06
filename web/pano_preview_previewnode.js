@@ -2,6 +2,8 @@ import { app } from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { cameraBasis, DEG2RAD, clamp, wrapYaw } from "./pano_preview_render.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
+import { renderSceneToContext2D } from "./pano_gl_viewport.js";
+import { buildPreviewNodeViewParams, buildStickerSceneFromState } from "./pano_gl_scene.js";
 import {
   drawErpBackground,
   STANDALONE_MESH_LOW,
@@ -185,7 +187,25 @@ function drawPreview(node, ctx, width, height, view, img) {
   }
   const basis = cameraBasis(Number(view.yaw || 0), Number(view.pitch || 0), 0);
   const tanHalfY = Math.tan((Number(view.fov || 100) * DEG2RAD) * 0.5);
-  drawErpBackground(node, ctx, { x: 0, y: 0, w: width, h: height }, basis, tanHalfY, img, STANDALONE_MESH_LOW);
+  const drawn = renderSceneToContext2D({
+    owner: node,
+    cacheKey: "standalone_preview_scene",
+    ctx,
+    width,
+    height,
+    backgroundSource: img,
+    backgroundRevision: [
+      String(img.currentSrc || img.src || ""),
+      Number(img.naturalWidth || img.width || 0),
+      Number(img.naturalHeight || img.height || 0),
+    ].join("|"),
+    textures: [],
+    scene: buildStickerSceneFromState(null, {}),
+    view: buildPreviewNodeViewParams(view),
+  });
+  if (!drawn) {
+    drawErpBackground(node, ctx, { x: 0, y: 0, w: width, h: height }, basis, tanHalfY, img, STANDALONE_MESH_LOW);
+  }
 
   drawGrid(ctx, width, height);
 }

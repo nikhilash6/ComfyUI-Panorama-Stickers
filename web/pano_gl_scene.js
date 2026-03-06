@@ -1,0 +1,117 @@
+import { getCutoutShotParams } from "./pano_cutout_projection.js";
+import { clamp } from "./pano_math.js";
+
+function normalizeCrop(crop) {
+  const raw = (crop && typeof crop === "object") ? crop : {};
+  const x0 = clamp(Number(raw.x0 ?? 0), 0, 1);
+  const y0 = clamp(Number(raw.y0 ?? 0), 0, 1);
+  const x1 = clamp(Number(raw.x1 ?? 1), 0, 1);
+  const y1 = clamp(Number(raw.y1 ?? 1), 0, 1);
+  return {
+    x0: Math.min(x0, x1),
+    y0: Math.min(y0, y1),
+    x1: Math.max(x0, x1),
+    y1: Math.max(y0, y1),
+  };
+}
+
+export function normalizeStickerItem(rawSticker) {
+  if (!rawSticker || typeof rawSticker !== "object") return null;
+  const assetId = String(rawSticker.asset_id || rawSticker.assetId || "").trim();
+  return {
+    id: String(rawSticker.id || ""),
+    assetId,
+    zIndex: Number(rawSticker.z_index || rawSticker.zIndex || 0),
+    yawDeg: Number(rawSticker.yaw_deg || rawSticker.yawDeg || 0),
+    pitchDeg: Number(rawSticker.pitch_deg || rawSticker.pitchDeg || 0),
+    rollDeg: Number(rawSticker.rot_deg ?? rawSticker.roll_deg ?? rawSticker.rollDeg ?? 0),
+    hFovDeg: clamp(Number(rawSticker.hFOV_deg || rawSticker.hFovDeg || 30), 1, 179),
+    vFovDeg: clamp(Number(rawSticker.vFOV_deg || rawSticker.vFovDeg || 30), 1, 179),
+    crop: normalizeCrop(rawSticker.crop),
+    opacity: clamp(Number(rawSticker.opacity ?? 1), 0, 1),
+    visible: rawSticker.visible !== false,
+    external: rawSticker.type === "external_image" || rawSticker.source_kind === "external_image",
+  };
+}
+
+export function buildStickerSceneFromState(state, options = {}) {
+  const stickers = Array.isArray(options.stickers)
+    ? options.stickers
+    : Array.isArray(state?.stickers) ? state.stickers : [];
+  const includeHidden = options.includeHidden === true;
+  const normalized = stickers
+    .map((item) => normalizeStickerItem(item))
+    .filter((item) => item && (includeHidden || item.visible !== false))
+    .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0));
+  return {
+    stickers: normalized,
+    selectedId: options.selectedId ?? state?.active?.selected_sticker_id ?? null,
+    hoveredId: options.hoveredId ?? null,
+  };
+}
+
+export function buildStickerTexturesFromState(state, assetLoader, options = {}) {
+  if (typeof assetLoader !== "function") return [];
+  const scene = options.scene || buildStickerSceneFromState(state, options);
+  const assets = (state && typeof state === "object" && state.assets && typeof state.assets === "object")
+    ? state.assets
+    : {};
+  const textures = [];
+  const seen = new Set();
+  scene.stickers.forEach((item) => {
+    const assetId = String(item?.assetId || "").trim();
+    if (!assetId || seen.has(assetId)) return;
+    const asset = assets[assetId];
+    const source = assetLoader(assetId, asset, item);
+    const width = Number(source?.naturalWidth || source?.videoWidth || source?.width || 0);
+    const height = Number(source?.naturalHeight || source?.videoHeight || source?.height || 0);
+    if (!source || width <= 0 || height <= 0) return;
+    seen.add(assetId);
+    textures.push({
+      assetId,
+      source,
+      revision: String(options.revisionFor?.(assetId, asset, source) ?? [
+        assetId,
+        Number(source.naturalWidth || source.videoWidth || source.width || 0),
+        Number(source.naturalHeight || source.videoHeight || source.height || 0),
+        String(source.currentSrc || source.src || ""),
+      ].join("|")),
+    });
+  });
+  return textures;
+}
+
+export function buildPanoramaViewParamsFromEditor(editor) {
+  return {
+    mode: "panorama",
+    yawDeg: Number(editor?.viewYaw || 0),
+    pitchDeg: Number(editor?.viewPitch || 0),
+    fovDeg: clamp(Number(editor?.viewFov || 100), 1, 179),
+  };
+}
+
+export function buildPanoramaViewParamsFromRuntime(runtimeState) {
+  return {
+    mode: "panorama",
+    yawDeg: Number(runtimeState?.yaw || 0),
+    pitchDeg: Number(runtimeState?.pitch || 0),
+    fovDeg: clamp(Number(runtimeState?.fov || 100), 1, 179),
+  };
+}
+
+export function buildPreviewNodeViewParams(nodeState) {
+  return buildPanoramaViewParamsFromRuntime(nodeState);
+}
+
+export function buildCutoutViewParamsFromShot(shot) {
+  const params = getCutoutShotParams(shot || {});
+  return {
+    mode: "cutout",
+    yawDeg: Number(shot?.yaw_deg || 0),
+    pitchDeg: Number(shot?.pitch_deg || 0),
+    rollDeg: Number(shot?.roll_deg || 0),
+    hFovDeg: clamp(Number(shot?.hFOV_deg || 90), 1, 179),
+    vFovDeg: clamp(Number(shot?.vFOV_deg || 60), 1, 179),
+    aspect: Number(params?.aspect || 1),
+  };
+}

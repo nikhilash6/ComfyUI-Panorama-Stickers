@@ -7,8 +7,14 @@ import {
 } from "./pano_node_preview.js";
 import { isPanoramaPreviewNodeName } from "./pano_preview_identity.js";
 import { drawCutoutProjectionPreview, getCutoutShotParams } from "./pano_cutout_projection.js";
+import { renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
+import {
+  buildPanoramaViewParamsFromEditor,
+  buildStickerSceneFromState,
+  buildStickerTexturesFromState,
+} from "./pano_gl_scene.js";
 
 const STATE_WIDGET = "state_json";
 const EXTERNAL_STICKER_ID = "sticker_image_1";
@@ -1158,6 +1164,7 @@ function showEditor(node, type, options = {}) {
   node.graph?.setDirtyCanvas?.(true, true);
   app?.canvas?.setDirty?.(true, true);
   panoEditorDebug("modal.open", {
+    source: "pano_editor.js",
     nodeId: node?.id ?? null,
     type,
     readOnly,
@@ -1819,13 +1826,14 @@ function showEditor(node, type, options = {}) {
   }
 
   function getStickerImage(stickerOrAssetId) {
-    if (stickerOrAssetId && typeof stickerOrAssetId === "object" && isExternalSticker(stickerOrAssetId)) {
+    if (stickerOrAssetId && typeof stickerOrAssetId === "object"
+      && (isExternalSticker(stickerOrAssetId) || stickerOrAssetId.external === true)) {
       return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
         node.__panoExternalStickerSync?.("image-loaded");
       });
     }
     const assetId = (stickerOrAssetId && typeof stickerOrAssetId === "object")
-      ? String(stickerOrAssetId.asset_id || "")
+      ? String(stickerOrAssetId.asset_id || stickerOrAssetId.assetId || "")
       : String(stickerOrAssetId || "");
     if (!assetId) return null;
     const cached = imageCache.get(assetId);
@@ -1838,6 +1846,63 @@ function showEditor(node, type, options = {}) {
     img.src = src;
     imageCache.set(assetId, img);
     return img;
+  }
+
+  function buildEditorStickerScene() {
+    return buildStickerSceneFromState(state, {
+      selectedId: editor.selectedId || null,
+      hoveredId: null,
+      includeHidden: true,
+    });
+  }
+
+  function buildEditorStickerTextures(scene) {
+    const textures = buildStickerTexturesFromState(
+      state,
+      (assetId, asset, item) => getStickerImage(item || assetId),
+      { scene },
+    );
+    panoEditorDebug("modal.scene.assets", {
+      nodeId: node?.id ?? null,
+      assetKeys: Object.keys(state.assets || {}),
+      stickerAssetIds: Array.isArray(scene?.stickers) ? scene.stickers.map((item) => String(item?.assetId || "")) : [],
+      textureAssetIds: Array.isArray(textures) ? textures.map((item) => String(item?.assetId || "")) : [],
+      stickerAssetSummaries: Array.isArray(scene?.stickers) ? scene.stickers.map((item) => {
+        const assetId = String(item?.assetId || "");
+        const asset = state.assets?.[assetId];
+        const img = getStickerImage(item);
+        return {
+          assetId,
+          hasAsset: !!asset,
+          assetType: String(asset?.type || ""),
+          src: stickerAssetToPreviewSrc(asset),
+          hasImage: !!img,
+          imageComplete: !!img?.complete,
+          imageSize: img ? [Number(img.naturalWidth || img.width || 0), Number(img.naturalHeight || img.height || 0)] : null,
+        };
+      }) : [],
+    });
+    if (Array.isArray(scene?.stickers)) {
+      scene.stickers.forEach((item) => {
+        const assetId = String(item?.assetId || "");
+        const asset = state.assets?.[assetId];
+        const img = getStickerImage(item);
+        panoEditorDebug("modal.scene.asset.detail", {
+          nodeId: node?.id ?? null,
+          assetId,
+          hasAsset: !!asset,
+          assetType: String(asset?.type || ""),
+          assetStorage: String(asset?.storage || ""),
+          src: stickerAssetToPreviewSrc(asset),
+          hasImage: !!img,
+          imageComplete: !!img?.complete,
+          imageWidth: Number(img?.naturalWidth || img?.width || 0),
+          imageHeight: Number(img?.naturalHeight || img?.height || 0),
+          currentSrc: String(img?.currentSrc || img?.src || ""),
+        });
+      });
+    }
+    return textures;
   }
 
   async function uploadStickerAssetFile(file, fallbackName = "sticker.png") {
@@ -1882,7 +1947,20 @@ function showEditor(node, type, options = {}) {
       inputNames,
       preferred,
     });
-    return getLinkedInputImage(node, preferred, () => requestDraw());
+    const img = getLinkedInputImage(node, preferred, () => requestDraw());
+    panoEditorDebug("erp-select.result", {
+      nodeId: node?.id ?? null,
+      type,
+      readOnly,
+      inputNames,
+      preferred,
+      hasImage: !!img,
+      complete: !!img?.complete,
+      width: Number(img?.naturalWidth || img?.width || 0),
+      height: Number(img?.naturalHeight || img?.height || 0),
+      src: String(img?.currentSrc || img?.src || ""),
+    });
+    return img;
   }
 
   function getWrappedErpCanvas(img) {
@@ -1908,6 +1986,17 @@ function showEditor(node, type, options = {}) {
   function drawErpBackgroundUnwrap(rect) {
     const img = getConnectedErpImage();
     if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+    if (renderErpViewToContext2D({
+      owner: node,
+      cacheKey: "modal_unwrap_bg",
+      ctx,
+      rect,
+      img,
+      mode: "unwrap",
+      backgroundOpacity: 0.94,
+    })) {
+      return;
+    }
     ctx.save();
     ctx.globalAlpha = 0.94;
     ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h);
@@ -1917,6 +2006,19 @@ function showEditor(node, type, options = {}) {
   function drawErpBackgroundPano() {
     const img = getConnectedErpImage();
     if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+    if (renderErpViewToContext2D({
+      owner: node,
+      cacheKey: "modal_pano_bg",
+      ctx,
+      rect: { x: 0, y: 0, w: canvas.width, h: canvas.height },
+      img,
+      mode: "panorama",
+      yawDeg: Number(editor.viewYaw || 0),
+      pitchDeg: Number(editor.viewPitch || 0),
+      fovDeg: Number(editor.viewFov || 100),
+    })) {
+      return;
+    }
     const iw = Number(img.naturalWidth || img.width || 0);
     const ih = Number(img.naturalHeight || img.height || 0);
     if (iw <= 1 || ih <= 1) return;
@@ -2125,18 +2227,19 @@ function showEditor(node, type, options = {}) {
     return [28, 20];
   }
 
-  function drawGridUnwrap() {
+  function drawGridUnwrap(skipBackground = false) {
     const w = canvas.width;
     const h = canvas.height;
     const r = getUnwrapRect();
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    drawErpBackgroundUnwrap(r);
+    if (!skipBackground) {
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+    if (!skipBackground) drawErpBackgroundUnwrap(r);
 
     if (editor.showGrid && !editor.fullscreen) {
       ctx.strokeStyle = "#3f3f46";
@@ -2179,12 +2282,14 @@ function showEditor(node, type, options = {}) {
     ctx.stroke();
   }
 
-  function drawGridPano() {
+  function drawGridPano(skipBackground = false) {
     const w = canvas.width;
     const h = canvas.height;
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(0, 0, w, h);
-    drawErpBackgroundPano();
+    if (!skipBackground) {
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (!skipBackground) drawErpBackgroundPano();
 
     if (editor.showGrid && !editor.fullscreen) {
       for (let lon = -180; lon <= 180; lon += 15) {
@@ -2211,6 +2316,104 @@ function showEditor(node, type, options = {}) {
         const p = projectDir(l.dir);
         if (p) ctx.fillText(l.name, p.x, p.y + 24);
       });
+    }
+  }
+
+  function renderModalStickerScene() {
+    panoEditorDebug("modal.scene.enter", {
+      nodeId: node?.id ?? null,
+      readOnly,
+      type: String(type || ""),
+      mode: String(editor.mode || ""),
+      stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+    });
+    try {
+      if (type !== "stickers") {
+        panoEditorDebug("modal.scene.skip", {
+          nodeId: node?.id ?? null,
+          readOnly,
+          type: String(type || ""),
+          mode: String(editor.mode || ""),
+          stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+          reason: "not_stickers",
+        });
+        return false;
+      }
+      if (editor.mode !== "pano" && editor.mode !== "unwrap") {
+        panoEditorDebug("modal.scene.skip", {
+          nodeId: node?.id ?? null,
+          readOnly,
+          type: String(type || ""),
+          mode: String(editor.mode || ""),
+          stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+          reason: "unsupported_mode",
+        });
+        return false;
+      }
+      const scene = buildEditorStickerScene();
+      panoEditorDebug("modal.scene.stage", {
+        nodeId: node?.id ?? null,
+        stage: "scene_built",
+        stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+        stickerCount: Array.isArray(scene?.stickers) ? scene.stickers.length : 0,
+      });
+      const textures = buildEditorStickerTextures(scene);
+      panoEditorDebug("modal.scene.stage", {
+        nodeId: node?.id ?? null,
+        stage: "textures_built",
+        stickerCount: Array.isArray(scene?.stickers) ? scene.stickers.length : 0,
+        textureCount: Array.isArray(textures) ? textures.length : 0,
+        textureAssetIds: Array.isArray(textures) ? textures.map((item) => String(item?.assetId || "")) : [],
+      });
+      if (!Array.isArray(scene?.stickers) || scene.stickers.length === 0 || textures.length === 0) {
+        panoEditorDebug("modal.scene.skip", {
+          nodeId: node?.id ?? null,
+          readOnly,
+          type: String(type || ""),
+          mode: String(editor.mode || ""),
+          stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+          reason: "no_sticker_scene",
+          stickerCount: Array.isArray(scene?.stickers) ? scene.stickers.length : 0,
+          textureCount: textures.length,
+        });
+        return false;
+      }
+      const view = editor.mode === "unwrap"
+        ? { mode: "unwrap" }
+        : buildPanoramaViewParamsFromEditor(editor);
+      const drawn = renderSceneToContext2D({
+        owner: node,
+        cacheKey: editor.mode === "unwrap" ? "modal_unwrap_scene" : "modal_pano_scene",
+        ctx,
+        rect: editor.mode === "unwrap" ? getUnwrapRect() : { x: 0, y: 0, w: canvas.width, h: canvas.height },
+        backgroundSource: null,
+        backgroundRevision: "",
+        textures,
+        scene,
+        view,
+      });
+      panoEditorDebug("modal.scene.render", {
+        nodeId: node?.id ?? null,
+        readOnly,
+        mode: String(editor.mode || ""),
+        drawn: !!drawn,
+        stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+        stickerCount: Array.isArray(scene?.stickers) ? scene.stickers.length : 0,
+        textureCount: Array.isArray(textures) ? textures.length : 0,
+        textureAssetIds: Array.isArray(textures) ? textures.map((item) => String(item?.assetId || "")) : [],
+      });
+      return drawn;
+    } catch (err) {
+      panoEditorDebug("modal.scene.skip", {
+        nodeId: node?.id ?? null,
+        readOnly,
+        type: String(type || ""),
+        mode: String(editor.mode || ""),
+        stateStickerCount: Array.isArray(state?.stickers) ? state.stickers.length : 0,
+        reason: "exception",
+        error: String(err?.message || err || "unknown"),
+      });
+      return false;
     }
   }
 
@@ -2421,35 +2624,54 @@ function showEditor(node, type, options = {}) {
     ctx.stroke();
   }
 
+  function renderModalStickerBodyFallback() {
+    if (type !== "stickers") return false;
+    let anyDrawn = false;
+    const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    for (const item of items) {
+      if (item?.visible === false) continue;
+      const g = objectGeom(item);
+      const img = getStickerImage(item);
+      const alpha = getStickerDisplayAlpha(item);
+      if (img && (img.complete || img.width)) {
+        panoEditorDebug("modal.cpu-sticker-body", {
+          nodeId: node?.id ?? null,
+          readOnly,
+          id: String(item?.id || ""),
+          assetId: String(item?.asset_id || ""),
+          visible: item?.visible !== false,
+        });
+        if (drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha)) {
+          anyDrawn = true;
+        }
+        continue;
+      }
+      if (!g.visible) continue;
+      const prevAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.beginPath();
+      ctx.moveTo(g.corners[0].x, g.corners[0].y);
+      for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = prevAlpha;
+      anyDrawn = true;
+    }
+    return anyDrawn;
+  }
+
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
     const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
     for (const item of items) {
       const selected = item.id === editor.selectedId;
       const g = objectGeom(item);
-      let meshDrawn = false;
-
-      if (type === "stickers") {
-        const img = getStickerImage(item);
-        const alpha = getStickerDisplayAlpha(item);
-        if (img && (img.complete || img.width)) {
-          meshDrawn = drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha);
-        } else if (g.visible) {
-          const prevAlpha = ctx.globalAlpha;
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = "rgba(255,255,255,0.08)";
-          ctx.beginPath(); ctx.moveTo(g.corners[0].x, g.corners[0].y);
-          for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
-          ctx.closePath(); ctx.fill();
-          ctx.globalAlpha = prevAlpha;
-          meshDrawn = true;
-        }
-      } else if (!g.visible) {
+      if (type !== "stickers" && !g.visible) {
         continue;
       }
 
       if (type === "stickers") {
-        if (!meshDrawn) continue;
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = getStickerDisplayAlpha(item);
         drawStickerBoundary(item, selected);
@@ -2596,7 +2818,20 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
-    const drawn = drawCutoutProjectionPreview(
+    const glDrawn = renderErpViewToContext2D({
+      owner: node,
+      cacheKey: "modal_cutout_output_preview",
+      ctx,
+      rect: { x: px, y: py, w: pw, h: ph },
+      img,
+      mode: "cutout",
+      yawDeg: Number(shot?.yaw_deg || 0),
+      pitchDeg: Number(shot?.pitch_deg || 0),
+      rollDeg: Number(shot?.roll_deg || 0),
+      hFovDeg: Number(shot?.hFOV_deg || 90),
+      vFovDeg: Number(shot?.vFOV_deg || 60),
+    });
+    const fallbackDrawn = !glDrawn && drawCutoutProjectionPreview(
       ctx,
       node,
       img,
@@ -2604,12 +2839,15 @@ function showEditor(node, type, options = {}) {
       shot,
       mix > 0.65 ? "high" : "balanced",
     );
+    const drawn = glDrawn || fallbackDrawn;
     panoEditorDebug("cutout.draw", {
       nodeId: node?.id ?? null,
       hasImage: !!img,
       imageComplete: !!img?.complete,
       imageSize: img ? [Number(img.naturalWidth || img.width || 0), Number(img.naturalHeight || img.height || 0)] : null,
       imageSrc: String(img?.src || ""),
+      glDrawn: !!glDrawn,
+      fallbackDrawn: !!fallbackDrawn,
       drawn: !!drawn,
       quality: mix > 0.65 ? "high" : "balanced",
     });
@@ -2618,8 +2856,18 @@ function showEditor(node, type, options = {}) {
   }
 
   function drawScene() {
-    if (editor.mode === "unwrap") drawGridUnwrap();
-    else drawGridPano();
+    panoEditorDebug("drawScene.enter", {
+      nodeId: node?.id ?? null,
+      type: String(type || ""),
+      mode: String(editor.mode || ""),
+      readOnly,
+    });
+    if (editor.mode === "unwrap") drawGridUnwrap(false);
+    else drawGridPano(false);
+    const stickerSceneDrawn = renderModalStickerScene();
+    if (type === "stickers" && !stickerSceneDrawn) {
+      renderModalStickerBodyFallback();
+    }
     drawObjects();
     drawCutoutOutputPreview();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
