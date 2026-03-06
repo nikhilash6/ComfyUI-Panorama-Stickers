@@ -6,9 +6,16 @@ import {
   attachStickersNodePreview,
 } from "./pano_node_preview.js";
 import { isPanoramaPreviewNodeName } from "./pano_preview_identity.js";
-import { drawCutoutProjectionPreview, getCutoutShotParams } from "./pano_cutout_projection.js";
+import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
+import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
+import {
+  buildCutoutViewParamsFromShot,
+  buildPanoramaViewParamsFromEditor,
+  buildStickerSceneFromState,
+  buildStickerTexturesFromState,
+} from "./pano_gl_scene.js";
 
 const STATE_WIDGET = "state_json";
 const EXTERNAL_STICKER_ID = "sticker_image_1";
@@ -707,15 +714,6 @@ function getNodePreviewResetButtonRect(rect) {
 }
 
 function getWidget(node, name) { return node.widgets?.find((w) => w.name === name) || null; }
-function panoEditorDebug(tag, payload = null) {
-  const enabled = window?.__PANO_PREVIEW_DEBUG__ === true
-    || String(window?.localStorage?.getItem("panoPreviewDebug") || "").trim() === "1";
-  if (!enabled) return;
-  try {
-    if (payload == null) console.log(`[PANO_EDITOR][${tag}]`);
-    else console.log(`[PANO_EDITOR][${tag}]`, payload);
-  } catch { }
-}
 function escapeHtml(text) {
   return String(text ?? "")
     .replaceAll("&", "&amp;")
@@ -963,11 +961,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
     .filter(({ input }) => String(input?.type || "").toUpperCase() === "IMAGE")
     .map(({ idx }) => idx);
   const indices = [...new Set([...preferred, ...imageTyped])];
-  panoEditorDebug("image-resolve.start", {
-    nodeId: node?.id ?? null,
-    preferredInputNames,
-    resolvedIndices: indices,
-  });
 
   for (const idx of indices) {
     const input = inputs[idx];
@@ -979,13 +972,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
     const originNode = resolveInputOriginNode(node, idx, originId);
     const resolvedOriginSlot = Number(originSlot || 0);
     if (!originNode) continue;
-    panoEditorDebug("image-resolve.link", {
-      input: String(input?.name || ""),
-      linkId,
-      originId,
-      originSlot: resolvedOriginSlot,
-      originType: String(originNode?.comfyClass || originNode?.type || originNode?.title || ""),
-    });
 
     let appNodeImageUrls = [];
     try {
@@ -1000,7 +986,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       for (const cand of ordered) {
         const src = imageSourceFromCandidate(cand);
         if (src) {
-          panoEditorDebug("image-resolve.hit", { sourceType: "appNodeImageUrls", src, input: String(input?.name || "") });
           return { src, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
         }
       }
@@ -1015,7 +1000,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       for (const cand of ordered) {
         const src = imageSourceFromCandidate(cand);
         if (src) {
-          panoEditorDebug("image-resolve.hit", { sourceType: "nodeOutputs", src, input: String(input?.name || "") });
           return { src, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
         }
       }
@@ -1029,7 +1013,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       for (const cand of ordered) {
         const src = imageSourceFromCandidate(cand);
         if (src) {
-          panoEditorDebug("image-resolve.hit", { sourceType: "nodeImgs", src, input: String(input?.name || "") });
           return { src, sourceType: "nodeImgs", inputName: String(input?.name || "") };
         }
       }
@@ -1042,7 +1025,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
         src = api.apiURL(`/view?filename=${encodeURIComponent(src)}&type=input&subfolder=`);
       }
       if (src) {
-        panoEditorDebug("image-resolve.hit", { sourceType: "widget", src, input: String(input?.name || "") });
         return { src, sourceType: "widget", inputName: String(input?.name || "") };
       }
     }
@@ -1060,13 +1042,11 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
     for (const item of fallbackCandidates) {
       const src = imageSourceFromCandidate(item);
       if (src) {
-        panoEditorDebug("image-resolve.hit", { sourceType: "selfOutput", src, input: "fallback" });
         return { src, sourceType: "selfOutput", inputName: "fallback" };
       }
     }
   }
 
-  panoEditorDebug("image-resolve.miss", { nodeId: node?.id ?? null, preferredInputNames });
   return { src: "", sourceType: "", inputName: "" };
 }
 
@@ -1089,14 +1069,6 @@ function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
     attempt += 1;
     if (attempt >= candidates.length) {
       try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
-      panoEditorDebug("image.load.error", {
-        nodeId: node?.id ?? null,
-        src: srcRaw,
-        preferredInputNames,
-        sourceType: String(resolved?.sourceType || ""),
-        attemptCount: candidates.length,
-        errorType: "all_candidates_failed",
-      });
       return;
     }
     const nextSrc = candidates[attempt];
@@ -1105,14 +1077,6 @@ function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
   };
 
   img.onload = () => {
-    panoEditorDebug("image.load.ok", {
-      nodeId: node?.id ?? null,
-      src: srcRaw,
-      resolvedSrc: String(cacheEntry.resolvedSrc || img.src || ""),
-      preferredInputNames,
-      sourceType: String(resolved?.sourceType || ""),
-      attemptCount: attempt + 1,
-    });
     onLoad?.();
     node.setDirtyCanvas?.(true, true);
   };
@@ -1122,15 +1086,6 @@ function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
       return;
     }
     try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
-    panoEditorDebug("image.load.error", {
-      nodeId: node?.id ?? null,
-      src: srcRaw,
-      resolvedSrc: String(cacheEntry.resolvedSrc || ""),
-      preferredInputNames,
-      sourceType: String(resolved?.sourceType || ""),
-      attemptCount: attempt + 1,
-      errorType: String(ev?.type || "error"),
-    });
   };
   tryLoadNext();
   return img;
@@ -1157,13 +1112,6 @@ function showEditor(node, type, options = {}) {
   node.setDirtyCanvas?.(true, true);
   node.graph?.setDirtyCanvas?.(true, true);
   app?.canvas?.setDirty?.(true, true);
-  panoEditorDebug("modal.open", {
-    nodeId: node?.id ?? null,
-    type,
-    readOnly,
-    hideSidebar,
-    inputs: Array.isArray(node?.inputs) ? node.inputs.map((i) => String(i?.name || "")) : [],
-  });
 
   if (type === "cutout") {
     state.shots = Array.isArray(state.shots) ? state.shots.slice(0, 1) : [];
@@ -1236,6 +1184,7 @@ function showEditor(node, type, options = {}) {
   const lookAtFrameBtn = root.querySelector("[data-action='look-at-frame']");
   const fullscreenBtn = root.querySelector("[data-action='toggle-fullscreen']");
   const tooltipEl = root.querySelector("[data-tooltip]");
+  if (type === "cutout") canvas.style.opacity = "0";
   if (hideSidebar) {
     side?.remove();
     root.classList.add("pano-modal-readonly");
@@ -1294,6 +1243,8 @@ function showEditor(node, type, options = {}) {
     running: true,
     lastTickTs: 0,
     lastSizeCheckTs: 0,
+    pendingStableLayoutFrames: type === "cutout" ? 2 : 0,
+    hasPresentedFrame: type !== "cutout",
   };
   const tooltip = {
     timer: 0,
@@ -1353,9 +1304,7 @@ function showEditor(node, type, options = {}) {
 
   // Coordinate sanity: front-facing sticker should have top edge above bottom edge.
   const __sanity = stickerCornerOrderSanity();
-  if (!__sanity) {
-    panoEditorDebug("corner-order.sanity-failed");
-  }
+  void __sanity;
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
   function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
@@ -1819,13 +1768,14 @@ function showEditor(node, type, options = {}) {
   }
 
   function getStickerImage(stickerOrAssetId) {
-    if (stickerOrAssetId && typeof stickerOrAssetId === "object" && isExternalSticker(stickerOrAssetId)) {
+    if (stickerOrAssetId && typeof stickerOrAssetId === "object"
+      && (isExternalSticker(stickerOrAssetId) || stickerOrAssetId.external === true)) {
       return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
         node.__panoExternalStickerSync?.("image-loaded");
       });
     }
     const assetId = (stickerOrAssetId && typeof stickerOrAssetId === "object")
-      ? String(stickerOrAssetId.asset_id || "")
+      ? String(stickerOrAssetId.asset_id || stickerOrAssetId.assetId || "")
       : String(stickerOrAssetId || "");
     if (!assetId) return null;
     const cached = imageCache.get(assetId);
@@ -1838,6 +1788,22 @@ function showEditor(node, type, options = {}) {
     img.src = src;
     imageCache.set(assetId, img);
     return img;
+  }
+
+  function buildEditorStickerScene() {
+    return buildStickerSceneFromState(state, {
+      selectedId: editor.selectedId || null,
+      hoveredId: null,
+      includeHidden: true,
+    });
+  }
+
+  function buildEditorStickerTextures(scene) {
+    return buildStickerTexturesFromState(
+      state,
+      (assetId, asset, item) => getStickerImage(item || assetId),
+      { scene },
+    );
   }
 
   async function uploadStickerAssetFile(file, fallbackName = "sticker.png") {
@@ -1875,14 +1841,8 @@ function showEditor(node, type, options = {}) {
     } else {
       preferred = type === "stickers" ? ["bg_erp", "erp_image"] : ["erp_image", "bg_erp"];
     }
-    panoEditorDebug("erp-select", {
-      nodeId: node?.id ?? null,
-      type,
-      readOnly,
-      inputNames,
-      preferred,
-    });
-    return getLinkedInputImage(node, preferred, () => requestDraw());
+    const img = getLinkedInputImage(node, preferred, () => requestDraw());
+    return img;
   }
 
   function getWrappedErpCanvas(img) {
@@ -1908,6 +1868,17 @@ function showEditor(node, type, options = {}) {
   function drawErpBackgroundUnwrap(rect) {
     const img = getConnectedErpImage();
     if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+    if (renderErpViewToContext2D({
+      owner: node,
+      cacheKey: "modal_unwrap_bg",
+      ctx,
+      rect,
+      img,
+      mode: "unwrap",
+      backgroundOpacity: 0.94,
+    })) {
+      return;
+    }
     ctx.save();
     ctx.globalAlpha = 0.94;
     ctx.drawImage(img, rect.x, rect.y, rect.w, rect.h);
@@ -1917,6 +1888,19 @@ function showEditor(node, type, options = {}) {
   function drawErpBackgroundPano() {
     const img = getConnectedErpImage();
     if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+    if (renderErpViewToContext2D({
+      owner: node,
+      cacheKey: "modal_pano_bg",
+      ctx,
+      rect: { x: 0, y: 0, w: canvas.width, h: canvas.height },
+      img,
+      mode: "panorama",
+      yawDeg: Number(editor.viewYaw || 0),
+      pitchDeg: Number(editor.viewPitch || 0),
+      fovDeg: Number(editor.viewFov || 100),
+    })) {
+      return;
+    }
     const iw = Number(img.naturalWidth || img.width || 0);
     const ih = Number(img.naturalHeight || img.height || 0);
     if (iw <= 1 || ih <= 1) return;
@@ -2125,18 +2109,19 @@ function showEditor(node, type, options = {}) {
     return [28, 20];
   }
 
-  function drawGridUnwrap() {
+  function drawGridUnwrap(skipBackground = false) {
     const w = canvas.width;
     const h = canvas.height;
     const r = getUnwrapRect();
     ctx.globalAlpha = 1;
     ctx.lineWidth = 1;
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(0, 0, w, h);
-
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    drawErpBackgroundUnwrap(r);
+    if (!skipBackground) {
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+    if (!skipBackground) drawErpBackgroundUnwrap(r);
 
     if (editor.showGrid && !editor.fullscreen) {
       ctx.strokeStyle = "#3f3f46";
@@ -2179,12 +2164,14 @@ function showEditor(node, type, options = {}) {
     ctx.stroke();
   }
 
-  function drawGridPano() {
+  function drawGridPano(skipBackground = false) {
     const w = canvas.width;
     const h = canvas.height;
-    ctx.fillStyle = "#070707";
-    ctx.fillRect(0, 0, w, h);
-    drawErpBackgroundPano();
+    if (!skipBackground) {
+      ctx.fillStyle = "#070707";
+      ctx.fillRect(0, 0, w, h);
+    }
+    if (!skipBackground) drawErpBackgroundPano();
 
     if (editor.showGrid && !editor.fullscreen) {
       for (let lon = -180; lon <= 180; lon += 15) {
@@ -2211,6 +2198,33 @@ function showEditor(node, type, options = {}) {
         const p = projectDir(l.dir);
         if (p) ctx.fillText(l.name, p.x, p.y + 24);
       });
+    }
+  }
+
+  function renderModalStickerScene() {
+    try {
+      if (type !== "stickers") return false;
+      if (editor.mode !== "pano" && editor.mode !== "unwrap") return false;
+      const scene = buildEditorStickerScene();
+      const textures = buildEditorStickerTextures(scene);
+      if (!Array.isArray(scene?.stickers) || scene.stickers.length === 0 || textures.length === 0) return false;
+      const view = editor.mode === "unwrap"
+        ? { mode: "unwrap" }
+        : buildPanoramaViewParamsFromEditor(editor);
+      return renderSceneToContext2D({
+        owner: node,
+        cacheKey: editor.mode === "unwrap" ? "modal_unwrap_scene" : "modal_pano_scene",
+        ctx,
+        rect: editor.mode === "unwrap" ? getUnwrapRect() : { x: 0, y: 0, w: canvas.width, h: canvas.height },
+        backgroundSource: null,
+        backgroundRevision: "",
+        textures,
+        scene,
+        view,
+      });
+    } catch (err) {
+      void err;
+      return false;
     }
   }
 
@@ -2421,35 +2435,47 @@ function showEditor(node, type, options = {}) {
     ctx.stroke();
   }
 
+  function renderModalStickerBodyFallback() {
+    if (type !== "stickers") return false;
+    let anyDrawn = false;
+    const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    for (const item of items) {
+      if (item?.visible === false) continue;
+      const g = objectGeom(item);
+      const img = getStickerImage(item);
+      const alpha = getStickerDisplayAlpha(item);
+      if (img && (img.complete || img.width)) {
+        if (drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha)) {
+          anyDrawn = true;
+        }
+        continue;
+      }
+      if (!g.visible) continue;
+      const prevAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      ctx.beginPath();
+      ctx.moveTo(g.corners[0].x, g.corners[0].y);
+      for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = prevAlpha;
+      anyDrawn = true;
+    }
+    return anyDrawn;
+  }
+
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
     const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
     for (const item of items) {
       const selected = item.id === editor.selectedId;
       const g = objectGeom(item);
-      let meshDrawn = false;
-
-      if (type === "stickers") {
-        const img = getStickerImage(item);
-        const alpha = getStickerDisplayAlpha(item);
-        if (img && (img.complete || img.width)) {
-          meshDrawn = drawStickerMeshMapped(item, img, { x0: 0, y0: 0, x1: 1, y1: 1 }, { x0: 0, y0: 0, x1: 1, y1: 1 }, alpha);
-        } else if (g.visible) {
-          const prevAlpha = ctx.globalAlpha;
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = "rgba(255,255,255,0.08)";
-          ctx.beginPath(); ctx.moveTo(g.corners[0].x, g.corners[0].y);
-          for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
-          ctx.closePath(); ctx.fill();
-          ctx.globalAlpha = prevAlpha;
-          meshDrawn = true;
-        }
-      } else if (!g.visible) {
+      if (type !== "stickers" && !g.visible) {
         continue;
       }
 
       if (type === "stickers") {
-        if (!meshDrawn) continue;
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = getStickerDisplayAlpha(item);
         drawStickerBoundary(item, selected);
@@ -2526,8 +2552,8 @@ function showEditor(node, type, options = {}) {
     const maxHExpanded = Math.max(160, Math.min(340, canvas.height * 0.48));
     const maxW = lerp(maxWCollapsed, maxWExpanded, mix);
     const maxH = lerp(maxHCollapsed, maxHExpanded, mix);
-    const params = getCutoutShotParams(shot);
-    const aspect = params.aspect;
+    const cutoutView = buildCutoutViewParamsFromShot(shot);
+    const aspect = Number(cutoutView?.aspect || 1);
     let pw = maxW;
     let ph = pw / aspect;
     if (ph > maxH) {
@@ -2596,7 +2622,15 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
-    const drawn = drawCutoutProjectionPreview(
+    const glDrawn = renderCutoutViewToContext2D({
+      owner: node,
+      cacheKey: "modal_cutout_output_preview",
+      ctx,
+      rect: { x: px, y: py, w: pw, h: ph },
+      img,
+      view: cutoutView,
+    });
+    const fallbackDrawn = !glDrawn && drawCutoutProjectionPreview(
       ctx,
       node,
       img,
@@ -2604,26 +2638,25 @@ function showEditor(node, type, options = {}) {
       shot,
       mix > 0.65 ? "high" : "balanced",
     );
-    panoEditorDebug("cutout.draw", {
-      nodeId: node?.id ?? null,
-      hasImage: !!img,
-      imageComplete: !!img?.complete,
-      imageSize: img ? [Number(img.naturalWidth || img.width || 0), Number(img.naturalHeight || img.height || 0)] : null,
-      imageSrc: String(img?.src || ""),
-      drawn: !!drawn,
-      quality: mix > 0.65 ? "high" : "balanced",
-    });
     ctx.restore();
     placeOutputPreviewToggle();
   }
 
   function drawScene() {
-    if (editor.mode === "unwrap") drawGridUnwrap();
-    else drawGridPano();
+    if (editor.mode === "unwrap") drawGridUnwrap(false);
+    else drawGridPano(false);
+    const stickerSceneDrawn = renderModalStickerScene();
+    if (type === "stickers" && !stickerSceneDrawn) {
+      renderModalStickerBodyFallback();
+    }
     drawObjects();
     drawCutoutOutputPreview();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
     updateSelectionMenu();
+    if (!runtime.hasPresentedFrame) {
+      runtime.hasPresentedFrame = true;
+      canvas.style.opacity = "1";
+    }
   }
 
   function isCutoutTransformInteractionActive() {
@@ -2652,7 +2685,12 @@ function showEditor(node, type, options = {}) {
       canvas.width = nextW;
       canvas.height = nextH;
       runtime.dirty = true;
+      if (type === "cutout") {
+        runtime.pendingStableLayoutFrames = Math.max(Number(runtime.pendingStableLayoutFrames || 0), 1);
+      }
+      return true;
     }
+    return false;
   }
 
   function tick(ts = performance.now()) {
@@ -2696,7 +2734,15 @@ function showEditor(node, type, options = {}) {
       syncCanvasSize();
       runtime.lastSizeCheckTs = ts;
     }
+    if (runtime.pendingStableLayoutFrames > 0) {
+      runtime.pendingStableLayoutFrames -= 1;
+      runtime.dirty = true;
+    }
     if (runtime.dirty) {
+      if (runtime.pendingStableLayoutFrames > 0) {
+        runtime.rafId = requestAnimationFrame(tick);
+        return;
+      }
       runtime.dirty = false;
       drawScene();
     }
@@ -4678,11 +4724,6 @@ function installEditorButton(nodeType, nodeData, matchType, buttonText) {
 }
 
 function installStandalonePreviewNode(nodeType) {
-  panoEditorDebug("install.standalone_preview_node", {
-    nodeTypeTitle: String(nodeType?.title || ""),
-    nodeTypeComfyClass: String(nodeType?.comfyClass || nodeType?.prototype?.comfyClass || ""),
-    prototypeSize: Array.isArray(nodeType?.prototype?.size) ? [...nodeType.prototype.size] : null,
-  });
   if (!Array.isArray(nodeType?.prototype?.size) || nodeType.prototype.size[0] < 100 || nodeType.prototype.size[1] < 100) {
     nodeType.prototype.size = [360, 260];
   }
@@ -4700,26 +4741,10 @@ function installStandalonePreviewInstance(node) {
     const tries = Number(node.__panoStandaloneInstallProbeTries || 0) + 1;
     node.__panoStandaloneInstallProbeTries = tries;
 
-    panoEditorDebug("install.standalone_preview_instance.probe", {
-      tries,
-      nodeId,
-      ready,
-      hasGraph: !!node?.graph,
-      size: Array.isArray(node?.size) ? [...node.size] : null,
-    });
-
     if (!ready && tries < 40) {
       requestAnimationFrame(tryInstall);
       return;
     }
-
-    panoEditorDebug("install.standalone_preview_instance", {
-      nodeId: node?.id ?? null,
-      nodeType: String(node?.comfyClass || node?.type || node?.title || ""),
-      size: Array.isArray(node?.size) ? [...node.size] : null,
-      deferred: !ready,
-      tries,
-    });
     ensureActionButtonWidget(node, "Open Preview", () => showEditor(node, "stickers", { readOnly: true, hideSidebar: false }));
     attachPreviewNode(node, {
       buttonText: "Open Preview",
@@ -4738,12 +4763,6 @@ app.registerExtension({
   name: "ComfyUI.PanoramaSuite.Editor",
   beforeRegisterNodeDef(nodeType, nodeData) {
     const name = String(nodeData?.name || "");
-    panoEditorDebug("register.node", {
-      nodeDataName: name,
-      nodeDataDisplayName: String(nodeData?.display_name || ""),
-      nodeTypeTitle: String(nodeType?.title || ""),
-      nodeTypeComfyClass: String(nodeType?.comfyClass || nodeType?.prototype?.comfyClass || ""),
-    });
     if (name === "PanoramaStickers" || name === "Panorama Stickers") {
       installEditorButton(nodeType, nodeData, "PanoramaStickers", "Open Stickers Editor");
     }

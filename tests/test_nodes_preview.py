@@ -250,6 +250,80 @@ class TestNodesPreview(unittest.TestCase):
         assert 'document.createElement("button")' not in preview_js
         assert "getLegacyButtonRect" not in preview_js
 
+    def test_webgl_preview_renderer_is_present(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        gl_renderer_js = (repo_root / "web" / "pano_gl_renderer.js").read_text(encoding="utf-8")
+        gl_viewport_js = (repo_root / "web" / "pano_gl_viewport.js").read_text(encoding="utf-8")
+        gl_scene_js = (repo_root / "web" / "pano_gl_scene.js").read_text(encoding="utf-8")
+        assert "export function createPanoGlRenderer()" in gl_renderer_js
+        assert "export function renderErpViewToContext2D" in gl_viewport_js
+        assert "export function renderSceneToContext2D" in gl_viewport_js
+        assert "export function buildStickerSceneFromState" in gl_scene_js
+
+    def test_modal_runtime_and_preview_use_shared_scene_builder(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        runtime_js = (repo_root / "web" / "pano_preview_runtime.js").read_text(encoding="utf-8")
+        preview_node_js = (repo_root / "web" / "pano_preview_previewnode.js").read_text(encoding="utf-8")
+        assert 'from "./pano_gl_scene.js"' in editor_js
+        assert 'from "./pano_gl_scene.js"' in runtime_js
+        assert 'from "./pano_gl_scene.js"' in preview_node_js
+        assert "buildStickerSceneFromState" in editor_js
+        assert "buildStickerSceneFromState" in runtime_js
+        assert "buildStickerSceneFromState" in preview_node_js
+        assert "buildCutoutViewParamsFromShot" in editor_js
+        assert "buildCutoutViewParamsFromShot" in runtime_js
+
+    def test_modal_runtime_and_preview_use_shared_gl_scene_helper(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        runtime_js = (repo_root / "web" / "pano_preview_runtime.js").read_text(encoding="utf-8")
+        preview_node_js = (repo_root / "web" / "pano_preview_previewnode.js").read_text(encoding="utf-8")
+        assert 'from "./pano_gl_viewport.js"' in editor_js
+        assert 'from "./pano_gl_viewport.js"' in runtime_js
+        assert 'from "./pano_gl_viewport.js"' in preview_node_js
+        assert "renderSceneToContext2D({" in editor_js
+        assert "renderSceneToContext2D({" in runtime_js
+        assert "renderSceneToContext2D({" in preview_node_js
+        assert "modal_pano_scene" in editor_js
+        assert "runtime_panorama_scene" in runtime_js
+        assert "runtime_dom_scene" in runtime_js
+        assert "standalone_preview_scene" in preview_node_js
+        assert "renderCutoutViewToContext2D({" in editor_js
+        assert "renderCutoutViewToContext2D({" in runtime_js
+
+    def test_old_cpu_sticker_functions_are_not_normal_gl_path(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        runtime_js = (repo_root / "web" / "pano_preview_runtime.js").read_text(encoding="utf-8")
+        assert "function drawStickerPreviewPano" in editor_js
+        assert "function drawSticker(" in runtime_js
+        assert "function drawStickerMeshMapped" in editor_js
+        assert runtime_js.count("if (!drawn && stickers.length > 0)") >= 2
+        assert "stickers.forEach((item) => drawSticker(ctx, node, rect, viewBasis, tanHalfY, state, item, stickerNu, stickerNv));" in runtime_js
+        assert "if (!drawn && stickers.length > 0)" in runtime_js
+        assert "renderModalStickerBodyFallback" in editor_js
+        assert "if (type === \"stickers\" && !stickerSceneDrawn)" in editor_js
+        assert "!glDrawn && drawCutoutProjectionPreview" in editor_js
+        assert "!glDrawn && !!drawCutoutProjectionPreview" in runtime_js
+
+    def test_cutout_unavailable_hint_is_not_gated_on_gl_success(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        runtime_js = (repo_root / "web" / "pano_preview_runtime.js").read_text(encoding="utf-8")
+        assert "const liveDrawnValidated = !!glDrawn || (!!fallbackDrawn && hasValidCutoutStats(node));" in runtime_js
+
+    def test_preview_node_grid_is_fallback_only(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        preview_js = (repo_root / "web" / "pano_preview_previewnode.js").read_text(encoding="utf-8")
+        assert "if (!img || !img.complete || !(img.naturalWidth || img.width) || width <= 1 || height <= 1) {" in preview_js
+        assert "if (!drawn) {" in preview_js
+        assert preview_js.count("drawGrid(ctx, width, height);") == 2
+
+    def test_editor_debug_probe_is_removed_from_normal_path(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        assert "function panoEditorDebug(" not in editor_js
+
     def test_preview_runtime_wheel_and_scheduler_guards(self):
         repo_root = Path(__file__).resolve().parent.parent
         preview_js = (repo_root / "web" / "pano_preview_previewnode.js").read_text(encoding="utf-8")
@@ -289,6 +363,15 @@ class TestNodesPreview(unittest.TestCase):
         assert 'pano_sticker_input_images' in nodes_py
         assert 'pano_sticker_input_pose' in nodes_py
         assert 'sticker_state_json' in nodes_py
+
+    def test_no_new_active_preview_dependency_on_editor_core(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        runtime_js = (repo_root / "web" / "pano_preview_runtime.js").read_text(encoding="utf-8")
+        preview_node_js = (repo_root / "web" / "pano_preview_previewnode.js").read_text(encoding="utf-8")
+        assert 'from "./pano_editor_core.js"' not in editor_js
+        assert 'from "./pano_editor_core.js"' not in runtime_js
+        assert 'from "./pano_editor_core.js"' not in preview_node_js
 
 if __name__ == '__main__':
     unittest.main()
