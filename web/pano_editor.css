@@ -151,11 +151,17 @@
   will-change: transform;
   pointer-events: none;
 }
+.pano-view-toggle[data-view-count="3"]::before {
+  width: calc((100% - (var(--pano-float-pad) * 2)) / 3);
+}
 .pano-view-toggle[data-selected="pano"]::before {
   transform: translateX(0);
 }
 .pano-view-toggle[data-selected="unwrap"]::before {
   transform: translateX(100%);
+}
+.pano-view-toggle[data-selected="frame"]::before {
+  transform: translateX(200%);
 }
 .pano-view-btn {
   position: relative;
@@ -197,12 +203,22 @@
   outline: none;
 }
 .pano-view-toggle[data-selected="pano"] .pano-view-btn[data-view="pano"],
-.pano-view-toggle[data-selected="unwrap"] .pano-view-btn[data-view="unwrap"] {
+.pano-view-toggle[data-selected="unwrap"] .pano-view-btn[data-view="unwrap"],
+.pano-view-toggle[data-selected="frame"] .pano-view-btn[data-view="frame"] {
   color: var(--pano-text);
 }
 .pano-view-toggle[data-selected="pano"] .pano-view-btn[data-view="unwrap"]:hover,
-.pano-view-toggle[data-selected="unwrap"] .pano-view-btn[data-view="pano"]:hover {
+.pano-view-toggle[data-selected="pano"] .pano-view-btn[data-view="frame"]:hover,
+.pano-view-toggle[data-selected="unwrap"] .pano-view-btn[data-view="pano"]:hover,
+.pano-view-toggle[data-selected="unwrap"] .pano-view-btn[data-view="frame"]:hover,
+.pano-view-toggle[data-selected="frame"] .pano-view-btn[data-view="pano"]:hover,
+.pano-view-toggle[data-selected="frame"] .pano-view-btn[data-view="unwrap"]:hover {
   color: var(--pano-muted-strong);
+}
+.pano-view-btn:disabled {
+  color: var(--pano-text-tertiary);
+  cursor: default;
+  opacity: 0.5;
 }
 .pano-floating-bottom {
   position: absolute;

@@ -8,9 +8,9 @@ EMPTY_PAINTING_STATE = {
     "mask": {"strokes": []},
 }
 
-PAINT_TOOL_KINDS = {"pen", "marker", "brush", "eraser", "rect_fill_drag", "lasso_fill"}
-MASK_TOOL_KINDS = {"pen", "eraser", "rect_fill_drag"}
-GEOMETRY_KINDS = {"freehand_open", "freehand_closed", "rect_fill", "lasso_fill"}
+PAINT_TOOL_KINDS = {"pen", "marker", "brush", "eraser", "lasso_fill"}
+MASK_TOOL_KINDS = {"pen", "eraser"}
+GEOMETRY_KINDS = {"freehand_open", "freehand_closed", "lasso_fill"}
 
 
 def empty_painting_state() -> dict:
@@ -55,6 +55,8 @@ def _normalize_target_point(raw, target_space):
     t = _finite_float(raw.get("t", 0.0))
     if t is None:
         return None
+    width_scale = _finite_float(raw.get("widthScale"))
+    pressure_like = _finite_float(raw.get("pressureLike"))
     if target_space["kind"] == "ERP_GLOBAL":
         u = _finite_float(raw.get("u"))
         v = _finite_float(raw.get("v"))
@@ -64,7 +66,12 @@ def _normalize_target_point(raw, target_space):
         if abs(u - 1.0) < 1e-9:
             u = 0.0
         v = max(0.0, min(1.0, float(v)))
-        return {"targetKind": "ERP_GLOBAL", "u": u, "v": v, "t": float(t)}
+        out = {"targetKind": "ERP_GLOBAL", "u": u, "v": v, "t": float(t)}
+        if width_scale is not None:
+            out["widthScale"] = max(0.0, float(width_scale))
+        if pressure_like is not None:
+            out["pressureLike"] = max(0.0, float(pressure_like))
+        return out
     x = _finite_float(raw.get("x"))
     y = _finite_float(raw.get("y"))
     if x is None or y is None:
@@ -72,13 +79,18 @@ def _normalize_target_point(raw, target_space):
     frame_id = str(raw.get("frameId") or target_space.get("frameId") or "").strip()
     if frame_id != str(target_space.get("frameId") or "").strip():
         return None
-    return {
+    out = {
         "targetKind": "FRAME_LOCAL",
         "frameId": frame_id,
         "x": float(x),
         "y": float(y),
         "t": float(t),
     }
+    if width_scale is not None:
+        out["widthScale"] = max(0.0, float(width_scale))
+    if pressure_like is not None:
+        out["pressureLike"] = max(0.0, float(pressure_like))
+    return out
 
 
 def _normalize_point_list(raw_points, target_space, min_points=1):
@@ -101,14 +113,6 @@ def _normalize_geometry(raw, target_space, tool_kind, allow_lasso):
     geometry_kind = str(raw.get("geometryKind") or "").strip()
     if geometry_kind not in GEOMETRY_KINDS:
         return None
-    if geometry_kind == "rect_fill":
-        if tool_kind != "rect_fill_drag":
-            return None
-        p0 = _normalize_target_point(raw.get("p0"), target_space)
-        p1 = _normalize_target_point(raw.get("p1"), target_space)
-        if p0 is None or p1 is None:
-            return None
-        return {"geometryKind": "rect_fill", "p0": p0, "p1": p1}
     if geometry_kind == "lasso_fill":
         if tool_kind != "lasso_fill" or not allow_lasso:
             return None
@@ -118,12 +122,17 @@ def _normalize_geometry(raw, target_space, tool_kind, allow_lasso):
         return {"geometryKind": "lasso_fill", "points": points}
     if geometry_kind not in {"freehand_open", "freehand_closed"}:
         return None
-    if tool_kind in {"rect_fill_drag", "lasso_fill"}:
+    if tool_kind in {"lasso_fill"}:
         return None
     points = _normalize_point_list(raw.get("points"), target_space, min_points=1)
     if points is None:
         return None
-    return {"geometryKind": geometry_kind, "points": points}
+    raw_points = _normalize_point_list(raw.get("rawPoints"), target_space, min_points=1)
+    return {
+        "geometryKind": geometry_kind,
+        "points": points,
+        "rawPoints": raw_points if raw_points is not None else copy.deepcopy(points),
+    }
 
 
 def _normalize_color(raw, allow_color):
@@ -164,9 +173,9 @@ def _normalize_stroke(raw, layer_kind):
     if geometry is None:
         return None
     color = _normalize_color(raw.get("color"), allow_color=(layer_kind == "paint"))
-    if layer_kind == "paint" and tool_kind != "eraser" and tool_kind != "rect_fill_drag" and tool_kind != "lasso_fill" and color is None:
+    if layer_kind == "paint" and tool_kind != "eraser" and tool_kind != "lasso_fill" and color is None:
         return None
-    if layer_kind == "paint" and tool_kind in {"rect_fill_drag", "lasso_fill"} and color is None:
+    if layer_kind == "paint" and tool_kind in {"lasso_fill"} and color is None:
         return None
     if layer_kind == "mask":
         color = None
@@ -181,6 +190,25 @@ def _normalize_stroke(raw, layer_kind):
     opacity = _finite_float(raw.get("opacity"))
     if size is None or opacity is None:
         return None
+    radius_value = _finite_float(raw.get("radiusValue"))
+    radius_model = str(raw.get("radiusModel") or "").strip() or None
+    frame_snapshot = None
+    if target_space.get("kind") == "FRAME_LOCAL":
+        snap = raw.get("frameSnapshot")
+        if isinstance(snap, dict):
+            yaw_deg = _finite_float(snap.get("yaw_deg"))
+            pitch_deg = _finite_float(snap.get("pitch_deg"))
+            hFOV_deg = _finite_float(snap.get("hFOV_deg"))
+            vFOV_deg = _finite_float(snap.get("vFOV_deg"))
+            roll_deg = _finite_float(snap.get("roll_deg"))
+            if None not in (yaw_deg, pitch_deg, hFOV_deg, vFOV_deg, roll_deg):
+                frame_snapshot = {
+                    "yaw_deg": float(yaw_deg),
+                    "pitch_deg": float(pitch_deg),
+                    "hFOV_deg": float(hFOV_deg),
+                    "vFOV_deg": float(vFOV_deg),
+                    "roll_deg": float(roll_deg),
+                }
     out = {
         "id": stroke_id,
         "actionGroupId": action_group_id,
@@ -195,6 +223,9 @@ def _normalize_stroke(raw, layer_kind):
         "flow": _finite_float(raw.get("flow")),
         "spacing": _finite_float(raw.get("spacing")),
         "createdAt": int(created_at),
+        "frameSnapshot": frame_snapshot,
+        "radiusModel": radius_model,
+        "radiusValue": None if radius_value is None else max(0.0, float(radius_value)),
         "geometry": geometry,
     }
     return out

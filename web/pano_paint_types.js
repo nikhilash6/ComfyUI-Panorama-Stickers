@@ -24,22 +24,30 @@ function normalizeTargetSpace(raw) {
 function normalizePoint(raw, targetSpace) {
   if (!raw || typeof raw !== "object" || !targetSpace) return null;
   const t = finiteNumber(raw.t, 0);
+  const widthScale = finiteNumber(raw.widthScale, null);
+  const pressureLike = finiteNumber(raw.pressureLike, null);
   if (targetSpace.kind === "ERP_GLOBAL") {
     const u = finiteNumber(raw.u, null);
     const v = finiteNumber(raw.v, null);
     if (u == null || v == null) return null;
-    return {
+    const out = {
       targetKind: "ERP_GLOBAL",
       u: ((u % 1) + 1) % 1,
       v: Math.max(0, Math.min(1, v)),
       t,
     };
+    if (widthScale != null) out.widthScale = Math.max(0, widthScale);
+    if (pressureLike != null) out.pressureLike = Math.max(0, pressureLike);
+    return out;
   }
   const x = finiteNumber(raw.x, null);
   const y = finiteNumber(raw.y, null);
   const frameId = String(raw.frameId || targetSpace.frameId || "").trim();
   if (x == null || y == null || frameId !== targetSpace.frameId) return null;
-  return { targetKind: "FRAME_LOCAL", frameId, x, y, t };
+  const out = { targetKind: "FRAME_LOCAL", frameId, x, y, t };
+  if (widthScale != null) out.widthScale = Math.max(0, widthScale);
+  if (pressureLike != null) out.pressureLike = Math.max(0, pressureLike);
+  return out;
 }
 
 function normalizePointList(raw, targetSpace, minPoints = 1) {
@@ -56,21 +64,21 @@ function normalizePointList(raw, targetSpace, minPoints = 1) {
 function normalizeGeometry(raw, targetSpace, toolKind, allowLasso) {
   if (!raw || typeof raw !== "object") return null;
   const geometryKind = String(raw.geometryKind || "").trim();
-  if (geometryKind === "rect_fill") {
-    if (toolKind !== "rect_fill_drag") return null;
-    const p0 = normalizePoint(raw.p0, targetSpace);
-    const p1 = normalizePoint(raw.p1, targetSpace);
-    return p0 && p1 ? { geometryKind, p0, p1 } : null;
-  }
   if (geometryKind === "lasso_fill") {
     if (!allowLasso || toolKind !== "lasso_fill") return null;
     const points = normalizePointList(raw.points, targetSpace, 3);
     return points ? { geometryKind, points } : null;
   }
   if (geometryKind !== "freehand_open" && geometryKind !== "freehand_closed") return null;
-  if (toolKind === "rect_fill_drag" || toolKind === "lasso_fill") return null;
+  if (toolKind === "lasso_fill") return null;
   const points = normalizePointList(raw.points, targetSpace, 1);
-  return points ? { geometryKind, points } : null;
+  if (!points) return null;
+  const rawPoints = normalizePointList(raw.rawPoints, targetSpace, 1);
+  return {
+    geometryKind,
+    points,
+    rawPoints: rawPoints || points.map((pt) => ({ ...pt })),
+  };
 }
 
 function normalizeStroke(raw, layerKind) {
@@ -86,6 +94,28 @@ function normalizeStroke(raw, layerKind) {
   const id = String(raw.id || "").trim();
   const actionGroupId = String(raw.actionGroupId || "").trim();
   if (!id || !actionGroupId) return null;
+  let frameSnapshot = null;
+  if (targetSpace.kind === "FRAME_LOCAL") {
+    const snap = raw.frameSnapshot;
+    if (snap && typeof snap === "object") {
+      const yaw_deg = finiteNumber(snap.yaw_deg, null);
+      const pitch_deg = finiteNumber(snap.pitch_deg, null);
+      const hFOV_deg = finiteNumber(snap.hFOV_deg, null);
+      const vFOV_deg = finiteNumber(snap.vFOV_deg, null);
+      const roll_deg = finiteNumber(snap.roll_deg, null);
+      if (yaw_deg != null && pitch_deg != null && hFOV_deg != null && vFOV_deg != null && roll_deg != null) {
+        frameSnapshot = {
+          yaw_deg,
+          pitch_deg,
+          hFOV_deg,
+          vFOV_deg,
+          roll_deg,
+        };
+      }
+    }
+  }
+  const radiusValue = finiteNumber(raw.radiusValue, null);
+  const radiusModel = String(raw.radiusModel || "").trim() || null;
   let color = null;
   if (layerKind === "paint") {
     const src = raw.color;
@@ -111,6 +141,9 @@ function normalizeStroke(raw, layerKind) {
     spacing: finiteNumber(raw.spacing, null),
     createdAt: Math.trunc(finiteNumber(raw.createdAt, 0)),
     color,
+    frameSnapshot,
+    radiusModel,
+    radiusValue: radiusValue == null ? null : Math.max(0, radiusValue),
     geometry,
   };
 }

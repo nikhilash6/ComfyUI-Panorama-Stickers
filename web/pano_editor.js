@@ -1188,21 +1188,20 @@ function showEditor(node, type, options = {}) {
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.pen}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Brush" data-tip="Brush">${ICON.pen}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.clear}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="rect_fill_drag" aria-label="Rect Fill" data-tip="Rect fill">${ICON.add}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.pen}</button>
           <div class="pano-paint-footer-note">Paint UI is live. Stroke input wiring is next.</div>
         </div>
         <div class="pano-paint-footer-group" data-paint-group="mask" hidden>
           <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pen}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.clear}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="rect_fill_drag" aria-label="Mask Rect Fill" data-tip="Mask rect fill">${ICON.add}</button>
           <div class="pano-paint-footer-note">Mask remains a separate grayscale layer.</div>
         </div>
       </div>`}
       <div class="pano-floating-top">
-        <div class="pano-view-toggle" data-selected="pano">
+        <div class="pano-view-toggle" data-selected="pano" data-view-count="${type === "cutout" ? "3" : "2"}">
           <button class="pano-view-btn" data-view="pano" aria-pressed="true" aria-label="Panorama">${ICON.pano}<span class="label">Panorama</span></button>
           <button class="pano-view-btn" data-view="unwrap" aria-pressed="false" aria-label="Unwrap">${ICON.unwrap}<span class="label">Unwrap</span></button>
+          ${type === "cutout" ? `<button class="pano-view-btn" data-view="frame" aria-pressed="false" aria-label="Frame">Frame</button>` : ""}
         </div>
       </div>
       <div class="pano-floating-right">
@@ -1239,6 +1238,7 @@ function showEditor(node, type, options = {}) {
   const selectionMenu = root.querySelector("[data-selection-menu]");
   const outputPreviewToggleBtn = root.querySelector("[data-action='toggle-output-preview-size']");
   const lookAtFrameBtn = root.querySelector("[data-action='look-at-frame']");
+  const frameViewBtn = root.querySelector("[data-view='frame']");
   const fullscreenBtn = root.querySelector("[data-action='toggle-fullscreen']");
   const tooltipEl = root.querySelector("[data-tooltip]");
   const toolRail = root.querySelector("[data-tool-rail]");
@@ -1288,6 +1288,8 @@ function showEditor(node, type, options = {}) {
     outputPreviewAnimStartTs: 0,
     outputPreviewAnimDurationMs: 180,
     outputPreviewRect: null,
+    frameView: { zoom: 1, panX: 0, panY: 0 },
+    paintCaches: { revisionKey: "", erp: null, frames: new Map() },
     panelLastValues: null,
     panelWasEnabled: false,
     viewTween: null,
@@ -1762,6 +1764,21 @@ function showEditor(node, type, options = {}) {
     lookAtFrameBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
   }
 
+  function syncViewToggleState() {
+    const frameEnabled = type === "cutout" && getList().length > 0;
+    if (editor.mode === "frame" && !frameEnabled) editor.mode = "pano";
+    if (frameViewBtn) {
+      frameViewBtn.disabled = !frameEnabled;
+      frameViewBtn.setAttribute("aria-disabled", frameEnabled ? "false" : "true");
+    }
+    viewBtns.forEach((btn) => {
+      const active = btn.dataset.view === editor.mode;
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    if (viewToggle) viewToggle.setAttribute("data-selected", editor.mode);
+    canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+  }
+
   function stickerCornerOrderSanity() {
     const test = {
       yaw_deg: 0, pitch_deg: 0, hFOV_deg: 20, vFOV_deg: 20, rot_deg: 0,
@@ -2184,6 +2201,14 @@ function showEditor(node, type, options = {}) {
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
     if (!skipBackground) drawErpBackgroundUnwrap(r);
+    rebuildNativePaintCachesIfNeeded();
+    const erpRaster = editor.paintCaches.erp?.canvas || null;
+    if (erpRaster) {
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.drawImage(erpRaster, r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
 
     if (editor.showGrid && !editor.fullscreen) {
       ctx.strokeStyle = "#3f3f46";
@@ -2234,6 +2259,22 @@ function showEditor(node, type, options = {}) {
       ctx.fillRect(0, 0, w, h);
     }
     if (!skipBackground) drawErpBackgroundPano();
+    rebuildNativePaintCachesIfNeeded();
+    const erpRaster = editor.paintCaches.erp?.canvas || null;
+    if (erpRaster) {
+      renderErpViewToContext2D({
+        owner: node,
+        cacheKey: `modal_pano_paint_raster_${String(editor.paintCaches.revisionKey || "").length}`,
+        ctx,
+        rect: { x: 0, y: 0, w, h },
+        backgroundSource: erpRaster,
+        backgroundRevision: editor.paintCaches.revisionKey,
+        mode: "panorama",
+        yawDeg: editor.viewYaw,
+        pitchDeg: editor.viewPitch,
+        fovDeg: editor.viewFov,
+      });
+    }
 
     if (editor.showGrid && !editor.fullscreen) {
       for (let lon = -180; lon <= 180; lon += 15) {
@@ -2668,19 +2709,24 @@ function showEditor(node, type, options = {}) {
     if (!img || !img.complete || !(img.naturalWidth || img.width)) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
       ctx.fillRect(px, py, pw, ph);
-      ctx.fillStyle = "rgba(250, 250, 250, 0.7)";
-      ctx.font = "500 10px Geist, sans-serif";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText("Connect ERP image", px + pw * 0.5, py + ph * 0.5);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+      drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
       ctx.restore();
       placeOutputPreviewToggle();
       return;
     }
 
     if (Number(img.naturalWidth || img.width || 0) <= 1 || Number(img.naturalHeight || img.height || 0) <= 1) {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
+      ctx.fillRect(px, py, pw, ph);
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
+      drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
       ctx.restore();
-      if (outputPreviewToggleBtn) outputPreviewToggleBtn.style.display = "none";
+      placeOutputPreviewToggle();
       return;
     }
 
@@ -2700,6 +2746,8 @@ function showEditor(node, type, options = {}) {
       shot,
       mix > 0.65 ? "high" : "balanced",
     );
+    void fallbackDrawn;
+    drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
     ctx.restore();
     placeOutputPreviewToggle();
   }
@@ -2707,67 +2755,882 @@ function showEditor(node, type, options = {}) {
   function projectErpStrokeToCurrentView(stroke) {
     const geometry = stroke?.geometry;
     if (!geometry || geometry.geometryKind !== "freehand_open") return [];
-    const points = Array.isArray(geometry.points) ? geometry.points : [];
-    if (editor.mode === "unwrap") {
-      const r = getUnwrapRect();
-      return points.map((pt) => ({
-        x: r.x + Number(pt.u || 0) * r.w,
-        y: r.y + Number(pt.v || 0) * r.h,
-      }));
-    }
-    return points.map((pt) => {
-      const lon = (Number(pt.u || 0) - 0.5) * (2 * Math.PI);
-      const lat = (0.5 - Number(pt.v || 0)) * Math.PI;
-      const cp = Math.cos(lat);
-      const dir = vec3(cp * Math.sin(lon), Math.sin(lat), cp * Math.cos(lon));
-      return projectDir(dir);
-    }).filter((pt) => pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) && Number(pt.z || 0) > 0);
+    const points = getStrokePointList(stroke, "points");
+    return points.map((pt, index) => {
+      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, null);
+      return projectWorldDirToCurrentViewSample(dirs.centerDir, dirs.offsetDir);
+    }).filter(Boolean);
   }
 
-  function drawPaintingOverlay() {
-    if (!supportsErpPainting()) return;
+  function frameLocalPointToWorldDir(shot, point) {
+    if (!shot || !point) return null;
+    const u = Number(point.x || 0);
+    const v = Number(point.y || 0);
+    return stickerSampleDir(shot, u, v);
+  }
+
+  function erpPointToWorldDir(point) {
+    if (!point) return null;
+    const lon = (Number(point.u || 0) - 0.5) * (2 * Math.PI);
+    const lat = (0.5 - Number(point.v || 0)) * Math.PI;
+    const cp = Math.cos(lat);
+    return vec3(cp * Math.sin(lon), Math.sin(lat), cp * Math.cos(lon));
+  }
+
+  function getStrokePointList(stroke, key = "points") {
+    const geometry = stroke?.geometry;
+    const points = Array.isArray(geometry?.[key]) ? geometry[key] : [];
+    return points;
+  }
+
+  function getStrokePointScalar(point, name, fallback = 1) {
+    const value = Number(point?.[name]);
+    return Number.isFinite(value) ? Math.max(0, value) : fallback;
+  }
+
+  function getStrokeRadiusSpec(stroke) {
+    const radiusValue = Number(stroke?.radiusValue);
+    if (Number.isFinite(radiusValue) && radiusValue > 0) {
+      const model = String(stroke?.radiusModel || "").trim() || "frame_local_norm";
+      if (model === "world_angle") {
+        return {
+          model: stroke?.targetSpace?.kind === "FRAME_LOCAL" ? "frame_local_norm" : "erp_uv_norm",
+          value: Math.max(1e-6, Number(stroke?.size || 10) * 0.5 / 2048),
+        };
+      }
+      return {
+        model,
+        value: radiusValue,
+      };
+    }
+    return {
+      model: stroke?.targetSpace?.kind === "FRAME_LOCAL" ? "frame_local_norm" : "erp_uv_norm",
+      value: Math.max(1e-6, Number(stroke?.size || 10) * 0.5 / 2048),
+    };
+  }
+
+  function createRasterSurface(width, height) {
+    const surface = document.createElement("canvas");
+    surface.width = Math.max(1, Math.round(width));
+    surface.height = Math.max(1, Math.round(height));
+    const surfaceCtx = surface.getContext("2d");
+    if (surfaceCtx) {
+      surfaceCtx.clearRect(0, 0, surface.width, surface.height);
+      surfaceCtx.imageSmoothingEnabled = true;
+    }
+    return { canvas: surface, ctx: surfaceCtx };
+  }
+
+  function getPaintingRevisionKey() {
+    return JSON.stringify({
+      paint: state.painting?.paint?.strokes || [],
+      mask: state.painting?.mask?.strokes || [],
+    });
+  }
+
+  function getSourcePoint2D(stroke, point) {
+    if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+      return { x: Number(point?.x || 0), y: Number(point?.y || 0) };
+    }
+    return { x: Number(point?.u || 0), y: Number(point?.v || 0) };
+  }
+
+  function getStrokeNormal2D(stroke, points, index) {
+    const prev = getSourcePoint2D(stroke, points[Math.max(0, index - 1)] || points[index]);
+    const next = getSourcePoint2D(stroke, points[Math.min(points.length - 1, index + 1)] || points[index]);
+    const dx = Number(next.x || 0) - Number(prev.x || 0);
+    const dy = Number(next.y || 0) - Number(prev.y || 0);
+    const len = Math.hypot(dx, dy) || 1;
+    return { x: -dy / len, y: dx / len };
+  }
+
+  function getWorldOffsetDirForStrokePoint(stroke, point, index, points, sourceShot = null) {
+    const centerDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
+      ? frameLocalPointToWorldDir(sourceShot, point)
+      : erpPointToWorldDir(point);
+    if (!centerDir) return { centerDir: null, offsetDir: null };
+    const radiusSpec = getStrokeRadiusSpec(stroke);
+    const scale = getStrokePointScalar(point, "widthScale", 1) * getStrokePointScalar(point, "pressureLike", 1);
+    if (radiusSpec.model === "world_angle") {
+      const prevDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
+        ? frameLocalPointToWorldDir(sourceShot, points[Math.max(0, index - 1)] || point)
+        : erpPointToWorldDir(points[Math.max(0, index - 1)] || point);
+      const nextDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
+        ? frameLocalPointToWorldDir(sourceShot, points[Math.min(points.length - 1, index + 1)] || point)
+        : erpPointToWorldDir(points[Math.min(points.length - 1, index + 1)] || point);
+      const tangent = norm(vec3(
+        Number((nextDir?.x || centerDir.x) - (prevDir?.x || centerDir.x)),
+        Number((nextDir?.y || centerDir.y) - (prevDir?.y || centerDir.y)),
+        Number((nextDir?.z || centerDir.z) - (prevDir?.z || centerDir.z)),
+      ));
+      const normal3 = norm(cross(tangent, centerDir));
+      const offsetDir = norm(add(centerDir, mul(normal3, Math.tan(radiusSpec.value * scale))));
+      return { centerDir, offsetDir };
+    }
+    const normal2 = getStrokeNormal2D(stroke, points, index);
+    if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+      const offsetPt = {
+        ...point,
+        x: Number(point?.x || 0) + (normal2.x * radiusSpec.value * scale),
+        y: Number(point?.y || 0) + (normal2.y * radiusSpec.value * scale),
+      };
+      return {
+        centerDir,
+        offsetDir: frameLocalPointToWorldDir(sourceShot, offsetPt),
+      };
+    }
+    const offsetPt = {
+      ...point,
+      u: Number(point?.u || 0) + (normal2.x * radiusSpec.value * scale),
+      v: Number(point?.v || 0) + (normal2.y * radiusSpec.value * scale),
+    };
+    return {
+      centerDir,
+      offsetDir: erpPointToWorldDir(offsetPt),
+    };
+  }
+
+  function projectWorldDirToCurrentViewSample(centerDir, offsetDir) {
+    if (!centerDir || !offsetDir) return null;
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      const cll = dirToLonLat(centerDir);
+      const oll = dirToLonLat(offsetDir);
+      const center = {
+        x: r.x + (((cll.lon / (2 * Math.PI)) + 0.5) * r.w),
+        y: r.y + ((0.5 - (cll.lat / Math.PI)) * r.h),
+      };
+      const offset = {
+        x: r.x + (((oll.lon / (2 * Math.PI)) + 0.5) * r.w),
+        y: r.y + ((0.5 - (oll.lat / Math.PI)) * r.h),
+      };
+      return {
+        x: center.x,
+        y: center.y,
+        radiusPx: Math.max(0.5, Math.hypot(offset.x - center.x, offset.y - center.y)),
+        z: 1,
+      };
+    }
+    const center = projectDir(centerDir);
+    const offset = projectDir(offsetDir);
+    if (!center || !offset || Number(center.z || 0) <= 0 || Number(offset.z || 0) <= 0) return null;
+    return {
+      x: center.x,
+      y: center.y,
+      radiusPx: Math.max(0.5, Math.hypot(offset.x - center.x, offset.y - center.y)),
+      z: center.z,
+    };
+  }
+
+  function projectWorldDirToFrameRectSample(targetShot, rect, centerDir, offsetDir) {
+    if (!targetShot || !rect || !centerDir || !offsetDir) return null;
+    const centerLocal = worldDirToFrameLocalPoint(targetShot, centerDir);
+    const offsetLocal = worldDirToFrameLocalPoint(targetShot, offsetDir);
+    if (!centerLocal || !offsetLocal) return null;
+    const center = {
+      x: Number(rect.x || 0) + (Number(centerLocal.x || 0) * Number(rect.w || 0)),
+      y: Number(rect.y || 0) + (Number(centerLocal.y || 0) * Number(rect.h || 0)),
+    };
+    const offset = {
+      x: Number(rect.x || 0) + (Number(offsetLocal.x || 0) * Number(rect.w || 0)),
+      y: Number(rect.y || 0) + (Number(offsetLocal.y || 0) * Number(rect.h || 0)),
+    };
+    return {
+      x: center.x,
+      y: center.y,
+      radiusPx: Math.max(0.5, Math.hypot(offset.x - center.x, offset.y - center.y)),
+      z: 1,
+    };
+  }
+
+  function getNativeRadiusPxForStrokePoint(stroke, point, targetWidth, targetHeight, shot = null) {
+    const spec = getStrokeRadiusSpec(stroke);
+    const scale = getStrokePointScalar(point, "widthScale", 1) * getStrokePointScalar(point, "pressureLike", 1);
+    if (spec.model === "erp_uv_norm") return Math.max(0.5, spec.value * targetWidth * scale);
+    if (spec.model === "frame_local_norm") return Math.max(0.5, spec.value * targetWidth * scale);
+    if (spec.model === "world_angle") {
+      if (shot) {
+        return Math.max(0.5, ((spec.value / Math.max(1e-6, Number(shot.hFOV_deg || 90) * DEG2RAD)) * targetWidth) * scale);
+      }
+      return Math.max(0.5, ((spec.value / (2 * Math.PI)) * targetWidth) * scale);
+    }
+    return Math.max(0.5, Number(stroke?.size || 10) * 0.5 * scale);
+  }
+
+  function drawNativeStrokePath(targetCtx, samples, stroke, bounds) {
+    if (!targetCtx || samples.length < 2) return;
+    targetCtx.save();
+    targetCtx.globalAlpha = String(stroke?.toolKind || "") === "marker" ? 0.7 : 1;
+    if (String(stroke?.layerKind || "") === "mask") {
+      targetCtx.fillStyle = "rgba(255,255,255,1)";
+    } else if (String(stroke?.toolKind || "") === "eraser") {
+      targetCtx.globalCompositeOperation = "destination-out";
+      targetCtx.fillStyle = "rgba(0,0,0,1)";
+    } else {
+      const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+      targetCtx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${Number(c.a ?? 1)})`;
+    }
+    const maxR = Math.max(bounds.w, bounds.h) * 0.25;
+    const drawDisc = (s) => {
+      const r = Math.max(0.5, Math.min(maxR, Number(s.radiusPx || 0.5)));
+      if (!Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(r)) return;
+      targetCtx.beginPath();
+      targetCtx.arc(s.x, s.y, r, 0, Math.PI * 2);
+      targetCtx.fill();
+    };
+    for (let i = 0; i < samples.length - 1; i += 1) {
+      const a = samples[i];
+      const b = samples[i + 1];
+      if (!a || !b) continue;
+      const dx = Number(b.x || 0) - Number(a.x || 0);
+      const dy = Number(b.y || 0) - Number(a.y || 0);
+      const len = Math.hypot(dx, dy);
+      if (!Number.isFinite(len) || len < 1e-6 || len > Math.max(bounds.w, bounds.h) * 0.5) {
+        drawDisc(a);
+        continue;
+      }
+      const nx = -dy / len;
+      const ny = dx / len;
+      const ra = Math.max(0.5, Math.min(maxR, Number(a.radiusPx || 0.5)));
+      const rb = Math.max(0.5, Math.min(maxR, Number(b.radiusPx || 0.5)));
+      targetCtx.beginPath();
+      targetCtx.moveTo(a.x + (nx * ra), a.y + (ny * ra));
+      targetCtx.lineTo(b.x + (nx * rb), b.y + (ny * rb));
+      targetCtx.lineTo(b.x - (nx * rb), b.y - (ny * rb));
+      targetCtx.lineTo(a.x - (nx * ra), a.y - (ny * ra));
+      targetCtx.closePath();
+      targetCtx.fill();
+      drawDisc(a);
+    }
+    drawDisc(samples[samples.length - 1]);
+    targetCtx.restore();
+  }
+
+  function drawNativeLassoFill(targetCtx, points, stroke, bounds, axisKeys) {
+    if (!targetCtx || !Array.isArray(points) || points.length < 3) return;
+    const xKey = axisKeys?.x || "u";
+    const yKey = axisKeys?.y || "v";
+    targetCtx.save();
+    if (String(stroke?.layerKind || "") === "mask") {
+      targetCtx.fillStyle = "rgba(255,255,255,1)";
+    } else if (String(stroke?.toolKind || "") === "eraser") {
+      targetCtx.globalCompositeOperation = "destination-out";
+      targetCtx.fillStyle = "rgba(0,0,0,1)";
+    } else {
+      const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+      targetCtx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${Number(c.a ?? 1)})`;
+    }
+    targetCtx.beginPath();
+    targetCtx.moveTo(Number(points[0]?.[xKey] || 0) * bounds.w, Number(points[0]?.[yKey] || 0) * bounds.h);
+    for (let i = 1; i < points.length; i += 1) {
+      targetCtx.lineTo(Number(points[i]?.[xKey] || 0) * bounds.w, Number(points[i]?.[yKey] || 0) * bounds.h);
+    }
+    targetCtx.closePath();
+    targetCtx.fill();
+    targetCtx.restore();
+  }
+
+  function rebuildNativePaintCachesIfNeeded() {
+    const revisionKey = getPaintingRevisionKey();
+    if (editor.paintCaches.revisionKey === revisionKey && editor.paintCaches.erp) return;
+    editor.paintCaches.revisionKey = revisionKey;
+    editor.paintCaches.erp = createRasterSurface(2048, 1024);
+    editor.paintCaches.frames = new Map();
+    const erpSurface = editor.paintCaches.erp;
     const strokes = [
       ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
       ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
     ];
-    if (editor.interaction?.kind === "paint_stroke") strokes.push(editor.interaction.stroke);
     strokes.forEach((stroke) => {
-      if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") return;
-      const projected = projectErpStrokeToCurrentView(stroke);
-      if (projected.length < 2) return;
-      const layerKind = String(stroke.layerKind || "paint");
-      const toolKind = String(stroke.toolKind || "pen");
-      ctx.save();
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.lineWidth = toolKind === "brush" ? 18 : (toolKind === "marker" ? 14 : 10);
-      ctx.globalAlpha = toolKind === "marker" ? 0.7 : 1;
-      if (layerKind === "mask") {
-        ctx.strokeStyle = "rgba(34, 197, 94, 0.85)";
-      } else if (toolKind === "eraser") {
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.strokeStyle = "rgba(0, 0, 0, 1)";
-      } else {
-        ctx.strokeStyle = "rgba(255, 92, 92, 0.95)";
+      const geometry = stroke?.geometry;
+      if (!geometry) return;
+      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+        if (geometry.geometryKind === "lasso_fill") {
+          drawNativeLassoFill(erpSurface.ctx, geometry.points, stroke, { w: erpSurface.canvas.width, h: erpSurface.canvas.height }, { x: "u", y: "v" });
+          return;
+        }
+        const points = getStrokePointList(stroke, "points");
+        if (points.length < 2) return;
+        const samples = points.map((pt) => ({
+          x: Number(pt.u || 0) * erpSurface.canvas.width,
+          y: Number(pt.v || 0) * erpSurface.canvas.height,
+          radiusPx: getNativeRadiusPxForStrokePoint(stroke, pt, erpSurface.canvas.width, erpSurface.canvas.height, null),
+        }));
+        drawNativeStrokePath(erpSurface.ctx, samples, stroke, { w: erpSurface.canvas.width, h: erpSurface.canvas.height });
+        return;
       }
+      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+        const shotId = String(stroke.targetSpace.frameId || "");
+        const shot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId)
+          || stroke.frameSnapshot
+          || null;
+        if (!shot) return;
+        const width = Math.max(64, Number(shot.out_w || 1024));
+        const height = Math.max(64, Number(shot.out_h || 1024));
+        let frameSurface = editor.paintCaches.frames.get(shotId);
+        if (!frameSurface || frameSurface.canvas.width !== width || frameSurface.canvas.height !== height) {
+          frameSurface = createRasterSurface(width, height);
+          editor.paintCaches.frames.set(shotId, frameSurface);
+        }
+        if (geometry.geometryKind === "lasso_fill") {
+          drawNativeLassoFill(frameSurface.ctx, geometry.points, stroke, { w: width, h: height }, { x: "x", y: "y" });
+          return;
+        }
+        const points = getStrokePointList(stroke, "points");
+        if (points.length < 2) return;
+        const samples = points.map((pt) => ({
+          x: Number(pt.x || 0) * width,
+          y: Number(pt.y || 0) * height,
+          radiusPx: getNativeRadiusPxForStrokePoint(stroke, pt, width, height, shot),
+        }));
+        drawNativeStrokePath(frameSurface.ctx, samples, stroke, { w: width, h: height });
+      }
+    });
+  }
+
+  function worldDirToFrameLocalPoint(shot, dir) {
+    if (!shot || !dir) return null;
+    const frame = getStickerFrame(shot);
+    const cz = dot(dir, frame.centerDir);
+    if (!Number.isFinite(cz) || cz <= 1e-6) return null;
+    const xr = dot(dir, frame.right) / cz;
+    const yr = dot(dir, frame.up) / cz;
+    const x = (xr * frame.cr) + (yr * frame.sr);
+    const y = (-xr * frame.sr) + (yr * frame.cr);
+    return {
+      x: (x / Math.max(1e-6, frame.tanX) + 1) * 0.5,
+      y: (1 - (y / Math.max(1e-6, frame.tanY))) * 0.5,
+    };
+  }
+
+  function projectFrameStrokeToFrameView(stroke) {
+    const shot = getActiveCutoutShot();
+    const rect = getFrameViewRect(shot);
+    return projectFrameStrokeToRect(stroke, shot, rect);
+  }
+
+  function projectFrameStrokeToRect(stroke, shot, rect) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind !== "freehand_open") return [];
+    if (!shot || String(stroke?.targetSpace?.frameId || "") !== String(shot.id || "")) return [];
+    const points = getStrokePointList(stroke, "points");
+    return points.map((pt, index) => {
+      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, shot);
+      return projectWorldDirToFrameRectSample(shot, rect, dirs.centerDir, dirs.offsetDir);
+    }).filter(Boolean);
+  }
+
+  function projectErpStrokeToFrameRect(stroke, shot, rect) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind !== "freehand_open" || !shot || !rect) return [];
+    const points = getStrokePointList(stroke, "points");
+    return points.map((pt, index) => {
+      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, null);
+      return projectWorldDirToFrameRectSample(shot, rect, dirs.centerDir, dirs.offsetDir);
+    }).filter(Boolean);
+  }
+
+  function projectFrameStrokeToShotRect(stroke, targetShot, rect) {
+    const segments = projectFrameStrokeToShotRectSegments(stroke, targetShot, rect);
+    return segments.length ? segments[0] : [];
+  }
+
+  function projectFrameStrokeToShotRectSegments(stroke, targetShot, rect) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind !== "freehand_open" || !targetShot || !rect) return [];
+    const sourceShot = stroke?.frameSnapshot
+      ? { ...stroke.frameSnapshot }
+      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === String(stroke?.targetSpace?.frameId || ""));
+    if (!sourceShot) return [];
+    const points = Array.isArray(geometry.points) ? geometry.points : [];
+    if (points.length < 2) return [];
+
+    const projectPoint = (pt, index, list) => {
+      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, list, sourceShot);
+      return projectWorldDirToFrameRectSample(targetShot, rect, dirs.centerDir, dirs.offsetDir);
+    };
+    const midpoint = (a, b) => ({
+      x: (Number(a.x || 0) + Number(b.x || 0)) * 0.5,
+      y: (Number(a.y || 0) + Number(b.y || 0)) * 0.5,
+      t: (Number(a.t || 0) + Number(b.t || 0)) * 0.5,
+      targetKind: "FRAME_LOCAL",
+      frameId: String(a.frameId || b.frameId || sourceShot.id || ""),
+    });
+    const mergeSamples = (left, right) => {
+      if (!left.length) return right;
+      if (!right.length) return left;
+      const out = left.slice();
+      const last = out[out.length - 1];
+      const first = right[0];
+      if (Math.hypot(last.x - first.x, last.y - first.y) < 1e-6) out.pop();
+      return out.concat(right);
+    };
+    const subdivide = (a, b, depth = 0) => {
+      const pa = projectPoint(a, 0, [a, b]);
+      const pb = projectPoint(b, 1, [a, b]);
+      const mid = midpoint(a, b);
+      const pm = projectPoint(mid, 1, [a, mid, b]);
+      const linearMid = pa && pb ? { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 } : null;
+      const splitNeeded = depth < 7 && (
+        !pa || !pb || !pm
+        || (pa && pb && Math.hypot(pb.x - pa.x, pb.y - pa.y) > 28)
+        || (pm && linearMid && Math.hypot(pm.x - linearMid.x, pm.y - linearMid.y) > 2.5)
+      );
+      if (splitNeeded) return mergeSamples(subdivide(a, mid, depth + 1), subdivide(mid, b, depth + 1));
+      if (!pa || !pb) return [];
+      return [pa, pb];
+    };
+
+    const segments = [];
+    let current = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const sampled = subdivide(points[i], points[i + 1], 0);
+      if (sampled.length < 2) {
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      if (!current.length) {
+        current = sampled.slice();
+        continue;
+      }
+      const prev = current[current.length - 1];
+      const next = sampled[0];
+      const continuous = Math.hypot(prev.x - next.x, prev.y - next.y) < 10;
+      if (!continuous) {
+        if (current.length >= 2) segments.push(current);
+        current = sampled.slice();
+        continue;
+      }
+      current = mergeSamples(current, sampled);
+    }
+    if (current.length >= 2) segments.push(current);
+    return segments;
+  }
+
+  function projectFrameStrokeToCurrentErpView(stroke) {
+    const segments = projectFrameStrokeToCurrentErpViewSegments(stroke);
+    return segments.length ? segments[0] : [];
+  }
+
+  function projectFrameStrokeToCurrentErpViewSegments(stroke) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind !== "freehand_open") return [];
+    const shotId = String(stroke?.targetSpace?.frameId || "");
+    const liveShot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
+    const shot = stroke?.frameSnapshot ? { ...stroke.frameSnapshot } : liveShot;
+    if (!shot) return [];
+    const points = Array.isArray(geometry.points) ? geometry.points : [];
+    if (points.length < 2) return [];
+    const projectPoint = (pt, index, list) => {
+      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, list, shot);
+      return projectWorldDirToCurrentViewSample(dirs.centerDir, dirs.offsetDir);
+    };
+    const midpoint = (a, b) => ({
+      x: (Number(a.x || 0) + Number(b.x || 0)) * 0.5,
+      y: (Number(a.y || 0) + Number(b.y || 0)) * 0.5,
+      t: (Number(a.t || 0) + Number(b.t || 0)) * 0.5,
+      targetKind: "FRAME_LOCAL",
+      frameId: String(a.frameId || b.frameId || shotId || ""),
+    });
+    const mergeSamples = (left, right) => {
+      if (!left.length) return right;
+      if (!right.length) return left;
+      const out = left.slice();
+      const last = out[out.length - 1];
+      const first = right[0];
+      if (Math.hypot(last.x - first.x, last.y - first.y) < 1e-6) out.pop();
+      return out.concat(right);
+    };
+    const subdivide = (a, b, depth = 0) => {
+      const pa = projectPoint(a, 0, [a, b]);
+      const pb = projectPoint(b, 1, [a, b]);
+      const mid = midpoint(a, b);
+      const pm = projectPoint(mid, 1, [a, mid, b]);
+      const linearMid = pa && pb ? { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 } : null;
+      const splitNeeded = depth < 7 && (
+        !pa || !pb || !pm
+        || (pa && pb && Math.hypot(pb.x - pa.x, pb.y - pa.y) > 28)
+        || (pm && linearMid && Math.hypot(pm.x - linearMid.x, pm.y - linearMid.y) > 2.5)
+      );
+      if (splitNeeded) return mergeSamples(subdivide(a, mid, depth + 1), subdivide(mid, b, depth + 1));
+      if (!pa || !pb || (editor.mode !== "unwrap" && ((pa.z || 1) <= 0 || (pb.z || 1) <= 0))) return [];
+      return [pa, pb];
+    };
+    const segments = [];
+    let current = [];
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const sampled = subdivide(points[i], points[i + 1], 0);
+      if (sampled.length < 2) {
+        if (current.length >= 2) segments.push(current);
+        current = [];
+        continue;
+      }
+      if (!current.length) {
+        current = sampled.slice();
+        continue;
+      }
+      const prev = current[current.length - 1];
+      const next = sampled[0];
+      const continuous = Math.hypot(prev.x - next.x, prev.y - next.y) < 10;
+      if (!continuous) {
+        if (current.length >= 2) segments.push(current);
+        current = sampled.slice();
+        continue;
+      }
+      current = mergeSamples(current, sampled);
+    }
+    if (current.length >= 2) segments.push(current);
+    return segments;
+  }
+
+  function drawProjectedStrokePath(projected, stroke, options = {}) {
+    if (projected.length < 2) return;
+    const layerKind = String(stroke.layerKind || "paint");
+    const toolKind = String(stroke.toolKind || "pen");
+    ctx.save();
+    ctx.globalAlpha = toolKind === "marker" ? 0.7 : 1;
+    if (layerKind === "mask") {
+      ctx.fillStyle = "rgba(34, 197, 94, 0.85)";
+    } else if (toolKind === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0, 0, 0, 1)";
+    } else {
+      ctx.fillStyle = "rgba(255, 92, 92, 0.95)";
+    }
+    const drawDisc = (sample) => {
+      const r = Math.max(0.5, Number(sample?.radiusPx || 0.5));
+      if (!Number.isFinite(sample?.x) || !Number.isFinite(sample?.y) || !Number.isFinite(r)) return;
+      if (r > Math.max(canvas.width, canvas.height) * 0.25) return;
       ctx.beginPath();
-      ctx.moveTo(projected[0].x, projected[0].y);
-      for (let i = 1; i < projected.length; i += 1) ctx.lineTo(projected[i].x, projected[i].y);
-      ctx.stroke();
-      ctx.restore();
+      ctx.arc(Number(sample.x || 0), Number(sample.y || 0), r, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    for (let i = 0; i < projected.length - 1; i += 1) {
+      const a = projected[i];
+      const b = projected[i + 1];
+      const ra = Math.max(0.5, Number(a?.radiusPx || 0.5));
+      const rb = Math.max(0.5, Number(b?.radiusPx || 0.5));
+      if (!Number.isFinite(a?.x) || !Number.isFinite(a?.y) || !Number.isFinite(b?.x) || !Number.isFinite(b?.y)) continue;
+      if (!Number.isFinite(ra) || !Number.isFinite(rb)) continue;
+      if (ra > Math.max(canvas.width, canvas.height) * 0.25 || rb > Math.max(canvas.width, canvas.height) * 0.25) continue;
+      const dx = Number(b.x || 0) - Number(a.x || 0);
+      const dy = Number(b.y || 0) - Number(a.y || 0);
+      const len = Math.hypot(dx, dy);
+      if (!Number.isFinite(len) || len < 1e-6) {
+        drawDisc(a);
+        continue;
+      }
+      if (len > Math.max(canvas.width, canvas.height) * 0.5) continue;
+      const nx = -dy / len;
+      const ny = dx / len;
+      ctx.beginPath();
+      ctx.moveTo(a.x + (nx * ra), a.y + (ny * ra));
+      ctx.lineTo(b.x + (nx * rb), b.y + (ny * rb));
+      ctx.lineTo(b.x - (nx * rb), b.y - (ny * rb));
+      ctx.lineTo(a.x - (nx * ra), a.y - (ny * ra));
+      ctx.closePath();
+      ctx.fill();
+      drawDisc(a);
+    }
+    drawDisc(projected[projected.length - 1]);
+    ctx.restore();
+  }
+
+  function drawProjectedStrokeSegments(segments, stroke, options = {}) {
+    segments.forEach((segment) => drawProjectedStrokePath(segment, stroke, options));
+  }
+
+  function projectLassoPointsToCurrentView(points) {
+    if (!Array.isArray(points) || points.length < 3) return [];
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      return points.map((pt) => ({
+        x: r.x + (Number(pt.u || 0) * r.w),
+        y: r.y + (Number(pt.v || 0) * r.h),
+      }));
+    }
+    const projected = points.map((pt) => projectDir(erpPointToWorldDir(pt))).filter(Boolean);
+    return projected.every((pt) => Number(pt.z || 0) > 0)
+      ? projected.map((pt) => ({ x: Number(pt.x || 0), y: Number(pt.y || 0) }))
+      : [];
+  }
+
+  function isProjectedPolygonContinuous(projected, maxJump = 160) {
+    if (!Array.isArray(projected) || projected.length < 3) return false;
+    for (let i = 0; i < projected.length; i += 1) {
+      const a = projected[i];
+      const b = projected[(i + 1) % projected.length];
+      if (!a || !b) return false;
+      if (!Number.isFinite(a.x) || !Number.isFinite(a.y) || !Number.isFinite(b.x) || !Number.isFinite(b.y)) return false;
+      if (Math.hypot(Number(b.x) - Number(a.x), Number(b.y) - Number(a.y)) > maxJump) return false;
+    }
+    return true;
+  }
+
+  function projectLassoPointsToFrameView(points, shot, rect) {
+    if (!Array.isArray(points) || points.length < 3 || !shot || !rect) return [];
+    const projected = points.map((pt) => ({
+      x: Number(rect.x || 0) + (Number(pt.x || 0) * Number(rect.w || 0)),
+      y: Number(rect.y || 0) + (Number(pt.y || 0) * Number(rect.h || 0)),
+    }));
+    return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
+  }
+
+  function projectErpLassoPointsToFrameRect(points, shot, rect) {
+    if (!Array.isArray(points) || points.length < 3 || !shot || !rect) return [];
+    const projected = [];
+    for (const pt of points) {
+      const dir = erpPointToWorldDir(pt);
+      const local = worldDirToFrameLocalPoint(shot, dir);
+      if (!local) return [];
+      projected.push({
+        x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+        y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+      });
+    }
+    return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
+  }
+
+  function projectFrameLassoPointsToCurrentView(points, stroke) {
+    if (!Array.isArray(points) || points.length < 3) return [];
+    const shotId = String(stroke?.targetSpace?.frameId || "");
+    const sourceShot = stroke?.frameSnapshot
+      ? { ...stroke.frameSnapshot }
+      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
+    if (!sourceShot) return [];
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      const projected = [];
+      for (const pt of points) {
+        const dir = frameLocalPointToWorldDir(sourceShot, pt);
+        if (!dir) return [];
+        const { lon, lat } = dirToLonLat(dir);
+        projected.push({
+          x: r.x + ((((lon / (2 * Math.PI)) + 0.5 + 1) % 1) * r.w),
+          y: r.y + ((0.5 - (lat / Math.PI)) * r.h),
+        });
+      }
+      return isProjectedPolygonContinuous(projected, Math.max(120, r.w * 0.5)) ? projected : [];
+    }
+    const projected = [];
+    for (const pt of points) {
+      const dir = frameLocalPointToWorldDir(sourceShot, pt);
+      const screen = dir ? projectDir(dir) : null;
+      if (!screen || Number(screen.z || 0) <= 0) return [];
+      projected.push({ x: Number(screen.x || 0), y: Number(screen.y || 0) });
+    }
+    return isProjectedPolygonContinuous(projected, Math.max(120, Math.max(canvas.width, canvas.height) * 0.35)) ? projected : [];
+  }
+
+  function projectFrameLassoPointsToShotRect(points, stroke, targetShot, rect) {
+    if (!Array.isArray(points) || points.length < 3 || !targetShot || !rect) return [];
+    const shotId = String(stroke?.targetSpace?.frameId || "");
+    const sourceShot = stroke?.frameSnapshot
+      ? { ...stroke.frameSnapshot }
+      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
+    if (!sourceShot) return [];
+    const projected = [];
+    for (const pt of points) {
+      const dir = frameLocalPointToWorldDir(sourceShot, pt);
+      const local = dir ? worldDirToFrameLocalPoint(targetShot, dir) : null;
+      if (!local) return [];
+      projected.push({
+        x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+        y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+      });
+    }
+    return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
+  }
+
+  function drawLassoPreviewPolygon(projected, stroke, options = {}) {
+    if (!Array.isArray(projected) || projected.length < 3) return;
+    const layerKind = String(stroke?.layerKind || "paint");
+    const toolKind = String(stroke?.toolKind || "pen");
+    const preview = options.preview === true;
+    ctx.save();
+    if (layerKind === "mask") {
+      ctx.fillStyle = `rgba(34, 197, 94, ${preview ? 0.55 : 0.85})`;
+    } else if (toolKind === "eraser") {
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = "rgba(0, 0, 0, 1)";
+    } else {
+      const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+      const fillAlpha = preview ? Math.max(0.12, Number(c.a ?? 1) * 0.45) : Math.max(0.2, Number(c.a ?? 1));
+      const strokeAlpha = preview ? Math.max(0.28, Number(c.a ?? 1) * 0.9) : Math.max(0.32, Number(c.a ?? 1));
+      ctx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${fillAlpha})`;
+      ctx.strokeStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${strokeAlpha})`;
+      ctx.lineWidth = 1.5;
+    }
+    ctx.beginPath();
+    ctx.moveTo(Number(projected[0].x || 0), Number(projected[0].y || 0));
+    for (let i = 1; i < projected.length; i += 1) ctx.lineTo(Number(projected[i].x || 0), Number(projected[i].y || 0));
+    ctx.closePath();
+    ctx.fill();
+    if (layerKind !== "mask" && toolKind !== "eraser") ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFramePaintingOverlayInRect(rect, shot, includeInteraction = false, includeNative = false) {
+    const strokes = [
+      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
+      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
+    ];
+    if (includeInteraction && (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill")) {
+      strokes.push(editor.interaction.stroke);
+    }
+    strokes.forEach((stroke) => {
+      if (stroke?.geometry?.geometryKind === "lasso_fill") {
+        if (stroke?.targetSpace?.kind === "FRAME_LOCAL" && stroke === editor.interaction?.stroke) {
+          drawLassoPreviewPolygon(projectLassoPointsToFrameView(stroke.geometry.points, shot, rect), stroke, { preview: true });
+          return;
+        }
+        if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+          drawLassoPreviewPolygon(projectErpLassoPointsToFrameRect(stroke.geometry.points, shot, rect), stroke);
+        }
+        return;
+      }
+      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+        if (!includeNative && stroke !== editor.interaction?.stroke) return;
+        drawProjectedStrokePath(projectFrameStrokeToRect(stroke, shot, rect), stroke);
+        return;
+      }
+      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+        drawProjectedStrokePath(projectErpStrokeToFrameRect(stroke, shot, rect), stroke);
+      }
+    });
+  }
+
+  function drawCutoutPreviewPaintingOverlayInRect(rect, shot, includeInteraction = false) {
+    const strokes = [
+      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
+      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
+    ];
+    if (includeInteraction && (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill")) {
+      strokes.push(editor.interaction.stroke);
+    }
+    strokes.forEach((stroke) => {
+      if (stroke?.geometry?.geometryKind === "lasso_fill") {
+        if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+          drawLassoPreviewPolygon(projectErpLassoPointsToFrameRect(stroke.geometry.points, shot, rect), stroke);
+          return;
+        }
+        if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+          drawLassoPreviewPolygon(projectFrameLassoPointsToShotRect(stroke.geometry.points, stroke, shot, rect), stroke);
+        }
+        return;
+      }
+      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+        drawProjectedStrokePath(projectErpStrokeToFrameRect(stroke, shot, rect), stroke);
+        return;
+      }
+      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+        drawProjectedStrokeSegments(projectFrameStrokeToShotRectSegments(stroke, shot, rect), stroke);
+      }
+    });
+  }
+
+  function drawFrameViewBackground() {
+    const shot = getActiveCutoutShot();
+    const rect = getFrameViewRect(shot);
+    const img = getConnectedErpImage();
+    if (!shot || !rect) return false;
+    ctx.save();
+    ctx.fillStyle = "#050505";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+    ctx.shadowBlur = 24;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 10;
+    ctx.fillStyle = "rgba(14, 14, 14, 1)";
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    ctx.restore();
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, rect.w, rect.h);
+    ctx.clip();
+    if (img && (img.complete || img.naturalWidth || img.width) && Number(img.naturalWidth || img.width || 0) > 1 && Number(img.naturalHeight || img.height || 0) > 1) {
+      const view = buildCutoutViewParamsFromShot(shot);
+      const glDrawn = renderCutoutViewToContext2D({
+        owner: node,
+        cacheKey: `modal_frame_bg_${String(shot.id || "")}`,
+        ctx,
+        rect,
+        img,
+        view,
+      });
+      if (!glDrawn) {
+        drawCutoutProjectionPreview(
+          ctx,
+          node,
+          img,
+          rect,
+          shot,
+          String(state.ui_settings?.preview_quality || "balanced"),
+        );
+      }
+    } else {
+      ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+    }
+    rebuildNativePaintCachesIfNeeded();
+    const frameRaster = editor.paintCaches.frames.get(String(shot.id || ""));
+    if (frameRaster?.canvas) {
+      ctx.drawImage(frameRaster.canvas, rect.x, rect.y, rect.w, rect.h);
+    }
+    drawFramePaintingOverlayInRect(rect, shot, true, false);
+    ctx.restore();
+    ctx.save();
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
+    ctx.restore();
+    return true;
+  }
+
+  function drawPaintingOverlay() {
+    if (!supportsErpPainting() && !supportsFramePainting()) return;
+    if (editor.mode === "frame") return;
+    const strokes = [
+      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
+      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
+    ];
+    if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
+      strokes.push(editor.interaction.stroke);
+    }
+    strokes.forEach((stroke) => {
+      if (stroke?.geometry?.geometryKind === "lasso_fill") {
+        if (stroke?.targetSpace?.kind === "ERP_GLOBAL" && stroke === editor.interaction?.stroke) {
+          drawLassoPreviewPolygon(projectLassoPointsToCurrentView(stroke.geometry.points), stroke, { preview: true });
+          return;
+        }
+        if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+          drawLassoPreviewPolygon(projectFrameLassoPointsToCurrentView(stroke.geometry.points, stroke), stroke);
+        }
+        return;
+      }
+      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
+        if (stroke !== editor.interaction?.stroke) return;
+        drawProjectedStrokePath(projectErpStrokeToCurrentView(stroke), stroke);
+      } else if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
+        drawProjectedStrokeSegments(projectFrameStrokeToCurrentErpViewSegments(stroke), stroke);
+      } else {
+        return;
+      }
     });
   }
 
   function drawScene() {
-    if (editor.mode === "unwrap") drawGridUnwrap(false);
+    if (editor.mode === "frame") drawFrameViewBackground();
+    else if (editor.mode === "unwrap") drawGridUnwrap(false);
     else drawGridPano(false);
     const stickerSceneDrawn = renderModalStickerScene();
     if (type === "stickers" && !stickerSceneDrawn) {
       renderModalStickerBodyFallback();
     }
     drawPaintingOverlay();
-    drawObjects();
-    drawCutoutOutputPreview();
+    if (editor.mode !== "frame") drawObjects();
+    if (editor.mode !== "frame") drawCutoutOutputPreview();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
     updateSelectionMenu();
     if (!runtime.hasPresentedFrame) {
@@ -2782,14 +3645,18 @@ function showEditor(node, type, options = {}) {
     return kind === "move" || kind === "scale" || kind === "scale_x" || kind === "scale_y" || kind === "rotate";
   }
 
-  function requestDraw() {
+  function requestDraw(options = {}) {
+    const localOnly = !!options.localOnly;
     syncLookAtFrameButtonState();
-    node.__panoLiveStateOverride = JSON.stringify(state);
-    if (!isCutoutTransformInteractionActive()) {
-      node.__panoDomPreview?.requestDraw?.();
-      node.setDirtyCanvas?.(true, false);
-      node.graph?.setDirtyCanvas?.(true, true);
-      app?.canvas?.setDirty?.(true, true);
+    syncViewToggleState();
+    if (!localOnly) {
+      node.__panoLiveStateOverride = JSON.stringify(state);
+      if (!isCutoutTransformInteractionActive()) {
+        node.__panoDomPreview?.requestDraw?.();
+        node.setDirtyCanvas?.(true, false);
+        node.graph?.setDirtyCanvas?.(true, true);
+        app?.canvas?.setDirty?.(true, true);
+      }
     }
     runtime.dirty = true;
   }
@@ -3655,6 +4522,7 @@ function showEditor(node, type, options = {}) {
     if (type !== "cutout") return;
     state.shots = [];
     editor.selectedId = null;
+    if (editor.mode === "frame") editor.mode = "pano";
     editor.cutoutAspectOpen = false;
     state.active.selected_shot_id = null;
     pushHistory();
@@ -3714,6 +4582,7 @@ function showEditor(node, type, options = {}) {
       state.shots = [];
       editor.selectedId = null;
       state.active.selected_shot_id = null;
+      if (editor.mode === "frame") editor.mode = "pano";
       editor.cutoutAspectOpen = false;
     }
     pushHistory();
@@ -3929,6 +4798,40 @@ function showEditor(node, type, options = {}) {
     return editor.mode === "pano" || editor.mode === "unwrap";
   }
 
+  function getActiveCutoutShot() {
+    if (type !== "cutout") return null;
+    return getSelected() || state.shots?.[0] || null;
+  }
+
+  function getFrameViewRect(shot = getActiveCutoutShot()) {
+    if (!shot) return null;
+    const aspect = Math.max(1e-4, Number(buildCutoutViewParamsFromShot(shot)?.aspect || 1));
+    const pad = 56;
+    const availW = Math.max(80, canvas.width - pad * 2);
+    const availH = Math.max(80, canvas.height - pad * 2);
+    let baseW = availW;
+    let baseH = baseW / aspect;
+    if (baseH > availH) {
+      baseH = availH;
+      baseW = baseH * aspect;
+    }
+    const zoom = Math.max(0.1, Number(editor.frameView?.zoom || 1));
+    const w = baseW * zoom;
+    const h = baseH * zoom;
+    const panX = Number(editor.frameView?.panX || 0);
+    const panY = Number(editor.frameView?.panY || 0);
+    return {
+      x: ((canvas.width - w) * 0.5) + panX,
+      y: ((canvas.height - h) * 0.5) + panY,
+      w,
+      h,
+    };
+  }
+
+  function supportsFramePainting() {
+    return type === "cutout" && editor.mode === "frame" && !!getActiveCutoutShot();
+  }
+
   function screenPosToErpPoint(pos, ts = performance.now()) {
     if (editor.mode === "unwrap") {
       const r = getUnwrapRect();
@@ -3951,24 +4854,122 @@ function showEditor(node, type, options = {}) {
     };
   }
 
-  function buildFreehandStrokeRecord(layerKind, toolKind, points) {
+  function screenPosToFramePoint(pos, shot, ts = performance.now()) {
+    const rect = getFrameViewRect(shot);
+    if (!rect) return null;
+    return {
+      targetKind: "FRAME_LOCAL",
+      frameId: String(shot?.id || ""),
+      x: (Number(pos.x) - rect.x) / Math.max(1, rect.w),
+      y: (Number(pos.y) - rect.y) / Math.max(1, rect.h),
+      t: Number(ts || 0),
+    };
+  }
+
+  function zoomFrameViewAt(anchor, factor) {
+    const shot = getActiveCutoutShot();
+    const before = getFrameViewRect(shot);
+    if (!shot || !before) return false;
+    const prevZoom = Math.max(0.1, Number(editor.frameView?.zoom || 1));
+    const nextZoom = clamp(prevZoom * Number(factor || 1), 0.25, 12);
+    if (Math.abs(nextZoom - prevZoom) < 1e-6) return false;
+    const nx = (Number(anchor.x) - before.x) / Math.max(1e-6, before.w);
+    const ny = (Number(anchor.y) - before.y) / Math.max(1e-6, before.h);
+    editor.frameView.zoom = nextZoom;
+    const after = getFrameViewRect(shot);
+    if (!after) return false;
+    editor.frameView.panX += Number(anchor.x) - (after.x + (after.w * nx));
+    editor.frameView.panY += Number(anchor.y) - (after.y + (after.h * ny));
+    return true;
+  }
+
+  function captureFrameSnapshot(shot) {
+    if (!shot) return null;
+    return {
+      yaw_deg: Number(shot.yaw_deg || 0),
+      pitch_deg: Number(shot.pitch_deg || 0),
+      hFOV_deg: Number(shot.hFOV_deg || 90),
+      vFOV_deg: Number(shot.vFOV_deg || 60),
+      roll_deg: Number(shot.roll_deg || 0),
+    };
+  }
+
+  function captureStrokeRadiusSpec(targetSpace, sizePx) {
+    if (targetSpace?.kind === "FRAME_LOCAL") {
+      const shot = getActiveCutoutShot();
+      const sourceWidth = Math.max(64, Number(shot?.out_w || 1024));
+      return {
+        radiusModel: "frame_local_norm",
+        radiusValue: Math.max(1e-6, (Number(sizePx || 0) * 0.5) / sourceWidth),
+      };
+    }
+    return {
+      radiusModel: "erp_uv_norm",
+      radiusValue: Math.max(1e-6, (Number(sizePx || 0) * 0.5) / 2048),
+    };
+  }
+
+  function buildFreehandStrokeRecord(layerKind, toolKind, points, targetSpace) {
+    const size = toolKind === "brush" ? 18 : (toolKind === "marker" ? 14 : 10);
+    const radiusSpec = captureStrokeRadiusSpec(targetSpace, size);
+    const preparedPoints = points.map((pt) => ({
+      ...pt,
+      t: Number(pt?.t || 0),
+      widthScale: Number.isFinite(Number(pt?.widthScale)) ? Math.max(0, Number(pt.widthScale)) : 1,
+      pressureLike: Number.isFinite(Number(pt?.pressureLike)) ? Math.max(0, Number(pt.pressureLike)) : 1,
+    }));
     return {
       id: makePaintId(layerKind),
       actionGroupId: makePaintId("ag"),
-      targetSpace: { kind: "ERP_GLOBAL" },
+      targetSpace: targetSpace && typeof targetSpace === "object" ? { ...targetSpace } : { kind: "ERP_GLOBAL" },
       layerKind,
       toolKind,
       brushPresetId: toolKind,
-      size: toolKind === "brush" ? 18 : (toolKind === "marker" ? 14 : 10),
+      size,
       opacity: toolKind === "marker" ? 0.7 : 1,
       hardness: toolKind === "brush" ? 0.35 : 0.9,
       flow: null,
       spacing: null,
       createdAt: Date.now(),
       color: layerKind === "paint" ? { ...editor.paintColor } : null,
+      frameSnapshot: targetSpace?.kind === "FRAME_LOCAL" ? captureFrameSnapshot(getActiveCutoutShot()) : null,
+      radiusModel: radiusSpec.radiusModel,
+      radiusValue: radiusSpec.radiusValue,
       geometry: {
         geometryKind: "freehand_open",
-        points: points.map((pt) => ({ ...pt })),
+        rawPoints: preparedPoints.map((pt) => ({ ...pt })),
+        points: preparedPoints.map((pt) => ({ ...pt })),
+      },
+    };
+  }
+
+  function buildLassoFillStrokeRecord(layerKind, toolKind, points, targetSpace) {
+    const preparedPoints = points.map((pt) => ({
+      ...pt,
+      t: Number(pt?.t || 0),
+      widthScale: Number.isFinite(Number(pt?.widthScale)) ? Math.max(0, Number(pt.widthScale)) : 1,
+      pressureLike: Number.isFinite(Number(pt?.pressureLike)) ? Math.max(0, Number(pt.pressureLike)) : 1,
+    }));
+    return {
+      id: makePaintId(layerKind),
+      actionGroupId: makePaintId("ag"),
+      targetSpace: targetSpace && typeof targetSpace === "object" ? { ...targetSpace } : { kind: "ERP_GLOBAL" },
+      layerKind,
+      toolKind,
+      brushPresetId: toolKind,
+      size: 10,
+      opacity: 1,
+      hardness: 1,
+      flow: null,
+      spacing: null,
+      createdAt: Date.now(),
+      color: layerKind === "paint" ? { ...editor.paintColor } : null,
+      frameSnapshot: targetSpace?.kind === "FRAME_LOCAL" ? captureFrameSnapshot(getActiveCutoutShot()) : null,
+      radiusModel: null,
+      radiusValue: null,
+      geometry: {
+        geometryKind: "lasso_fill",
+        points: preparedPoints.map((pt) => ({ ...pt })),
       },
     };
   }
@@ -3981,20 +4982,61 @@ function showEditor(node, type, options = {}) {
   }
 
   function appendPaintPoint(interaction, pos, ts = performance.now()) {
-    const next = screenPosToErpPoint(pos, ts);
+    const targetSpace = interaction?.stroke?.targetSpace || interaction?.targetSpace || null;
+    const next = targetSpace?.kind === "FRAME_LOCAL"
+      ? screenPosToFramePoint(pos, { id: targetSpace.frameId }, ts)
+      : screenPosToErpPoint(pos, ts);
+    const rawPoints = interaction.stroke.geometry.rawPoints || interaction.stroke.geometry.points;
     const points = interaction.stroke.geometry.points;
     const prev = points[points.length - 1];
     if (prev) {
-      const du = Math.abs(next.u - prev.u);
-      const dv = Math.abs(next.v - prev.v);
+      const du = Math.abs(Number(next.u ?? next.x ?? 0) - Number(prev.u ?? prev.x ?? 0));
+      const dv = Math.abs(Number(next.v ?? next.y ?? 0) - Number(prev.v ?? prev.y ?? 0));
       if (du < 0.0015 && dv < 0.0015) return false;
     }
-    points.push(next);
+    const sample = {
+      ...next,
+      t: Number(next?.t || 0),
+      widthScale: 1,
+      pressureLike: 1,
+    };
+    rawPoints.push({ ...sample });
+    points.push(sample);
+    return true;
+  }
+
+  function appendLassoPoint(interaction, pos, ts = performance.now()) {
+    const targetSpace = interaction?.stroke?.targetSpace || interaction?.targetSpace || null;
+    const next = targetSpace?.kind === "FRAME_LOCAL"
+      ? screenPosToFramePoint(pos, { id: targetSpace.frameId }, ts)
+      : screenPosToErpPoint(pos, ts);
+    const points = interaction?.stroke?.geometry?.points;
+    if (!next || !Array.isArray(points)) return false;
+    const prev = points[points.length - 1];
+    if (prev) {
+      const du = Math.abs(Number(next.u ?? next.x ?? 0) - Number(prev.u ?? prev.x ?? 0));
+      const dv = Math.abs(Number(next.v ?? next.y ?? 0) - Number(prev.v ?? prev.y ?? 0));
+      if (du < 0.0015 && dv < 0.0015) return false;
+    }
+    points.push({
+      ...next,
+      t: Number(next?.t || 0),
+      widthScale: 1,
+      pressureLike: 1,
+    });
     return true;
   }
 
   function commitPaintInteraction(interaction) {
-    const points = interaction?.stroke?.geometry?.points || [];
+    const geometry = interaction?.stroke?.geometry || null;
+    if (!geometry) return false;
+    if (geometry.geometryKind === "lasso_fill") {
+      const points = Array.isArray(geometry.points) ? geometry.points : [];
+      if (points.length < 3) return false;
+      getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
+      return true;
+    }
+    const points = geometry.points || [];
     if (points.length < 2) return false;
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
@@ -4035,10 +5077,19 @@ function showEditor(node, type, options = {}) {
   function updateCursor(p) {
     if (editor.interaction) {
       if (editor.interaction.kind === "view") canvas.style.cursor = "grabbing";
+      else if (editor.interaction.kind === "pan_frame") canvas.style.cursor = "grabbing";
       else if (editor.interaction.kind === "move") canvas.style.cursor = "move";
       else if (editor.interaction.kind === "scale" || editor.interaction.kind === "scale_x" || editor.interaction.kind === "scale_y") canvas.style.cursor = editor.interaction.cursor || "nwse-resize";
       else if (editor.interaction.kind === "rotate") canvas.style.cursor = "grabbing";
       else canvas.style.cursor = "default";
+      return;
+    }
+    if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && (supportsErpPainting() || supportsFramePainting())) {
+      canvas.style.cursor = "crosshair";
+      return;
+    }
+    if (editor.mode === "frame") {
+      canvas.style.cursor = editor.primaryTool === "cursor" ? "grab" : "default";
       return;
     }
     const selected = getSelected();
@@ -4049,6 +5100,10 @@ function showEditor(node, type, options = {}) {
 
   function updateSelectionMenu() {
     if (!selectionMenu) return;
+    if (editor.mode === "frame") {
+      selectionMenu.style.display = "none";
+      return;
+    }
     const selected = getSelected();
     if (!selected || editor.interaction) {
       selectionMenu.style.display = "none";
@@ -4219,8 +5274,12 @@ function showEditor(node, type, options = {}) {
     viewController.state.inertia.vy = 0;
     if (e.button === 1) {
       e.preventDefault();
-      editor.interaction = { kind: "view", last: p, lastTs: performance.now() };
-      viewController.startDrag(p.x, p.y, e.pointerId, performance.now());
+      if (editor.mode === "frame") {
+        editor.interaction = { kind: "pan_frame", last: p };
+      } else {
+        editor.interaction = { kind: "view", last: p, lastTs: performance.now() };
+        viewController.startDrag(p.x, p.y, e.pointerId, performance.now());
+      }
       updateCursor(p);
       canvas.setPointerCapture(e.pointerId);
       return;
@@ -4232,22 +5291,45 @@ function showEditor(node, type, options = {}) {
         viewController.startDrag(p.x, p.y, e.pointerId, performance.now());
         updateCursor(p);
         canvas.setPointerCapture(e.pointerId);
+      } else if (editor.mode === "frame") {
+        editor.interaction = { kind: "pan_frame", last: p };
+        updateCursor(p);
+        canvas.setPointerCapture(e.pointerId);
       }
       return;
     }
 
-    if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && supportsErpPainting()) {
+    if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && (supportsErpPainting() || supportsFramePainting())) {
       const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
       const toolKind = editor.primaryTool === "mask" ? editor.maskTool : editor.paintTool;
-      const startPoint = screenPosToErpPoint(p, performance.now());
+      const activeShot = supportsFramePainting() ? getActiveCutoutShot() : null;
+      const targetSpace = activeShot
+        ? { kind: "FRAME_LOCAL", frameId: String(activeShot.id || "") }
+        : { kind: "ERP_GLOBAL" };
+      const startPoint = activeShot
+        ? screenPosToFramePoint(p, activeShot, performance.now())
+        : screenPosToErpPoint(p, performance.now());
+      if (layerKind === "mask" && toolKind === "lasso_fill") return;
       editor.interaction = {
-        kind: "paint_stroke",
+        kind: toolKind === "lasso_fill" ? "paint_lasso_fill" : "paint_stroke",
         layerKind,
-        stroke: buildFreehandStrokeRecord(layerKind, toolKind, [startPoint]),
+        stroke: toolKind === "lasso_fill"
+          ? buildLassoFillStrokeRecord(layerKind, toolKind, [startPoint], targetSpace)
+          : buildFreehandStrokeRecord(layerKind, toolKind, [startPoint], targetSpace),
       };
       updateCursor(p);
       canvas.setPointerCapture(e.pointerId);
       requestDraw();
+      return;
+    }
+
+    if (editor.mode === "frame") {
+      if (editor.primaryTool === "cursor") {
+        editor.interaction = { kind: "pan_frame", last: p };
+        updateCursor(p);
+        canvas.setPointerCapture(e.pointerId);
+      }
+      updateCursor(p);
       return;
     }
 
@@ -4379,7 +5461,12 @@ function showEditor(node, type, options = {}) {
     const it = editor.interaction;
 
     if (it.kind === "paint_stroke") {
-      if (appendPaintPoint(it, p, performance.now())) requestDraw();
+      if (appendPaintPoint(it, p, performance.now())) requestDraw({ localOnly: true });
+      return;
+    }
+
+    if (it.kind === "paint_lasso_fill") {
+      if (appendLassoPoint(it, p, performance.now())) requestDraw({ localOnly: true });
       return;
     }
 
@@ -4388,7 +5475,15 @@ function showEditor(node, type, options = {}) {
       viewController.moveDrag(p.x, p.y, editor.mode === "unwrap" ? "unwrap" : "pano", now);
       it.lastTs = now;
       it.last = p;
-      requestDraw();
+      requestDraw({ localOnly: true });
+      return;
+    }
+
+    if (it.kind === "pan_frame") {
+      editor.frameView.panX += p.x - it.last.x;
+      editor.frameView.panY += p.y - it.last.y;
+      it.last = p;
+      requestDraw({ localOnly: true });
       return;
     }
 
@@ -4407,7 +5502,7 @@ function showEditor(node, type, options = {}) {
         it.item.yaw_deg = yp.yaw;
         it.item.pitch_deg = yp.pitch;
       }
-      requestDraw();
+      requestDraw({ localOnly: true });
       return;
     }
 
@@ -4417,7 +5512,7 @@ function showEditor(node, type, options = {}) {
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
-      requestDraw();
+      requestDraw({ localOnly: true });
       return;
     }
 
@@ -4425,7 +5520,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
-      requestDraw();
+      requestDraw({ localOnly: true });
       return;
     }
 
@@ -4433,7 +5528,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
-      requestDraw();
+      requestDraw({ localOnly: true });
       return;
     }
 
@@ -4444,20 +5539,20 @@ function showEditor(node, type, options = {}) {
       if (e.shiftKey) out = Math.round(out / 45) * 45;
       const key = type === "stickers" ? "rot_deg" : "roll_deg";
       it.item[key] = out;
-      requestDraw();
+      requestDraw({ localOnly: true });
     }
   };
 
   canvas.onpointerup = () => {
     const ended = editor.interaction;
-    if (editor.interaction?.kind === "paint_stroke") {
+    if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
       if (commitPaintInteraction(editor.interaction)) {
         pushHistory();
         commitState();
         node.setDirtyCanvas(true, true);
         requestDraw();
       }
-    } else if (editor.interaction && editor.interaction.kind !== "view") {
+    } else if (editor.interaction && editor.interaction.kind !== "view" && editor.interaction.kind !== "pan_frame") {
       pushHistory();
       commitState();
       node.setDirtyCanvas(true, true);
@@ -4470,7 +5565,7 @@ function showEditor(node, type, options = {}) {
     if (ended && ended.kind === "view") {
       viewController.endDrag(performance.now());
     }
-    canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+    syncViewToggleState();
     updateSelectionMenu();
     requestDraw();
   };
@@ -4480,7 +5575,7 @@ function showEditor(node, type, options = {}) {
       viewController.endDrag(performance.now());
     }
     editor.interaction = null;
-    canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+    syncViewToggleState();
   };
 
   canvas.onauxclick = (e) => {
@@ -4494,8 +5589,15 @@ function showEditor(node, type, options = {}) {
   };
 
   canvas.onwheel = (e) => {
+    if (editor.mode === "frame") {
+      const p = screenPos(e);
+      const factor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+      if (zoomFrameViewAt(p, factor)) requestDraw({ localOnly: true });
+      e.preventDefault();
+      return;
+    }
     if (editor.mode !== "pano") return;
-    if (viewController.applyWheelEvent(e)) requestDraw();
+    if (viewController.applyWheelEvent(e)) requestDraw({ localOnly: true });
     e.preventDefault();
   };
 
@@ -4549,10 +5651,9 @@ function showEditor(node, type, options = {}) {
 
   viewBtns.forEach((btn) => {
     btn.onclick = () => {
+      if (btn.disabled) return;
       editor.mode = btn.dataset.view;
-      viewBtns.forEach((b) => b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
-      if (viewToggle) viewToggle.setAttribute("data-selected", editor.mode === "unwrap" ? "unwrap" : "pano");
-      canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+      syncViewToggleState();
       requestDraw();
     };
   });
