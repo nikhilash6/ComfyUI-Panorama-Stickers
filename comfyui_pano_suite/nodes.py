@@ -20,6 +20,7 @@ from .core.math import (
     finite_float,
     finite_int,
 )
+from .core.painting import alpha_composite_over_rgb, render_painting_to_cutout, render_painting_to_erp
 from .core.state import merge_state, parse_sticker_state
 from .core.stickers import compose_stickers_to_erp
 
@@ -342,6 +343,8 @@ class PanoramaStickersNode(io.ComfyNode):
             base_dir=Path.cwd(),
             quality="export",
         )
+        paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_w // 2)
+        out = alpha_composite_over_rgb(out, paint_rgba)
 
         out_t = torch.from_numpy(out)[None, ...]
         ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
@@ -376,6 +379,7 @@ class PanoramaCutoutNode(io.ComfyNode):
             ],
             outputs=[
                 io.Image.Output("rect_image", display_name="rect_image"),
+                io.Mask.Output("mask", display_name="mask"),
                 io.String.Output("sticker_state_json", display_name="sticker_state"),
             ],
             hidden=[io.Hidden.unique_id],
@@ -450,13 +454,17 @@ class PanoramaCutoutNode(io.ComfyNode):
 
         ui_ret = _save_input_preview(erp_image) if erp_image is not None else {}
         sticker_state_json = _build_sticker_state_json(shot, ow, oh)
+        empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
 
         try:
             out = cutout_from_erp(src, yaw, pitch, hfov, vfov, roll, ow, oh)
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
+            paint_rgba, mask_bw = render_painting_to_cutout(state.get("painting"), shot, ow, oh)
+            out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
-            return io.NodeOutput(out_t, sticker_state_json, ui=ui_ret)
+            mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]
+            return io.NodeOutput(out_t, mask_t, sticker_state_json, ui=ui_ret)
         except Exception as ex:
             print(f"[PanoramaCutout] run failed, fallback passthrough: {ex}")
             try:
@@ -465,10 +473,10 @@ class PanoramaCutoutNode(io.ComfyNode):
                     t = t.permute(0, 3, 1, 2)
                     t = F.interpolate(t, size=(oh, ow), mode="bilinear", align_corners=False)
                     t = t.permute(0, 2, 3, 1).clamp(0.0, 1.0)
-                    return io.NodeOutput(t[:1], sticker_state_json, ui=ui_ret)
+                    return io.NodeOutput(t[:1], empty_mask, sticker_state_json, ui=ui_ret)
             except Exception as ex2:
                 print(f"[PanoramaCutout] fallback resize failed: {ex2}")
-            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), sticker_state_json, ui=ui_ret)
+            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), empty_mask, sticker_state_json, ui=ui_ret)
 
 
 class PanoramaPreviewNode(io.ComfyNode):

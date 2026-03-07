@@ -181,6 +181,7 @@ class TestNodesPreview(unittest.TestCase):
     def test_cutout_node_saves_preview(self):
         PanoramaCutoutNode = self.nodes_module.PanoramaCutoutNode
         assert PanoramaCutoutNode.OUTPUT_NODE is True
+        assert PanoramaCutoutNode.RETURN_TYPES == ("IMAGE", "MASK", "STRING")
         node = PanoramaCutoutNode()
         dummy_erp = MagicMock()
         # Setup detach logic for cutout logic in nodes.py which does:
@@ -363,6 +364,21 @@ class TestNodesPreview(unittest.TestCase):
         assert 'pano_sticker_input_images' in nodes_py
         assert 'pano_sticker_input_pose' in nodes_py
         assert 'sticker_state_json' in nodes_py
+
+    def test_paint_rebuild_ui_scaffold_strings(self):
+        repo_root = Path(__file__).resolve().parent.parent
+        editor_js = (repo_root / "web" / "pano_editor.js").read_text(encoding="utf-8")
+        css = (repo_root / "web" / "pano_editor.css").read_text(encoding="utf-8")
+        assert 'data-tool-rail' in editor_js
+        assert 'data-tool-mode="paint"' in editor_js
+        assert 'data-tool-mode="mask"' in editor_js
+        assert 'data-paint-footer' in editor_js
+        assert 'Paint UI is live. Stroke input wiring is next.' in editor_js
+        assert 'pano-floating-bottom' not in editor_js
+        assert '.pano-floating-left' in css
+        assert '.pano-paint-footer' in css
+        assert 'top: 50%;' in css
+        assert 'Clear All Paint Data' in editor_js
 
     def test_no_new_active_preview_dependency_on_editor_core(self):
         repo_root = Path(__file__).resolve().parent.parent

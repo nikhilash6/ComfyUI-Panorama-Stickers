@@ -204,6 +204,7 @@ void main() {
     alpha = paintAlpha + alpha * (1.0 - paintAlpha);
   }
   if (u_hasMask == 1 && u_showMaskTint == 1) {
+    // Mask tint is a viewport-only visualization. Backend materialization keeps mask as a separate grayscale layer.
     float maskAlpha = clamp(mask.a * u_maskOpacity, 0.0, 1.0);
     premul = u_maskTint * maskAlpha + premul * (1.0 - maskAlpha);
     alpha = maskAlpha + alpha * (1.0 - maskAlpha);

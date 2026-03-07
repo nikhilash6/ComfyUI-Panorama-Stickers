@@ -10,6 +10,8 @@ import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
 import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
+import { createHistoryController } from "./pano_paint_history.js";
+import { normalizePaintingState } from "./pano_paint_types.js";
 import {
   buildCutoutViewParamsFromShot,
   buildPanoramaViewParamsFromEditor,
@@ -49,6 +51,8 @@ const ICON = {
   close: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3.7 3.7 12.3 12.3M12.3 3.7 3.7 12.3'/></svg>",
   copy: "<svg viewBox='0 0 16 16' aria-hidden='true'><rect x='5.2' y='5.2' width='7.8' height='7.8' rx='1.4'/><rect x='3' y='3' width='7.8' height='7.8' rx='1.4'/></svg>",
   chevron: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='m4.5 6.5 3.5 3.5 3.5-3.5'/></svg>",
+  pen: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='m11.8 2.2 2 2-7.6 7.6-2.7.7.7-2.7z'/><path d='m10.7 3.3 2 2'/></svg>",
+  mask: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3 8c1.4-2 3.2-3 5-3s3.6 1 5 3c-1.4 2-3.2 3-5 3S4.4 10 3 8Z'/><path d='M8 6.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3Z'/></svg>",
 };
 
 function easeInOutCubic(t) {
@@ -263,6 +267,36 @@ function cloneStickerList(raw) {
   });
 }
 
+function paintingStrokeCount(painting) {
+  const paintCount = Array.isArray(painting?.paint?.strokes) ? painting.paint.strokes.length : 0;
+  const maskCount = Array.isArray(painting?.mask?.strokes) ? painting.mask.strokes.length : 0;
+  return { paintCount, maskCount };
+}
+
+function makePaintId(prefix) {
+  return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function normalizeEditorHistory(raw) {
+  if (!raw || typeof raw !== "object") {
+    return { version: 1, entries: [], index: -1 };
+  }
+  const entries = Array.isArray(raw.entries) ? raw.entries.map((entry) => String(entry || "")) : [];
+  const index = Number.isInteger(Number(raw.index)) ? Number(raw.index) : (entries.length - 1);
+  return {
+    version: 1,
+    entries,
+    index: Math.max(-1, Math.min(entries.length - 1, index)),
+  };
+}
+
+function cloneStateForHistorySnapshot(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const next = JSON.parse(JSON.stringify(raw));
+  delete next.editor_history;
+  return next;
+}
+
 function cloneShotList(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => ((item && typeof item === "object") ? { ...item } : item));
@@ -279,6 +313,8 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
     assets: {},
     stickers: [],
     shots: [],
+    painting: normalizePaintingState(null),
+    editor_history: normalizeEditorHistory(null),
     ui_settings: {
       invert_view_x: !!sharedUi?.invert_view_x,
       invert_view_y: !!sharedUi?.invert_view_y,
@@ -306,6 +342,9 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
       assets: cloneAssetMap(p.assets),
       stickers: cloneStickerList(p.stickers),
       shots: cloneShotList(p.shots),
+      // source of truth persists target-local stroke geometry, never view coordinates.
+      painting: normalizePaintingState(p.painting),
+      editor_history: normalizeEditorHistory(p.editor_history),
       ui_settings: {
         invert_view_x: !!(p.ui_settings && p.ui_settings.invert_view_x),
         invert_view_y: !!(p.ui_settings && p.ui_settings.invert_view_y),
@@ -1123,15 +1162,6 @@ function showEditor(node, type, options = {}) {
   overlay.className = "pano-modal-overlay";
   const root = document.createElement("div");
   root.className = "pano-modal";
-  const bottomToolbarHtml = previewMode ? "" : `
-      <div class="pano-floating-bottom">
-        <button class="pano-btn pano-btn-icon" data-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
-        <button class="pano-btn pano-btn-icon" data-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
-        <button class="pano-btn pano-btn-texticon" data-action="add" aria-label="${type === "stickers" ? "Add Image" : "Add Frame"}" data-tip="${type === "stickers" ? "Add image" : "Add frame"}">${ICON.add}<span class="label">${type === "stickers" ? "Add Image" : "Add Frame"}</span></button>
-        ${type === "cutout" ? `<button class="pano-btn pano-btn-icon" data-action="look-at-frame" aria-label="Look at Frame" data-tip="Look at frame">${ICON.camera}</button>` : ""}
-        <button class="pano-btn pano-btn-icon" data-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
-      </div>
-  `;
   const fullscreenBtnHtml = previewMode
     ? `<button class="pano-btn pano-btn-icon" data-action="toggle-fullscreen" aria-label="Fullscreen" data-tip="Fullscreen">${ICON.fullscreen}</button>`
     : "";
@@ -1141,13 +1171,40 @@ function showEditor(node, type, options = {}) {
       <div class="pano-stage-drop-hint" aria-hidden="true">
         <div class="pano-stage-drop-hint-text">Drag and drop image here</div>
       </div>
+      ${previewMode ? "" : `
+      <div class="pano-floating-left" data-tool-rail>
+        <button class="pano-btn pano-btn-icon${"cursor" === "cursor" ? " active" : ""}" type="button" data-tool-mode="cursor" aria-label="Cursor" aria-pressed="true">${ICON.chevron}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="paint" aria-label="Paint" aria-pressed="false">${ICON.pen}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false">${ICON.mask}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="${type === "stickers" ? "Add Image" : "Add Frame"}" data-tip="${type === "stickers" ? "Add image" : "Add frame"}">${ICON.add}</button>
+        ${type === "cutout" ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="look-at-frame" aria-label="Look at Frame" data-tip="Look at frame">${ICON.camera}</button>` : ""}
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
+      </div>
+      <div class="pano-paint-footer" data-paint-footer hidden>
+        <div class="pano-paint-footer-group" data-paint-group="paint" hidden>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Brush" data-tip="Brush">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.clear}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="rect_fill_drag" aria-label="Rect Fill" data-tip="Rect fill">${ICON.add}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.pen}</button>
+          <div class="pano-paint-footer-note">Paint UI is live. Stroke input wiring is next.</div>
+        </div>
+        <div class="pano-paint-footer-group" data-paint-group="mask" hidden>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.clear}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="rect_fill_drag" aria-label="Mask Rect Fill" data-tip="Mask rect fill">${ICON.add}</button>
+          <div class="pano-paint-footer-note">Mask remains a separate grayscale layer.</div>
+        </div>
+      </div>`}
       <div class="pano-floating-top">
         <div class="pano-view-toggle" data-selected="pano">
           <button class="pano-view-btn" data-view="pano" aria-pressed="true" aria-label="Panorama">${ICON.pano}<span class="label">Panorama</span></button>
           <button class="pano-view-btn" data-view="unwrap" aria-pressed="false" aria-label="Unwrap">${ICON.unwrap}<span class="label">Unwrap</span></button>
         </div>
       </div>
-      ${bottomToolbarHtml}
       <div class="pano-floating-right">
         <span>FOV</span>
         <span class="pano-fov-value" data-fov-value>100.0</span>
@@ -1184,6 +1241,8 @@ function showEditor(node, type, options = {}) {
   const lookAtFrameBtn = root.querySelector("[data-action='look-at-frame']");
   const fullscreenBtn = root.querySelector("[data-action='toggle-fullscreen']");
   const tooltipEl = root.querySelector("[data-tooltip]");
+  const toolRail = root.querySelector("[data-tool-rail]");
+  const paintFooter = root.querySelector("[data-paint-footer]");
   if (type === "cutout") canvas.style.opacity = "0";
   if (hideSidebar) {
     side?.remove();
@@ -1210,8 +1269,11 @@ function showEditor(node, type, options = {}) {
     viewYaw: 0,
     viewPitch: 0,
     viewFov: 100,
-    history: [],
-    historyIndex: -1,
+    historyController: createHistoryController(80, state.editor_history),
+    primaryTool: "cursor",
+    paintTool: "pen",
+    maskTool: "pen",
+    paintColor: { r: 1, g: 0.25, b: 0.25, a: 1 },
     interaction: null,
     hqFrames: 0,
     viewInertia: { vx: 0, vy: 0, active: false },
@@ -2642,6 +2704,60 @@ function showEditor(node, type, options = {}) {
     placeOutputPreviewToggle();
   }
 
+  function projectErpStrokeToCurrentView(stroke) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind !== "freehand_open") return [];
+    const points = Array.isArray(geometry.points) ? geometry.points : [];
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      return points.map((pt) => ({
+        x: r.x + Number(pt.u || 0) * r.w,
+        y: r.y + Number(pt.v || 0) * r.h,
+      }));
+    }
+    return points.map((pt) => {
+      const lon = (Number(pt.u || 0) - 0.5) * (2 * Math.PI);
+      const lat = (0.5 - Number(pt.v || 0)) * Math.PI;
+      const cp = Math.cos(lat);
+      const dir = vec3(cp * Math.sin(lon), Math.sin(lat), cp * Math.cos(lon));
+      return projectDir(dir);
+    }).filter((pt) => pt && Number.isFinite(pt.x) && Number.isFinite(pt.y) && Number(pt.z || 0) > 0);
+  }
+
+  function drawPaintingOverlay() {
+    if (!supportsErpPainting()) return;
+    const strokes = [
+      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
+      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
+    ];
+    if (editor.interaction?.kind === "paint_stroke") strokes.push(editor.interaction.stroke);
+    strokes.forEach((stroke) => {
+      if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") return;
+      const projected = projectErpStrokeToCurrentView(stroke);
+      if (projected.length < 2) return;
+      const layerKind = String(stroke.layerKind || "paint");
+      const toolKind = String(stroke.toolKind || "pen");
+      ctx.save();
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = toolKind === "brush" ? 18 : (toolKind === "marker" ? 14 : 10);
+      ctx.globalAlpha = toolKind === "marker" ? 0.7 : 1;
+      if (layerKind === "mask") {
+        ctx.strokeStyle = "rgba(34, 197, 94, 0.85)";
+      } else if (toolKind === "eraser") {
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.strokeStyle = "rgba(0, 0, 0, 1)";
+      } else {
+        ctx.strokeStyle = "rgba(255, 92, 92, 0.95)";
+      }
+      ctx.beginPath();
+      ctx.moveTo(projected[0].x, projected[0].y);
+      for (let i = 1; i < projected.length; i += 1) ctx.lineTo(projected[i].x, projected[i].y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
   function drawScene() {
     if (editor.mode === "unwrap") drawGridUnwrap(false);
     else drawGridPano(false);
@@ -2649,6 +2765,7 @@ function showEditor(node, type, options = {}) {
     if (type === "stickers" && !stickerSceneDrawn) {
       renderModalStickerBodyFallback();
     }
+    drawPaintingOverlay();
     drawObjects();
     drawCutoutOutputPreview();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
@@ -2757,25 +2874,45 @@ function showEditor(node, type, options = {}) {
 
   function pushHistory() {
     if (readOnly) return;
-    const snap = JSON.stringify(state);
-    if (editor.history[editor.historyIndex] === snap) return;
-    editor.history = editor.history.slice(0, editor.historyIndex + 1);
-    editor.history.push(snap);
-    if (editor.history.length > 80) editor.history.shift();
-    editor.historyIndex = editor.history.length - 1;
+    editor.historyController.commitActionGroup(JSON.stringify(cloneStateForHistorySnapshot(state)));
+    state.editor_history = editor.historyController.serialize();
   }
 
   function restoreHistory(step) {
     if (readOnly) return;
-    const idx = editor.historyIndex + step;
-    if (idx < 0 || idx >= editor.history.length) return;
-    const parsed = JSON.parse(editor.history[idx]);
+    const snapshot = step < 0 ? editor.historyController.undo() : editor.historyController.redo();
+    if (!snapshot) return;
+    const parsed = JSON.parse(snapshot);
     Object.keys(state).forEach((k) => delete state[k]);
     Object.assign(state, parsed);
-    editor.historyIndex = idx;
+    state.editor_history = editor.historyController.serialize();
     editor.selectedId = type === "stickers" ? state.active.selected_sticker_id : state.active.selected_shot_id;
+    syncPaintUi();
     updateSidePanel();
+    commitState();
     requestDraw();
+  }
+
+  function syncPaintUi() {
+    toolRail?.querySelectorAll("[data-tool-mode]").forEach((btn) => {
+      const active = btn.getAttribute("data-tool-mode") === editor.primaryTool;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    if (paintFooter) {
+      const showFooter = editor.primaryTool === "paint" || editor.primaryTool === "mask";
+      paintFooter.hidden = !showFooter;
+      paintFooter.querySelectorAll("[data-paint-group]").forEach((group) => {
+        const mode = group.getAttribute("data-paint-group");
+        group.hidden = mode !== editor.primaryTool;
+      });
+      paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-paint-tool") === editor.paintTool && editor.primaryTool === "paint");
+      });
+      paintFooter.querySelectorAll("[data-mask-tool]").forEach((btn) => {
+        btn.classList.toggle("active", btn.getAttribute("data-mask-tool") === editor.maskTool && editor.primaryTool === "mask");
+      });
+    }
   }
 
   function addParamRow(container, selected, key, label, min, max, step, enabled = true) {
@@ -3030,11 +3167,20 @@ function showEditor(node, type, options = {}) {
 
     const inspector = document.createElement("div");
     inspector.className = "pano-inspector";
-    inspector.innerHTML = `
+    const counts = paintingStrokeCount(state.painting);
+    const summary = document.createElement("div");
+    summary.innerHTML = `
+      <div class="pano-section-title">
+        <span>Paint Rebuild</span>
+        <span class="meta">${editor.primaryTool === "cursor" ? "Cursor" : (editor.primaryTool === "paint" ? `Paint · ${editor.paintTool}` : `Mask · ${editor.maskTool}`)}</span>
+      </div>
+      <div class="pano-param-note">ERP_GLOBAL stores normalized u,v. FRAME_LOCAL stores normalized x,y and may keep values outside 0..1 while clipping only the rendered result.</div>
+      <div class="pano-param-note">Durable strokes: paint ${counts.paintCount} / mask ${counts.maskCount}</div>
       <div class="pano-section-title">
         <span>Transform</span>
       </div>
     `;
+    while (summary.firstChild) inspector.appendChild(summary.firstChild);
     side.appendChild(inspector);
 
     if (type === "stickers") {
@@ -3550,25 +3696,31 @@ function showEditor(node, type, options = {}) {
   async function clearAll() {
     if (readOnly) return;
     const ok = await showCanvasConfirm(
-      type === "stickers" ? "Clear All Stickers" : "Remove Frame",
+      "Clear All Paint Data",
       type === "stickers"
-        ? "This will remove all stickers from the current state."
-        : "This will remove the current cutout frame.",
-      type === "stickers" ? "Clear All" : "Remove",
+        ? "This will remove all paint, mask, and sticker images in the current node."
+        : "This will remove all paint, mask, and cutout frames in the current node.",
+      "Clear All",
     );
     if (!ok) return;
+    state.painting = normalizePaintingState(null);
     if (type === "stickers") {
       state.stickers = [];
-      pruneUnusedAssets();
+      state.assets = {};
       editor.selectedId = null;
       state.active.selected_sticker_id = null;
-      pushHistory();
-      commitAndRefreshNode();
-      updateSidePanel();
-      requestDraw();
-      return;
+      pruneUnusedAssets();
+    } else {
+      state.shots = [];
+      editor.selectedId = null;
+      state.active.selected_shot_id = null;
+      editor.cutoutAspectOpen = false;
     }
-    clearCutoutFrame();
+    pushHistory();
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    requestDraw();
   }
 
   function duplicateSelected() {
@@ -3746,6 +3898,7 @@ function showEditor(node, type, options = {}) {
 
   function commitState() {
     if (readOnly) return;
+    state.editor_history = editor.historyController.serialize();
     const text = JSON.stringify(state);
     if (stateWidget) {
       stateWidget.value = text;
@@ -3770,6 +3923,81 @@ function showEditor(node, type, options = {}) {
       x: ((evt.clientX - r.left) / r.width) * canvas.width,
       y: ((evt.clientY - r.top) / r.height) * canvas.height,
     };
+  }
+
+  function supportsErpPainting() {
+    return editor.mode === "pano" || editor.mode === "unwrap";
+  }
+
+  function screenPosToErpPoint(pos, ts = performance.now()) {
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      const u = (pos.x - r.x) / Math.max(1, r.w);
+      const v = (pos.y - r.y) / Math.max(1, r.h);
+      return {
+        targetKind: "ERP_GLOBAL",
+        u: ((u % 1) + 1) % 1,
+        v: clamp(v, 0, 1),
+        t: Number(ts || 0),
+      };
+    }
+    const d = screenToWorldDir(pos.x, pos.y);
+    const { lon, lat } = dirToLonLat(d);
+    return {
+      targetKind: "ERP_GLOBAL",
+      u: ((lon / (2 * Math.PI)) + 0.5 + 1) % 1,
+      v: clamp(0.5 - (lat / Math.PI), 0, 1),
+      t: Number(ts || 0),
+    };
+  }
+
+  function buildFreehandStrokeRecord(layerKind, toolKind, points) {
+    return {
+      id: makePaintId(layerKind),
+      actionGroupId: makePaintId("ag"),
+      targetSpace: { kind: "ERP_GLOBAL" },
+      layerKind,
+      toolKind,
+      brushPresetId: toolKind,
+      size: toolKind === "brush" ? 18 : (toolKind === "marker" ? 14 : 10),
+      opacity: toolKind === "marker" ? 0.7 : 1,
+      hardness: toolKind === "brush" ? 0.35 : 0.9,
+      flow: null,
+      spacing: null,
+      createdAt: Date.now(),
+      color: layerKind === "paint" ? { ...editor.paintColor } : null,
+      geometry: {
+        geometryKind: "freehand_open",
+        points: points.map((pt) => ({ ...pt })),
+      },
+    };
+  }
+
+  function getPaintingLayerList(layerKind) {
+    const root = state.painting || (state.painting = normalizePaintingState(null));
+    const layer = root[layerKind] || (root[layerKind] = { strokes: [] });
+    if (!Array.isArray(layer.strokes)) layer.strokes = [];
+    return layer.strokes;
+  }
+
+  function appendPaintPoint(interaction, pos, ts = performance.now()) {
+    const next = screenPosToErpPoint(pos, ts);
+    const points = interaction.stroke.geometry.points;
+    const prev = points[points.length - 1];
+    if (prev) {
+      const du = Math.abs(next.u - prev.u);
+      const dv = Math.abs(next.v - prev.v);
+      if (du < 0.0015 && dv < 0.0015) return false;
+    }
+    points.push(next);
+    return true;
+  }
+
+  function commitPaintInteraction(interaction) {
+    const points = interaction?.stroke?.geometry?.points || [];
+    if (points.length < 2) return false;
+    getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
+    return true;
   }
 
   function hitObjectAt(p) {
@@ -4008,6 +4236,21 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
+    if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && supportsErpPainting()) {
+      const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
+      const toolKind = editor.primaryTool === "mask" ? editor.maskTool : editor.paintTool;
+      const startPoint = screenPosToErpPoint(p, performance.now());
+      editor.interaction = {
+        kind: "paint_stroke",
+        layerKind,
+        stroke: buildFreehandStrokeRecord(layerKind, toolKind, [startPoint]),
+      };
+      updateCursor(p);
+      canvas.setPointerCapture(e.pointerId);
+      requestDraw();
+      return;
+    }
+
     const selected = getSelected();
     const selGeom = selected ? objectGeom(selected) : null;
 
@@ -4135,6 +4378,11 @@ function showEditor(node, type, options = {}) {
     updateCursor(p);
     const it = editor.interaction;
 
+    if (it.kind === "paint_stroke") {
+      if (appendPaintPoint(it, p, performance.now())) requestDraw();
+      return;
+    }
+
     if (it.kind === "view") {
       const now = performance.now();
       viewController.moveDrag(p.x, p.y, editor.mode === "unwrap" ? "unwrap" : "pano", now);
@@ -4202,7 +4450,14 @@ function showEditor(node, type, options = {}) {
 
   canvas.onpointerup = () => {
     const ended = editor.interaction;
-    if (editor.interaction && editor.interaction.kind !== "view") {
+    if (editor.interaction?.kind === "paint_stroke") {
+      if (commitPaintInteraction(editor.interaction)) {
+        pushHistory();
+        commitState();
+        node.setDirtyCanvas(true, true);
+        requestDraw();
+      }
+    } else if (editor.interaction && editor.interaction.kind !== "view") {
       pushHistory();
       commitState();
       node.setDirtyCanvas(true, true);
@@ -4370,6 +4625,60 @@ function showEditor(node, type, options = {}) {
       syncGridToggleButton();
       requestDraw();
     };
+  }
+  if (toolRail) {
+    toolRail.querySelectorAll("[data-tool-mode]").forEach((btn) => {
+      btn.onclick = () => {
+        if (readOnly) return;
+        editor.primaryTool = String(btn.getAttribute("data-tool-mode") || "cursor");
+        syncPaintUi();
+        updateSidePanel();
+        requestDraw();
+      };
+    });
+    toolRail.querySelectorAll("[data-tool-ui-action]").forEach((btn) => {
+      btn.onclick = () => {
+        if (readOnly) return;
+        const action = String(btn.getAttribute("data-tool-ui-action") || "");
+        if (action === "undo") restoreHistory(-1);
+        else if (action === "redo") restoreHistory(1);
+        else if (action === "clear") clearAll();
+        else if (action === "add") (type === "stickers" ? addImageSticker() : addCutoutFrame());
+        else if (action === "look-at-frame") {
+          if (getList().length === 0) return;
+          const target = getSelected() || getList()[0];
+          if (!target) return;
+          editor.selectedId = target.id || null;
+          state.active.selected_shot_id = editor.selectedId;
+          const targetYaw = wrapYaw(Number(target.yaw_deg || 0));
+          const targetPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
+          startViewTween(targetYaw, targetPitch, editor.viewFov);
+          updateSidePanel();
+          updateSelectionMenu();
+          requestDraw();
+        }
+      };
+    });
+  }
+  if (paintFooter) {
+    paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
+      btn.onclick = () => {
+        editor.primaryTool = "paint";
+        editor.paintTool = String(btn.getAttribute("data-paint-tool") || "pen");
+        syncPaintUi();
+        updateSidePanel();
+        requestDraw();
+      };
+    });
+    paintFooter.querySelectorAll("[data-mask-tool]").forEach((btn) => {
+      btn.onclick = () => {
+        editor.primaryTool = "mask";
+        editor.maskTool = String(btn.getAttribute("data-mask-tool") || "pen");
+        syncPaintUi();
+        updateSidePanel();
+        requestDraw();
+      };
+    });
   }
   const syncFullscreenButton = () => {
     if (!fullscreenBtn) return;
@@ -4618,6 +4927,7 @@ function showEditor(node, type, options = {}) {
   }
   void migrateLegacyEmbeddedAssets();
   pushHistory();
+  syncPaintUi();
   updateSidePanel();
   syncLookAtFrameButtonState();
   syncCanvasSize();

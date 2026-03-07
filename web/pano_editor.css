@@ -469,6 +469,56 @@
   min-width: 0;
   border-radius: 10px;
 }
+.pano-floating-left {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  background: var(--pano-overlay-glass, rgba(0, 0, 0, 0.50));
+  border: 0;
+  border-radius: 12px;
+  box-shadow: var(--pano-shadow-panel, 0 18px 60px rgba(0,0,0,0.55));
+  backdrop-filter: blur(12px);
+}
+.pano-floating-left .pano-btn-icon {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+}
+.pano-paint-footer {
+  position: absolute;
+  left: 50%;
+  bottom: var(--pano-space-2xl);
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  gap: var(--pano-float-gap);
+  padding: var(--pano-float-pad);
+  border-radius: var(--pano-float-radius);
+  border: 0;
+  background: var(--pano-float-bg);
+  backdrop-filter: blur(12px);
+}
+.pano-paint-footer-group {
+  display: flex;
+  align-items: center;
+  gap: var(--pano-float-gap);
+  flex-wrap: nowrap;
+}
+.pano-paint-footer-group[hidden] {
+  display: none;
+}
+.pano-paint-footer-note {
+  color: var(--pano-text-secondary);
+  font-size: 11px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
 .pano-side-footer {
   margin-top: auto;
   display: flex;
