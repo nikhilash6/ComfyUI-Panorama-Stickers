@@ -130,12 +130,13 @@
 .pano-view-toggle {
   position: relative;
   display: inline-flex;
-  background: var(--pano-surface-1);
+  background: var(--pano-float-bg);
   border: 0;
   border-radius: var(--pano-float-radius);
   padding: var(--pano-float-pad);
   gap: 0;
   box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  backdrop-filter: blur(12px);
   overflow: hidden;
 }
 .pano-view-toggle::before {
@@ -487,18 +488,18 @@
 }
 .pano-floating-left {
   position: absolute;
-  left: 18px;
+  left: var(--pano-space-lg);
   top: 50%;
   transform: translateY(-50%);
   z-index: 4;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px;
-  background: var(--pano-overlay-glass, rgba(0, 0, 0, 0.50));
+  gap: var(--pano-float-gap);
+  padding: var(--pano-float-pad);
+  background: var(--pano-float-bg);
   border: 0;
-  border-radius: 12px;
-  box-shadow: var(--pano-shadow-panel, 0 18px 60px rgba(0,0,0,0.55));
+  border-radius: var(--pano-float-radius);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
   backdrop-filter: blur(12px);
 }
 .pano-floating-left .pano-btn-icon {

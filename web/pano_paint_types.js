@@ -74,10 +74,12 @@ function normalizeGeometry(raw, targetSpace, toolKind, allowLasso) {
   const points = normalizePointList(raw.points, targetSpace, 1);
   if (!points) return null;
   const rawPoints = normalizePointList(raw.rawPoints, targetSpace, 1);
+  const processedPoints = normalizePointList(raw.processedPoints, targetSpace, 1);
   return {
     geometryKind,
     points,
     rawPoints: rawPoints || points.map((pt) => ({ ...pt })),
+    processedPoints: processedPoints || points.map((pt) => ({ ...pt })),
   };
 }
 

@@ -11,6 +11,7 @@ import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToCon
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
 import { createHistoryController } from "./pano_paint_history.js";
+import { createPaintEngineManager } from "./pano_paint_engine.js";
 import { normalizePaintingState } from "./pano_paint_types.js";
 import {
   buildCutoutViewParamsFromShot,
@@ -314,7 +315,6 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
     stickers: [],
     shots: [],
     painting: normalizePaintingState(null),
-    editor_history: normalizeEditorHistory(null),
     ui_settings: {
       invert_view_x: !!sharedUi?.invert_view_x,
       invert_view_y: !!sharedUi?.invert_view_y,
@@ -344,7 +344,6 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
       shots: cloneShotList(p.shots),
       // source of truth persists target-local stroke geometry, never view coordinates.
       painting: normalizePaintingState(p.painting),
-      editor_history: normalizeEditorHistory(p.editor_history),
       ui_settings: {
         invert_view_x: !!(p.ui_settings && p.ui_settings.invert_view_x),
         invert_view_y: !!(p.ui_settings && p.ui_settings.invert_view_y),
@@ -358,6 +357,7 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
     if (sharedUi) {
       merged.ui_settings = normalizeUiSettings({ ...merged.ui_settings, ...sharedUi });
     }
+    delete merged.editor_history;
     return merged;
   } catch {
     parseStateJsonCache = { text: textTrimmed, parsed: null };
@@ -1179,8 +1179,8 @@ function showEditor(node, type, options = {}) {
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="${type === "stickers" ? "Add Image" : "Add Frame"}" data-tip="${type === "stickers" ? "Add image" : "Add frame"}">${ICON.add}</button>
         ${type === "cutout" ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="look-at-frame" aria-label="Look at Frame" data-tip="Look at frame">${ICON.camera}</button>` : ""}
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
-        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
       </div>
       <div class="pano-paint-footer" data-paint-footer hidden>
         <div class="pano-paint-footer-group" data-paint-group="paint" hidden>
@@ -1269,7 +1269,7 @@ function showEditor(node, type, options = {}) {
     viewYaw: 0,
     viewPitch: 0,
     viewFov: 100,
-    historyController: createHistoryController(80, state.editor_history),
+    historyController: createHistoryController(80),
     primaryTool: "cursor",
     paintTool: "pen",
     maskTool: "pen",
@@ -1289,6 +1289,8 @@ function showEditor(node, type, options = {}) {
     outputPreviewAnimDurationMs: 180,
     outputPreviewRect: null,
     frameView: { zoom: 1, panX: 0, panY: 0 },
+    paintEngine: createPaintEngineManager(),
+    paintEngineRevisionKey: "",
     paintCaches: { revisionKey: "", erp: null, frames: new Map() },
     panelLastValues: null,
     panelWasEnabled: false,
@@ -2201,8 +2203,8 @@ function showEditor(node, type, options = {}) {
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
     if (!skipBackground) drawErpBackgroundUnwrap(r);
-    rebuildNativePaintCachesIfNeeded();
-    const erpRaster = editor.paintCaches.erp?.canvas || null;
+    rebuildPaintEngineIfNeeded();
+    const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
     if (erpRaster) {
       ctx.save();
       ctx.globalAlpha = 1;
@@ -2259,16 +2261,16 @@ function showEditor(node, type, options = {}) {
       ctx.fillRect(0, 0, w, h);
     }
     if (!skipBackground) drawErpBackgroundPano();
-    rebuildNativePaintCachesIfNeeded();
-    const erpRaster = editor.paintCaches.erp?.canvas || null;
+    rebuildPaintEngineIfNeeded();
+    const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
     if (erpRaster) {
       renderErpViewToContext2D({
         owner: node,
-        cacheKey: `modal_pano_paint_raster_${String(editor.paintCaches.revisionKey || "").length}`,
+        cacheKey: `modal_pano_paint_raster_${String(getPaintingRevisionKey()).length}`,
         ctx,
         rect: { x: 0, y: 0, w, h },
         backgroundSource: erpRaster,
-        backgroundRevision: editor.paintCaches.revisionKey,
+        backgroundRevision: getPaintingRevisionKey(),
         mode: "panorama",
         yawDeg: editor.viewYaw,
         pitchDeg: editor.viewPitch,
@@ -2779,8 +2781,131 @@ function showEditor(node, type, options = {}) {
 
   function getStrokePointList(stroke, key = "points") {
     const geometry = stroke?.geometry;
+    if (key === "points" && geometry?.geometryKind !== "lasso_fill") {
+      if (Array.isArray(geometry?.processedPoints) && geometry.processedPoints.length) return geometry.processedPoints;
+    }
     const points = Array.isArray(geometry?.[key]) ? geometry[key] : [];
     return points;
+  }
+
+  function getTargetSpaceCoord(point) {
+    if (!point || typeof point !== "object") return { x: 0, y: 0 };
+    if (String(point.targetKind || "") === "FRAME_LOCAL" || "x" in point || "y" in point) {
+      return { x: Number(point.x || 0), y: Number(point.y || 0) };
+    }
+    return { x: Number(point.u || 0), y: Number(point.v || 0) };
+  }
+
+  function cloneTargetPointWithCoords(template, x, y, extra = {}) {
+    const base = {
+      ...template,
+      t: Number(template?.t || 0),
+      widthScale: getStrokePointScalar(template, "widthScale", 1),
+      pressureLike: getStrokePointScalar(template, "pressureLike", 1),
+    };
+    if (String(template?.targetKind || "") === "FRAME_LOCAL" || "x" in template || "y" in template) {
+      return { ...base, ...extra, x, y };
+    }
+    return { ...base, ...extra, u: x, v: y };
+  }
+
+  function interpolateTargetPoint(a, b, t) {
+    const ac = getTargetSpaceCoord(a);
+    const bc = getTargetSpaceCoord(b);
+    return cloneTargetPointWithCoords(a, lerp(ac.x, bc.x, t), lerp(ac.y, bc.y, t), {
+      t: lerp(Number(a?.t || 0), Number(b?.t || 0), t),
+      widthScale: lerp(getStrokePointScalar(a, "widthScale", 1), getStrokePointScalar(b, "widthScale", 1), t),
+      pressureLike: lerp(getStrokePointScalar(a, "pressureLike", 1), getStrokePointScalar(b, "pressureLike", 1), t),
+    });
+  }
+
+  function getFreehandResampleSpacing(targetSpace, finalPass = false) {
+    if (targetSpace?.kind === "FRAME_LOCAL") return finalPass ? 0.001 : 0.0015;
+    return finalPass ? 0.0012 : 0.0018;
+  }
+
+  function processFreehandPoints(rawPoints, targetSpace, finalPass = false) {
+    if (!Array.isArray(rawPoints) || !rawPoints.length) return [];
+    if (rawPoints.length === 1) return [cloneTargetPointWithCoords(rawPoints[0], getTargetSpaceCoord(rawPoints[0]).x, getTargetSpaceCoord(rawPoints[0]).y)];
+    const spacing = getFreehandResampleSpacing(targetSpace, finalPass);
+    const buildUniformSamples = (srcPoints, sampleSpacing) => {
+      const cumulative = [0];
+      for (let i = 1; i < srcPoints.length; i += 1) {
+        const a = getTargetSpaceCoord(srcPoints[i - 1]);
+        const b = getTargetSpaceCoord(srcPoints[i]);
+        cumulative.push(cumulative[i - 1] + Math.hypot(b.x - a.x, b.y - a.y));
+      }
+      const totalLen = cumulative[cumulative.length - 1] || 0;
+      if (totalLen <= 1e-8) {
+        const only = srcPoints[0];
+        const onlyCoord = getTargetSpaceCoord(only);
+        return [cloneTargetPointWithCoords(only, onlyCoord.x, onlyCoord.y)];
+      }
+      const out = [];
+      let segIndex = 0;
+      for (let d = 0; d <= totalLen + 1e-9; d += sampleSpacing) {
+        while (segIndex < cumulative.length - 2 && cumulative[segIndex + 1] < d) segIndex += 1;
+        const s0 = cumulative[segIndex];
+        const s1 = cumulative[segIndex + 1];
+        const range = Math.max(1e-8, s1 - s0);
+        out.push(interpolateTargetPoint(srcPoints[segIndex], srcPoints[segIndex + 1], clamp((d - s0) / range, 0, 1)));
+      }
+      const tail = srcPoints[srcPoints.length - 1];
+      const tailCoord = getTargetSpaceCoord(tail);
+      const prev = out[out.length - 1];
+      const prevCoord = prev ? getTargetSpaceCoord(prev) : null;
+      if (!prevCoord || Math.hypot(prevCoord.x - tailCoord.x, prevCoord.y - tailCoord.y) > sampleSpacing * 0.35) {
+        out.push(cloneTargetPointWithCoords(tail, tailCoord.x, tailCoord.y));
+      }
+      return out;
+    };
+    const chaikinPass = (srcPoints) => {
+      if (!Array.isArray(srcPoints) || srcPoints.length < 3) return srcPoints ? srcPoints.slice() : [];
+      const out = [cloneTargetPointWithCoords(srcPoints[0], getTargetSpaceCoord(srcPoints[0]).x, getTargetSpaceCoord(srcPoints[0]).y)];
+      for (let i = 0; i < srcPoints.length - 1; i += 1) {
+        const a = srcPoints[i];
+        const b = srcPoints[i + 1];
+        const ac = getTargetSpaceCoord(a);
+        const bc = getTargetSpaceCoord(b);
+        const q = cloneTargetPointWithCoords(a,
+          (ac.x * 0.75) + (bc.x * 0.25),
+          (ac.y * 0.75) + (bc.y * 0.25),
+          {
+            t: (Number(a.t || 0) * 0.75) + (Number(b.t || 0) * 0.25),
+            widthScale: (getStrokePointScalar(a, "widthScale", 1) * 0.75) + (getStrokePointScalar(b, "widthScale", 1) * 0.25),
+            pressureLike: (getStrokePointScalar(a, "pressureLike", 1) * 0.75) + (getStrokePointScalar(b, "pressureLike", 1) * 0.25),
+          });
+        const r = cloneTargetPointWithCoords(a,
+          (ac.x * 0.25) + (bc.x * 0.75),
+          (ac.y * 0.25) + (bc.y * 0.75),
+          {
+            t: (Number(a.t || 0) * 0.25) + (Number(b.t || 0) * 0.75),
+            widthScale: (getStrokePointScalar(a, "widthScale", 1) * 0.25) + (getStrokePointScalar(b, "widthScale", 1) * 0.75),
+            pressureLike: (getStrokePointScalar(a, "pressureLike", 1) * 0.25) + (getStrokePointScalar(b, "pressureLike", 1) * 0.75),
+          });
+        out.push(q, r);
+      }
+      out.push(cloneTargetPointWithCoords(srcPoints[srcPoints.length - 1], getTargetSpaceCoord(srcPoints[srcPoints.length - 1]).x, getTargetSpaceCoord(srcPoints[srcPoints.length - 1]).y));
+      return out;
+    };
+    const resampled = buildUniformSamples(rawPoints, spacing);
+    if (resampled.length < 3) return resampled;
+    const passes = finalPass ? 2 : 1;
+    let curved = resampled.slice();
+    for (let i = 0; i < passes; i += 1) curved = chaikinPass(curved);
+    const finalPoints = buildUniformSamples(curved, Math.max(spacing * 0.75, 0.00055));
+    return finalPoints;
+  }
+
+  function updateStrokeProcessedPoints(stroke, finalPass = false) {
+    const geometry = stroke?.geometry;
+    if (!geometry || geometry.geometryKind === "lasso_fill") return;
+    const rawPoints = Array.isArray(geometry.rawPoints) && geometry.rawPoints.length
+      ? geometry.rawPoints
+      : (Array.isArray(geometry.points) ? geometry.points : []);
+    const processed = processFreehandPoints(rawPoints, stroke?.targetSpace, finalPass);
+    geometry.processedPoints = processed.map((pt) => ({ ...pt }));
+    geometry.points = geometry.processedPoints.map((pt) => ({ ...pt }));
   }
 
   function getStrokePointScalar(point, name, fallback = 1) {
@@ -2825,7 +2950,48 @@ function showEditor(node, type, options = {}) {
     return JSON.stringify({
       paint: state.painting?.paint?.strokes || [],
       mask: state.painting?.mask?.strokes || [],
+      frames: (Array.isArray(state.shots) ? state.shots : []).map((shot) => ({
+        id: String(shot?.id || ""),
+        out_w: Number(shot?.out_w || 1024),
+        out_h: Number(shot?.out_h || 1024),
+      })),
     });
+  }
+
+  function getPaintEngineFrameDescriptors() {
+    return (Array.isArray(state.shots) ? state.shots : [])
+      .filter((shot) => shot && shot.id != null)
+      .map((shot) => ({
+        kind: "FRAME_LOCAL",
+        frameId: String(shot.id || ""),
+        id: String(shot.id || ""),
+        width: Math.max(64, Number(shot.out_w || 1024)),
+        height: Math.max(64, Number(shot.out_h || 1024)),
+      }));
+  }
+
+  function rebuildPaintEngineIfNeeded() {
+    const revisionKey = getPaintingRevisionKey();
+    if (editor.paintEngineRevisionKey === revisionKey) return;
+    editor.paintEngineRevisionKey = revisionKey;
+    editor.paintEngine?.rebuildCommitted(state, getPaintEngineFrameDescriptors());
+  }
+
+  function getActivePaintTargetDescriptor(interaction = null) {
+    const targetSpace = interaction?.stroke?.targetSpace || interaction?.targetSpace || null;
+    if (targetSpace?.kind === "FRAME_LOCAL") {
+      const frameId = String(targetSpace.frameId || "");
+      const shot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === frameId)
+        || getActiveCutoutShot();
+      if (!shot) return null;
+      return {
+        kind: "FRAME_LOCAL",
+        frameId,
+        width: Math.max(64, Number(shot.out_w || 1024)),
+        height: Math.max(64, Number(shot.out_h || 1024)),
+      };
+    }
+    return { kind: "ERP_GLOBAL", width: 2048, height: 1024 };
   }
 
   function getSourcePoint2D(stroke, point) {
@@ -2957,53 +3123,83 @@ function showEditor(node, type, options = {}) {
     return Math.max(0.5, Number(stroke?.size || 10) * 0.5 * scale);
   }
 
-  function drawNativeStrokePath(targetCtx, samples, stroke, bounds) {
-    if (!targetCtx || samples.length < 2) return;
-    targetCtx.save();
-    targetCtx.globalAlpha = String(stroke?.toolKind || "") === "marker" ? 0.7 : 1;
-    if (String(stroke?.layerKind || "") === "mask") {
-      targetCtx.fillStyle = "rgba(255,255,255,1)";
-    } else if (String(stroke?.toolKind || "") === "eraser") {
+  function configureStrokeFill(targetCtx, stroke, options = {}) {
+    const layerKind = String(stroke?.layerKind || "paint");
+    const toolKind = String(stroke?.toolKind || "pen");
+    const preview = options.preview === true;
+    const markerAlphaScale = preview ? 0.78 : 1;
+    targetCtx.globalAlpha = toolKind === "marker" ? 0.7 * markerAlphaScale : 1;
+    if (layerKind === "mask") {
+      targetCtx.fillStyle = preview ? "rgba(34, 197, 94, 0.75)" : "rgba(255,255,255,1)";
+      return;
+    }
+    if (toolKind === "eraser") {
       targetCtx.globalCompositeOperation = "destination-out";
       targetCtx.fillStyle = "rgba(0,0,0,1)";
-    } else {
-      const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
-      targetCtx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${Number(c.a ?? 1)})`;
+      return;
     }
-    const maxR = Math.max(bounds.w, bounds.h) * 0.25;
-    const drawDisc = (s) => {
-      const r = Math.max(0.5, Math.min(maxR, Number(s.radiusPx || 0.5)));
-      if (!Number.isFinite(s.x) || !Number.isFinite(s.y) || !Number.isFinite(r)) return;
-      targetCtx.beginPath();
-      targetCtx.arc(s.x, s.y, r, 0, Math.PI * 2);
-      targetCtx.fill();
-    };
+    const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+    const alpha = preview ? Math.max(0.28, Number(c.a ?? 1) * 0.88) : Math.max(0.12, Number(c.a ?? 1));
+    targetCtx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${alpha})`;
+  }
+
+  function drawDiscStamp(targetCtx, sample, maxRadiusPx) {
+    const r = Math.max(0.5, Math.min(maxRadiusPx, Number(sample?.radiusPx || 0.5)));
+    if (!Number.isFinite(sample?.x) || !Number.isFinite(sample?.y) || !Number.isFinite(r)) return;
+    targetCtx.beginPath();
+    targetCtx.arc(Number(sample.x || 0), Number(sample.y || 0), r, 0, Math.PI * 2);
+    targetCtx.fill();
+  }
+
+  function drawStampedStroke(targetCtx, samples, stroke, bounds, options = {}) {
+    if (!targetCtx || !Array.isArray(samples) || !samples.length) return;
+    const maxRadiusPx = Math.max(bounds.w, bounds.h) * 0.25;
+    targetCtx.save();
+    configureStrokeFill(targetCtx, stroke, options);
+    const drawSample = (sample) => drawDiscStamp(targetCtx, sample, maxRadiusPx);
+    if (samples.length === 1) {
+      drawSample(samples[0]);
+      targetCtx.restore();
+      return;
+    }
     for (let i = 0; i < samples.length - 1; i += 1) {
       const a = samples[i];
       const b = samples[i + 1];
       if (!a || !b) continue;
-      const dx = Number(b.x || 0) - Number(a.x || 0);
-      const dy = Number(b.y || 0) - Number(a.y || 0);
+      const ax = Number(a.x || 0);
+      const ay = Number(a.y || 0);
+      const bx = Number(b.x || 0);
+      const by = Number(b.y || 0);
+      const ar = Math.max(0.5, Math.min(maxRadiusPx, Number(a.radiusPx || 0.5)));
+      const br = Math.max(0.5, Math.min(maxRadiusPx, Number(b.radiusPx || 0.5)));
+      if (!Number.isFinite(ax) || !Number.isFinite(ay) || !Number.isFinite(bx) || !Number.isFinite(by)) continue;
+      if (!Number.isFinite(ar) || !Number.isFinite(br)) continue;
+      const dx = bx - ax;
+      const dy = by - ay;
       const len = Math.hypot(dx, dy);
-      if (!Number.isFinite(len) || len < 1e-6 || len > Math.max(bounds.w, bounds.h) * 0.5) {
-        drawDisc(a);
+      if (!Number.isFinite(len) || len < 1e-6) {
+        drawSample(a);
         continue;
       }
-      const nx = -dy / len;
-      const ny = dx / len;
-      const ra = Math.max(0.5, Math.min(maxR, Number(a.radiusPx || 0.5)));
-      const rb = Math.max(0.5, Math.min(maxR, Number(b.radiusPx || 0.5)));
-      targetCtx.beginPath();
-      targetCtx.moveTo(a.x + (nx * ra), a.y + (ny * ra));
-      targetCtx.lineTo(b.x + (nx * rb), b.y + (ny * rb));
-      targetCtx.lineTo(b.x - (nx * rb), b.y - (ny * rb));
-      targetCtx.lineTo(a.x - (nx * ra), a.y - (ny * ra));
-      targetCtx.closePath();
-      targetCtx.fill();
-      drawDisc(a);
+      if (len > Math.max(bounds.w, bounds.h) * 0.5) continue;
+      const minRadius = Math.max(0.5, Math.min(ar, br));
+      const step = Math.max(0.35, Math.min(minRadius * 0.4, 2.25));
+      const count = Math.max(1, Math.ceil(len / step));
+      for (let j = 0; j <= count; j += 1) {
+        const t = j / count;
+        drawSample({
+          x: lerp(ax, bx, t),
+          y: lerp(ay, by, t),
+          radiusPx: lerp(ar, br, t),
+        });
+      }
     }
-    drawDisc(samples[samples.length - 1]);
+    drawSample(samples[samples.length - 1]);
     targetCtx.restore();
+  }
+
+  function drawNativeStrokePath(targetCtx, samples, stroke, bounds) {
+    drawStampedStroke(targetCtx, samples, stroke, bounds, { preview: false });
   }
 
   function drawNativeLassoFill(targetCtx, points, stroke, bounds, axisKeys) {
@@ -3285,56 +3481,8 @@ function showEditor(node, type, options = {}) {
   }
 
   function drawProjectedStrokePath(projected, stroke, options = {}) {
-    if (projected.length < 2) return;
-    const layerKind = String(stroke.layerKind || "paint");
-    const toolKind = String(stroke.toolKind || "pen");
-    ctx.save();
-    ctx.globalAlpha = toolKind === "marker" ? 0.7 : 1;
-    if (layerKind === "mask") {
-      ctx.fillStyle = "rgba(34, 197, 94, 0.85)";
-    } else if (toolKind === "eraser") {
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.fillStyle = "rgba(0, 0, 0, 1)";
-    } else {
-      ctx.fillStyle = "rgba(255, 92, 92, 0.95)";
-    }
-    const drawDisc = (sample) => {
-      const r = Math.max(0.5, Number(sample?.radiusPx || 0.5));
-      if (!Number.isFinite(sample?.x) || !Number.isFinite(sample?.y) || !Number.isFinite(r)) return;
-      if (r > Math.max(canvas.width, canvas.height) * 0.25) return;
-      ctx.beginPath();
-      ctx.arc(Number(sample.x || 0), Number(sample.y || 0), r, 0, Math.PI * 2);
-      ctx.fill();
-    };
-    for (let i = 0; i < projected.length - 1; i += 1) {
-      const a = projected[i];
-      const b = projected[i + 1];
-      const ra = Math.max(0.5, Number(a?.radiusPx || 0.5));
-      const rb = Math.max(0.5, Number(b?.radiusPx || 0.5));
-      if (!Number.isFinite(a?.x) || !Number.isFinite(a?.y) || !Number.isFinite(b?.x) || !Number.isFinite(b?.y)) continue;
-      if (!Number.isFinite(ra) || !Number.isFinite(rb)) continue;
-      if (ra > Math.max(canvas.width, canvas.height) * 0.25 || rb > Math.max(canvas.width, canvas.height) * 0.25) continue;
-      const dx = Number(b.x || 0) - Number(a.x || 0);
-      const dy = Number(b.y || 0) - Number(a.y || 0);
-      const len = Math.hypot(dx, dy);
-      if (!Number.isFinite(len) || len < 1e-6) {
-        drawDisc(a);
-        continue;
-      }
-      if (len > Math.max(canvas.width, canvas.height) * 0.5) continue;
-      const nx = -dy / len;
-      const ny = dx / len;
-      ctx.beginPath();
-      ctx.moveTo(a.x + (nx * ra), a.y + (ny * ra));
-      ctx.lineTo(b.x + (nx * rb), b.y + (ny * rb));
-      ctx.lineTo(b.x - (nx * rb), b.y - (ny * rb));
-      ctx.lineTo(a.x - (nx * ra), a.y - (ny * ra));
-      ctx.closePath();
-      ctx.fill();
-      drawDisc(a);
-    }
-    drawDisc(projected[projected.length - 1]);
-    ctx.restore();
+    if (!Array.isArray(projected) || projected.length < 2) return;
+    drawStampedStroke(ctx, projected, stroke, { w: canvas.width, h: canvas.height }, options);
   }
 
   function drawProjectedStrokeSegments(segments, stroke, options = {}) {
@@ -3573,12 +3721,12 @@ function showEditor(node, type, options = {}) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
       ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
     }
-    rebuildNativePaintCachesIfNeeded();
-    const frameRaster = editor.paintCaches.frames.get(String(shot.id || ""));
-    if (frameRaster?.canvas) {
-      ctx.drawImage(frameRaster.canvas, rect.x, rect.y, rect.w, rect.h);
+    rebuildPaintEngineIfNeeded();
+    const frameRaster = editor.paintEngine?.getFrameTarget?.(String(shot.id || ""))?.displayPaint?.canvas || null;
+    if (frameRaster) {
+      ctx.drawImage(frameRaster, rect.x, rect.y, rect.w, rect.h);
     }
-    drawFramePaintingOverlayInRect(rect, shot, true, false);
+    drawFramePaintingOverlayInRect(rect, shot, false, false);
     ctx.restore();
     ctx.save();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
@@ -3595,23 +3743,15 @@ function showEditor(node, type, options = {}) {
       ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
       ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
     ];
-    if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
-      strokes.push(editor.interaction.stroke);
-    }
     strokes.forEach((stroke) => {
       if (stroke?.geometry?.geometryKind === "lasso_fill") {
-        if (stroke?.targetSpace?.kind === "ERP_GLOBAL" && stroke === editor.interaction?.stroke) {
-          drawLassoPreviewPolygon(projectLassoPointsToCurrentView(stroke.geometry.points), stroke, { preview: true });
-          return;
-        }
         if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
           drawLassoPreviewPolygon(projectFrameLassoPointsToCurrentView(stroke.geometry.points, stroke), stroke);
         }
         return;
       }
       if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-        if (stroke !== editor.interaction?.stroke) return;
-        drawProjectedStrokePath(projectErpStrokeToCurrentView(stroke), stroke);
+        return;
       } else if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
         drawProjectedStrokeSegments(projectFrameStrokeToCurrentErpViewSegments(stroke), stroke);
       } else {
@@ -3742,7 +3882,6 @@ function showEditor(node, type, options = {}) {
   function pushHistory() {
     if (readOnly) return;
     editor.historyController.commitActionGroup(JSON.stringify(cloneStateForHistorySnapshot(state)));
-    state.editor_history = editor.historyController.serialize();
   }
 
   function restoreHistory(step) {
@@ -3752,7 +3891,6 @@ function showEditor(node, type, options = {}) {
     const parsed = JSON.parse(snapshot);
     Object.keys(state).forEach((k) => delete state[k]);
     Object.assign(state, parsed);
-    state.editor_history = editor.historyController.serialize();
     editor.selectedId = type === "stickers" ? state.active.selected_sticker_id : state.active.selected_shot_id;
     syncPaintUi();
     updateSidePanel();
@@ -4497,6 +4635,7 @@ function showEditor(node, type, options = {}) {
   function addCutoutFrame() {
     if (readOnly) return;
     if (type !== "cutout") return;
+    forceCursorTool();
     state.shots = [{
       id: uid("sh"),
       yaw_deg: editor.viewYaw,
@@ -4767,7 +4906,6 @@ function showEditor(node, type, options = {}) {
 
   function commitState() {
     if (readOnly) return;
-    state.editor_history = editor.historyController.serialize();
     const text = JSON.stringify(state);
     if (stateWidget) {
       stateWidget.value = text;
@@ -4784,6 +4922,13 @@ function showEditor(node, type, options = {}) {
     if (readOnly) return;
     commitState();
     node.setDirtyCanvas?.(true, true);
+  }
+
+  function forceCursorTool() {
+    if (editor.primaryTool === "cursor") return;
+    editor.primaryTool = "cursor";
+    syncPaintUi();
+    updateSidePanel();
   }
 
   function screenPos(evt) {
@@ -4918,7 +5063,7 @@ function showEditor(node, type, options = {}) {
       widthScale: Number.isFinite(Number(pt?.widthScale)) ? Math.max(0, Number(pt.widthScale)) : 1,
       pressureLike: Number.isFinite(Number(pt?.pressureLike)) ? Math.max(0, Number(pt.pressureLike)) : 1,
     }));
-    return {
+    const stroke = {
       id: makePaintId(layerKind),
       actionGroupId: makePaintId("ag"),
       targetSpace: targetSpace && typeof targetSpace === "object" ? { ...targetSpace } : { kind: "ERP_GLOBAL" },
@@ -4938,9 +5083,12 @@ function showEditor(node, type, options = {}) {
       geometry: {
         geometryKind: "freehand_open",
         rawPoints: preparedPoints.map((pt) => ({ ...pt })),
+        processedPoints: preparedPoints.map((pt) => ({ ...pt })),
         points: preparedPoints.map((pt) => ({ ...pt })),
       },
     };
+    updateStrokeProcessedPoints(stroke, false);
+    return stroke;
   }
 
   function buildLassoFillStrokeRecord(layerKind, toolKind, points, targetSpace) {
@@ -5001,7 +5149,7 @@ function showEditor(node, type, options = {}) {
       pressureLike: 1,
     };
     rawPoints.push({ ...sample });
-    points.push(sample);
+    updateStrokeProcessedPoints(interaction.stroke, false);
     return true;
   }
 
@@ -5036,7 +5184,8 @@ function showEditor(node, type, options = {}) {
       getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
       return true;
     }
-    const points = geometry.points || [];
+    updateStrokeProcessedPoints(interaction.stroke, false);
+    const points = geometry.processedPoints || geometry.points || [];
     if (points.length < 2) return false;
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
@@ -5317,6 +5466,11 @@ function showEditor(node, type, options = {}) {
           ? buildLassoFillStrokeRecord(layerKind, toolKind, [startPoint], targetSpace)
           : buildFreehandStrokeRecord(layerKind, toolKind, [startPoint], targetSpace),
       };
+      const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
+      if (targetDescriptor) {
+        editor.paintEngine.beginStroke(editor.interaction.stroke, targetDescriptor);
+        editor.paintEngine.updateActiveStroke(editor.interaction.stroke, targetDescriptor);
+      }
       updateCursor(p);
       canvas.setPointerCapture(e.pointerId);
       requestDraw();
@@ -5461,12 +5615,32 @@ function showEditor(node, type, options = {}) {
     const it = editor.interaction;
 
     if (it.kind === "paint_stroke") {
-      if (appendPaintPoint(it, p, performance.now())) requestDraw({ localOnly: true });
+      const samples = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [e];
+      let changed = false;
+      samples.forEach((sample) => {
+        const sp = screenPos(sample);
+        if (appendPaintPoint(it, sp, performance.now())) changed = true;
+      });
+      if (changed) {
+        const targetDescriptor = getActivePaintTargetDescriptor(it);
+        if (targetDescriptor) editor.paintEngine.updateActiveStroke(it.stroke, targetDescriptor);
+        requestDraw({ localOnly: true });
+      }
       return;
     }
 
     if (it.kind === "paint_lasso_fill") {
-      if (appendLassoPoint(it, p, performance.now())) requestDraw({ localOnly: true });
+      const samples = typeof e.getCoalescedEvents === "function" ? e.getCoalescedEvents() : [e];
+      let changed = false;
+      samples.forEach((sample) => {
+        const sp = screenPos(sample);
+        if (appendLassoPoint(it, sp, performance.now())) changed = true;
+      });
+      if (changed) {
+        const targetDescriptor = getActivePaintTargetDescriptor(it);
+        if (targetDescriptor) editor.paintEngine.updateActiveStroke(it.stroke, targetDescriptor);
+        requestDraw({ localOnly: true });
+      }
       return;
     }
 
@@ -5547,10 +5721,15 @@ function showEditor(node, type, options = {}) {
     const ended = editor.interaction;
     if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
       if (commitPaintInteraction(editor.interaction)) {
+        const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
+        if (targetDescriptor) editor.paintEngine.commitActiveStroke(editor.interaction.stroke, targetDescriptor);
         pushHistory();
         commitState();
         node.setDirtyCanvas(true, true);
         requestDraw();
+      } else {
+        const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
+        if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
       }
     } else if (editor.interaction && editor.interaction.kind !== "view" && editor.interaction.kind !== "pan_frame") {
       pushHistory();
@@ -5573,6 +5752,10 @@ function showEditor(node, type, options = {}) {
   canvas.onpointercancel = () => {
     if (editor.interaction?.kind === "view") {
       viewController.endDrag(performance.now());
+    }
+    if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
+      const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
+      if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
     }
     editor.interaction = null;
     syncViewToggleState();
@@ -5653,6 +5836,7 @@ function showEditor(node, type, options = {}) {
     btn.onclick = () => {
       if (btn.disabled) return;
       editor.mode = btn.dataset.view;
+      forceCursorTool();
       syncViewToggleState();
       requestDraw();
     };

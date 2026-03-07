@@ -1,7 +1,8 @@
-export function createHistoryController(limit = 80, initialState = null) {
+export function createHistoryController(limit = 80, initialState = null, serializeLimit = 8) {
   const entries = [];
   let index = -1;
   const maxEntries = Math.max(1, Number(limit || 80));
+  const maxSerializedEntries = Math.max(1, Number(serializeLimit || 8));
 
   function hydrate(raw) {
     entries.splice(0, entries.length);
@@ -54,10 +55,13 @@ export function createHistoryController(limit = 80, initialState = null) {
       return index;
     },
     serialize() {
+      const start = Math.max(0, entries.length - maxSerializedEntries);
+      const serializedEntries = entries.slice(start);
+      const serializedIndex = index < 0 ? -1 : Math.max(-1, Math.min(serializedEntries.length - 1, index - start));
       return {
         version: 1,
-        entries: entries.slice(),
-        index,
+        entries: serializedEntries,
+        index: serializedIndex,
       };
     },
     hydrate,

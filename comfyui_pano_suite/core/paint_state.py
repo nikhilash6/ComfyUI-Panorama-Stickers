@@ -128,10 +128,12 @@ def _normalize_geometry(raw, target_space, tool_kind, allow_lasso):
     if points is None:
         return None
     raw_points = _normalize_point_list(raw.get("rawPoints"), target_space, min_points=1)
+    processed_points = _normalize_point_list(raw.get("processedPoints"), target_space, min_points=1)
     return {
         "geometryKind": geometry_kind,
         "points": points,
         "rawPoints": raw_points if raw_points is not None else copy.deepcopy(points),
+        "processedPoints": processed_points if processed_points is not None else copy.deepcopy(points),
     }
 
 
