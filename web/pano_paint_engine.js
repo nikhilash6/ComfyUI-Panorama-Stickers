@@ -80,9 +80,6 @@ function drawMaskTint(displayCtx, maskCanvas) {
 
 function getTargetCoord(point) {
   if (!point || typeof point !== "object") return { x: 0, y: 0 };
-  if (String(point.targetKind || "") === "FRAME_LOCAL" || "x" in point) {
-    return { x: Number(point.x || 0), y: Number(point.y || 0) };
-  }
   return { x: Number(point.u || 0), y: Number(point.v || 0) };
 }
 
@@ -295,32 +292,12 @@ export function createPaintEngineManager() {
     // Set to true whenever committed or currentStroke content changes.
     displayDirty: true,
   };
-  const frameTargets = new Map();
   let activeTargetKey = "";
   let activeLayerKind = "";
 
-  function ensureTarget(descriptor) {
-    if (descriptor.kind === "ERP_GLOBAL") return erpTarget;
-    const key = String(descriptor.frameId || "");
-    let target = frameTargets.get(key);
-    if (!target) {
-      target = {
-        descriptor: { ...descriptor },
-        committedPaint: createCanvasSurface(descriptor.width, descriptor.height),
-        committedMask: createCanvasSurface(descriptor.width, descriptor.height),
-        currentStroke: createCanvasSurface(descriptor.width, descriptor.height),
-        displayPaint: createCanvasSurface(descriptor.width, descriptor.height),
-        activeStroke: null,
-        displayDirty: true,
-      };
-      frameTargets.set(key, target);
-    }
-    target.descriptor = { ...descriptor };
-    target.committedPaint = resizeSurface(target.committedPaint, descriptor.width, descriptor.height);
-    target.committedMask = resizeSurface(target.committedMask, descriptor.width, descriptor.height);
-    target.currentStroke = resizeSurface(target.currentStroke, descriptor.width, descriptor.height);
-    target.displayPaint = resizeSurface(target.displayPaint, descriptor.width, descriptor.height);
-    return target;
+  // ERP_GLOBAL is the only painting target. All strokes are stored in ERP UV space.
+  function ensureTarget(_descriptor) {
+    return erpTarget;
   }
 
   // Compose the displayPaint canvas from committed layers + active stroke.
@@ -363,55 +340,41 @@ export function createPaintEngineManager() {
     }
   }
 
-  function rebuildCommitted(state, frameDescriptors = []) {
+  function rebuildCommitted(state) {
     // Deduplication is handled by the caller (rebuildPaintEngineIfNeeded in pano_editor.js).
-    // No JSON.stringify here — always rebuild when called.
-
     clearSurface(erpTarget.committedPaint);
     clearSurface(erpTarget.committedMask);
     clearSurface(erpTarget.currentStroke);
     erpTarget.activeStroke = null;
-    frameTargets.forEach((target) => {
-      clearSurface(target.committedPaint);
-      clearSurface(target.committedMask);
-      clearSurface(target.currentStroke);
-      target.activeStroke = null;
-    });
 
-    const frameMap = new Map(frameDescriptors.map((item) => [String(item.id || ""), item]));
     const allStrokes = [
       ...(Array.isArray(state?.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
       ...(Array.isArray(state?.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
     ];
 
     allStrokes.forEach((stroke) => {
-      const descriptor = stroke?.targetSpace?.kind === "FRAME_LOCAL"
-        ? (frameMap.get(String(stroke.targetSpace.frameId || "")) || null)
-        : erpTarget.descriptor;
-      if (!descriptor) return;
+      // Only ERP_GLOBAL strokes are supported. Legacy FRAME_LOCAL strokes are ignored.
+      if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") return;
 
-      const target = ensureTarget(descriptor);
+      const descriptor = erpTarget.descriptor;
       const layerKind = String(stroke?.layerKind || "paint");
       const toolKind = String(stroke?.toolKind || "pen");
       const isEraser = toolKind === "eraser";
 
       if (isEraser) {
-        // Draw white marks to a temp, then apply destination-out to committed layer
         const tmp = createCanvasSurface(descriptor.width, descriptor.height);
         drawStrokeToSurface(tmp.ctx, stroke, descriptor);
-        const surface = layerKind === "mask" ? target.committedMask : target.committedPaint;
+        const surface = layerKind === "mask" ? erpTarget.committedMask : erpTarget.committedPaint;
         applyEraserToSurface(surface.ctx, tmp.canvas);
       } else if (layerKind === "mask") {
-        drawStrokeToSurface(target.committedMask.ctx, stroke, descriptor);
+        drawStrokeToSurface(erpTarget.committedMask.ctx, stroke, descriptor);
       } else {
-        drawStrokeToSurface(target.committedPaint.ctx, stroke, descriptor);
+        drawStrokeToSurface(erpTarget.committedPaint.ctx, stroke, descriptor);
       }
     });
 
     erpTarget.displayDirty = true;
-    frameTargets.forEach((target) => { target.displayDirty = true; });
     composeDisplayPaint(erpTarget);
-    frameTargets.forEach((target) => composeDisplayPaint(target));
   }
 
   // Begin a new stroke: clear currentStroke canvas, initialize incremental state.
@@ -507,39 +470,14 @@ export function createPaintEngineManager() {
     return erpTarget;
   }
 
-  function getFrameTarget(frameId) {
-    const target = frameTargets.get(String(frameId || ""));
-    if (!target) return null;
-    composeDisplayPaint(target);
-    return target;
-  }
-
-  // Sync frame surfaces to match the given descriptors without touching the ERP surface.
-  // Called when only the frame list changes (add/remove/resize) — avoids a full rebuildCommitted.
-  function syncFrameTargets(frameDescriptors = []) {
-    const frameMap = new Map(frameDescriptors.map((item) => [String(item.id || ""), item]));
-    // Ensure surfaces exist for all current descriptors.
-    frameMap.forEach((descriptor) => {
-      ensureTarget(descriptor);
-    });
-    // Remove surfaces for frames that no longer exist.
-    const toDelete = [];
-    frameTargets.forEach((_, id) => {
-      if (!frameMap.has(id)) toDelete.push(id);
-    });
-    toDelete.forEach((id) => frameTargets.delete(id));
-  }
-
   return {
     rebuildCommitted,
-    syncFrameTargets,
     beginStroke,
     appendStrokePoint,
     updateActiveStroke,
     commitActiveStroke,
     cancelActiveStroke,
     getErpTarget,
-    getFrameTarget,
     ensureTarget,
   };
 }

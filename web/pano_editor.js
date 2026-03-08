@@ -1298,9 +1298,7 @@ function showEditor(node, type, options = {}) {
     paintEngine: createPaintEngineManager(),
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
-    _lastPaintStrokeKey: "",
     _sortedItemsCache: null,
-    paintCaches: { revisionKey: "", erp: null, frames: new Map() },
     panelLastValues: null,
     panelWasEnabled: false,
     viewTween: null,
@@ -2745,8 +2743,6 @@ function showEditor(node, type, options = {}) {
           backgroundRevision: getPaintingRevisionKey(),
           backgroundOpacity: 1,
         });
-      } else {
-        drawCutoutPreviewPaintingOverlayInRect(previewRect, shot, false);
       }
     };
 
@@ -2832,10 +2828,7 @@ function showEditor(node, type, options = {}) {
 
   function getTargetSpaceCoord(point) {
     if (!point || typeof point !== "object") return { x: 0, y: 0 };
-    if (String(point.targetKind || "") === "FRAME_LOCAL" || "x" in point || "y" in point) {
-      return { x: Number(point.x || 0), y: Number(point.y || 0) };
-    }
-    return { x: Number(point.u || 0), y: Number(point.v || 0) };
+    return { x: Number(point?.u || 0), y: Number(point?.v || 0) };
   }
 
   function cloneTargetPointWithCoords(template, x, y, extra = {}) {
@@ -2845,9 +2838,6 @@ function showEditor(node, type, options = {}) {
       widthScale: getStrokePointScalar(template, "widthScale", 1),
       pressureLike: getStrokePointScalar(template, "pressureLike", 1),
     };
-    if (String(template?.targetKind || "") === "FRAME_LOCAL" || "x" in template || "y" in template) {
-      return { ...base, ...extra, x, y };
-    }
     return { ...base, ...extra, u: x, v: y };
   }
 
@@ -2862,7 +2852,6 @@ function showEditor(node, type, options = {}) {
   }
 
   function getFreehandResampleSpacing(targetSpace, finalPass = false) {
-    if (targetSpace?.kind === "FRAME_LOCAL") return finalPass ? 0.001 : 0.0015;
     return finalPass ? 0.0012 : 0.0018;
   }
 
@@ -2958,10 +2947,10 @@ function showEditor(node, type, options = {}) {
   function getStrokeRadiusSpec(stroke) {
     const radiusValue = Number(stroke?.radiusValue);
     if (Number.isFinite(radiusValue) && radiusValue > 0) {
-      const model = String(stroke?.radiusModel || "").trim() || "frame_local_norm";
+      const model = String(stroke?.radiusModel || "").trim() || "erp_uv_norm";
       if (model === "world_angle") {
         return {
-          model: stroke?.targetSpace?.kind === "FRAME_LOCAL" ? "frame_local_norm" : "erp_uv_norm",
+          model: "erp_uv_norm",
           value: Math.max(1e-6, Number(stroke?.size || 10) * 0.5 / 2048),
         };
       }
@@ -2971,7 +2960,7 @@ function showEditor(node, type, options = {}) {
       };
     }
     return {
-      model: stroke?.targetSpace?.kind === "FRAME_LOCAL" ? "frame_local_norm" : "erp_uv_norm",
+      model: "erp_uv_norm",
       value: Math.max(1e-6, Number(stroke?.size || 10) * 0.5 / 2048),
     };
   }
@@ -2989,70 +2978,22 @@ function showEditor(node, type, options = {}) {
   }
 
   function getPaintingRevisionKey() {
-    // Tracks stroke changes only (commit, undo/redo, clear all).
-    // Frame list changes are tracked separately via getFrameListKey().
+    // Tracks stroke changes (commit, undo/redo, clear all).
     return String(editor.paintStrokeRevision);
   }
 
-  function getFrameListKey() {
-    return (Array.isArray(state.shots) ? state.shots : [])
-      .map((s) => `${s?.id}:${s?.out_w}x${s?.out_h}`)
-      .join(",");
-  }
-
-  function getPaintEngineFrameDescriptors() {
-    return (Array.isArray(state.shots) ? state.shots : [])
-      .filter((shot) => shot && shot.id != null)
-      .map((shot) => ({
-        kind: "FRAME_LOCAL",
-        frameId: String(shot.id || ""),
-        id: String(shot.id || ""),
-        width: Math.max(64, Number(shot.out_w || 1024)),
-        height: Math.max(64, Number(shot.out_h || 1024)),
-      }));
-  }
-
   function rebuildPaintEngineIfNeeded() {
-    const strokeKey = getPaintingRevisionKey();
-    const frameKey = getFrameListKey();
-    const fullKey = `${strokeKey}|${frameKey}`;
-    if (editor.paintEngineRevisionKey === fullKey) return;
-
-    const strokeChanged = editor._lastPaintStrokeKey !== strokeKey;
-    editor.paintEngineRevisionKey = fullKey;
-    editor._lastPaintStrokeKey = strokeKey;
-
-    if (strokeChanged) {
-      // Strokes changed (commit/undo/redo/clear) → full rebuild of all surfaces.
-      editor.paintEngine?.rebuildCommitted(state, getPaintEngineFrameDescriptors());
-    } else {
-      // Only frame list changed (add/remove/resize) → sync frame surfaces only.
-      // ERP surface is untouched, avoiding O(n_strokes × n_points) rebuild.
-      editor.paintEngine?.syncFrameTargets(getPaintEngineFrameDescriptors());
-    }
+    const key = getPaintingRevisionKey();
+    if (editor.paintEngineRevisionKey === key) return;
+    editor.paintEngineRevisionKey = key;
+    editor.paintEngine?.rebuildCommitted(state);
   }
 
-  function getActivePaintTargetDescriptor(interaction = null) {
-    const targetSpace = interaction?.stroke?.targetSpace || interaction?.targetSpace || null;
-    if (targetSpace?.kind === "FRAME_LOCAL") {
-      const frameId = String(targetSpace.frameId || "");
-      const shot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === frameId)
-        || getActiveCutoutShot();
-      if (!shot) return null;
-      return {
-        kind: "FRAME_LOCAL",
-        frameId,
-        width: Math.max(64, Number(shot.out_w || 1024)),
-        height: Math.max(64, Number(shot.out_h || 1024)),
-      };
-    }
+  function getActivePaintTargetDescriptor() {
     return { kind: "ERP_GLOBAL", width: 2048, height: 1024 };
   }
 
   function getSourcePoint2D(stroke, point) {
-    if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-      return { x: Number(point?.x || 0), y: Number(point?.y || 0) };
-    }
     return { x: Number(point?.u || 0), y: Number(point?.v || 0) };
   }
 
@@ -3069,19 +3010,13 @@ function showEditor(node, type, options = {}) {
   }
 
   function getWorldOffsetDirForStrokePoint(stroke, point, index, points, sourceShot = null) {
-    const centerDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
-      ? frameLocalPointToWorldDir(sourceShot, point)
-      : erpPointToWorldDir(point);
+    const centerDir = erpPointToWorldDir(point);
     if (!centerDir) return { centerDir: null, offsetDir: null };
     const radiusSpec = getStrokeRadiusSpec(stroke);
     const scale = getStrokePointScalar(point, "widthScale", 1) * getStrokePointScalar(point, "pressureLike", 1);
     if (radiusSpec.model === "world_angle") {
-      const prevDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
-        ? frameLocalPointToWorldDir(sourceShot, points[Math.max(0, index - 1)] || point)
-        : erpPointToWorldDir(points[Math.max(0, index - 1)] || point);
-      const nextDir = stroke?.targetSpace?.kind === "FRAME_LOCAL"
-        ? frameLocalPointToWorldDir(sourceShot, points[Math.min(points.length - 1, index + 1)] || point)
-        : erpPointToWorldDir(points[Math.min(points.length - 1, index + 1)] || point);
+      const prevDir = erpPointToWorldDir(points[Math.max(0, index - 1)] || point);
+      const nextDir = erpPointToWorldDir(points[Math.min(points.length - 1, index + 1)] || point);
       const tangent = norm(vec3(
         Number((nextDir?.x || centerDir.x) - (prevDir?.x || centerDir.x)),
         Number((nextDir?.y || centerDir.y) - (prevDir?.y || centerDir.y)),
@@ -3092,17 +3027,6 @@ function showEditor(node, type, options = {}) {
       return { centerDir, offsetDir };
     }
     const normal2 = getStrokeNormal2D(stroke, points, index);
-    if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-      const offsetPt = {
-        ...point,
-        x: Number(point?.x || 0) + (normal2.x * radiusSpec.value * scale),
-        y: Number(point?.y || 0) + (normal2.y * radiusSpec.value * scale),
-      };
-      return {
-        centerDir,
-        offsetDir: frameLocalPointToWorldDir(sourceShot, offsetPt),
-      };
-    }
     const offsetPt = {
       ...point,
       u: Number(point?.u || 0) + (normal2.x * radiusSpec.value * scale),
@@ -3171,7 +3095,6 @@ function showEditor(node, type, options = {}) {
     const spec = getStrokeRadiusSpec(stroke);
     const scale = getStrokePointScalar(point, "widthScale", 1) * getStrokePointScalar(point, "pressureLike", 1);
     if (spec.model === "erp_uv_norm") return Math.max(0.5, spec.value * targetWidth * scale);
-    if (spec.model === "frame_local_norm") return Math.max(0.5, spec.value * targetWidth * scale);
     if (spec.model === "world_angle") {
       if (shot) {
         return Math.max(0.5, ((spec.value / Math.max(1e-6, Number(shot.hFOV_deg || 90) * DEG2RAD)) * targetWidth) * scale);
@@ -3284,64 +3207,6 @@ function showEditor(node, type, options = {}) {
     targetCtx.restore();
   }
 
-  function rebuildNativePaintCachesIfNeeded() {
-    const revisionKey = getPaintingRevisionKey();
-    if (editor.paintCaches.revisionKey === revisionKey && editor.paintCaches.erp) return;
-    editor.paintCaches.revisionKey = revisionKey;
-    editor.paintCaches.erp = createRasterSurface(2048, 1024);
-    editor.paintCaches.frames = new Map();
-    const erpSurface = editor.paintCaches.erp;
-    const strokes = [
-      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
-      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
-    ];
-    strokes.forEach((stroke) => {
-      const geometry = stroke?.geometry;
-      if (!geometry) return;
-      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-        if (geometry.geometryKind === "lasso_fill") {
-          drawNativeLassoFill(erpSurface.ctx, geometry.points, stroke, { w: erpSurface.canvas.width, h: erpSurface.canvas.height }, { x: "u", y: "v" });
-          return;
-        }
-        const points = getStrokePointList(stroke, "points");
-        if (points.length < 2) return;
-        const samples = points.map((pt) => ({
-          x: Number(pt.u || 0) * erpSurface.canvas.width,
-          y: Number(pt.v || 0) * erpSurface.canvas.height,
-          radiusPx: getNativeRadiusPxForStrokePoint(stroke, pt, erpSurface.canvas.width, erpSurface.canvas.height, null),
-        }));
-        drawNativeStrokePath(erpSurface.ctx, samples, stroke, { w: erpSurface.canvas.width, h: erpSurface.canvas.height });
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-        const shotId = String(stroke.targetSpace.frameId || "");
-        const shot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId)
-          || stroke.frameSnapshot
-          || null;
-        if (!shot) return;
-        const width = Math.max(64, Number(shot.out_w || 1024));
-        const height = Math.max(64, Number(shot.out_h || 1024));
-        let frameSurface = editor.paintCaches.frames.get(shotId);
-        if (!frameSurface || frameSurface.canvas.width !== width || frameSurface.canvas.height !== height) {
-          frameSurface = createRasterSurface(width, height);
-          editor.paintCaches.frames.set(shotId, frameSurface);
-        }
-        if (geometry.geometryKind === "lasso_fill") {
-          drawNativeLassoFill(frameSurface.ctx, geometry.points, stroke, { w: width, h: height }, { x: "x", y: "y" });
-          return;
-        }
-        const points = getStrokePointList(stroke, "points");
-        if (points.length < 2) return;
-        const samples = points.map((pt) => ({
-          x: Number(pt.x || 0) * width,
-          y: Number(pt.y || 0) * height,
-          radiusPx: getNativeRadiusPxForStrokePoint(stroke, pt, width, height, shot),
-        }));
-        drawNativeStrokePath(frameSurface.ctx, samples, stroke, { w: width, h: height });
-      }
-    });
-  }
-
   function worldDirToFrameLocalPoint(shot, dir) {
     if (!shot || !dir) return null;
     const frame = getStickerFrame(shot);
@@ -3357,23 +3222,6 @@ function showEditor(node, type, options = {}) {
     };
   }
 
-  function projectFrameStrokeToFrameView(stroke) {
-    const shot = getActiveCutoutShot();
-    const rect = getFrameViewRect(shot);
-    return projectFrameStrokeToRect(stroke, shot, rect);
-  }
-
-  function projectFrameStrokeToRect(stroke, shot, rect) {
-    const geometry = stroke?.geometry;
-    if (!geometry || geometry.geometryKind !== "freehand_open") return [];
-    if (!shot || String(stroke?.targetSpace?.frameId || "") !== String(shot.id || "")) return [];
-    const points = getStrokePointList(stroke, "points");
-    return points.map((pt, index) => {
-      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, shot);
-      return projectWorldDirToFrameRectSample(shot, rect, dirs.centerDir, dirs.offsetDir);
-    }).filter(Boolean);
-  }
-
   function projectErpStrokeToFrameRect(stroke, shot, rect) {
     const geometry = stroke?.geometry;
     if (!geometry || geometry.geometryKind !== "freehand_open" || !shot || !rect) return [];
@@ -3382,209 +3230,6 @@ function showEditor(node, type, options = {}) {
       const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, null);
       return projectWorldDirToFrameRectSample(shot, rect, dirs.centerDir, dirs.offsetDir);
     }).filter(Boolean);
-  }
-
-  function projectFrameStrokeToShotRect(stroke, targetShot, rect) {
-    const segments = projectFrameStrokeToShotRectSegments(stroke, targetShot, rect);
-    return segments.length ? segments[0] : [];
-  }
-
-  function projectFrameStrokeToShotRectSegments(stroke, targetShot, rect) {
-    const geometry = stroke?.geometry;
-    if (!geometry || geometry.geometryKind !== "freehand_open" || !targetShot || !rect) return [];
-    const sourceShot = stroke?.frameSnapshot
-      ? { ...stroke.frameSnapshot }
-      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === String(stroke?.targetSpace?.frameId || ""));
-    if (!sourceShot) return [];
-    const points = Array.isArray(geometry.points) ? geometry.points : [];
-    if (points.length < 2) return [];
-
-    const projectPoint = (pt, index, list) => {
-      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, list, sourceShot);
-      return projectWorldDirToFrameRectSample(targetShot, rect, dirs.centerDir, dirs.offsetDir);
-    };
-    const midpoint = (a, b) => ({
-      x: (Number(a.x || 0) + Number(b.x || 0)) * 0.5,
-      y: (Number(a.y || 0) + Number(b.y || 0)) * 0.5,
-      t: (Number(a.t || 0) + Number(b.t || 0)) * 0.5,
-      targetKind: "FRAME_LOCAL",
-      frameId: String(a.frameId || b.frameId || sourceShot.id || ""),
-    });
-    const mergeSamples = (left, right) => {
-      if (!left.length) return right;
-      if (!right.length) return left;
-      const out = left.slice();
-      const last = out[out.length - 1];
-      const first = right[0];
-      if (Math.hypot(last.x - first.x, last.y - first.y) < 1e-6) out.pop();
-      return out.concat(right);
-    };
-    const subdivide = (a, b, depth = 0) => {
-      const pa = projectPoint(a, 0, [a, b]);
-      const pb = projectPoint(b, 1, [a, b]);
-      const mid = midpoint(a, b);
-      const pm = projectPoint(mid, 1, [a, mid, b]);
-      const linearMid = pa && pb ? { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 } : null;
-      const splitNeeded = depth < 7 && (
-        !pa || !pb || !pm
-        || (pa && pb && Math.hypot(pb.x - pa.x, pb.y - pa.y) > 28)
-        || (pm && linearMid && Math.hypot(pm.x - linearMid.x, pm.y - linearMid.y) > 2.5)
-      );
-      if (splitNeeded) return mergeSamples(subdivide(a, mid, depth + 1), subdivide(mid, b, depth + 1));
-      if (!pa || !pb) return [];
-      return [pa, pb];
-    };
-
-    const segments = [];
-    let current = [];
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const sampled = subdivide(points[i], points[i + 1], 0);
-      if (sampled.length < 2) {
-        if (current.length >= 2) segments.push(current);
-        current = [];
-        continue;
-      }
-      if (!current.length) {
-        current = sampled.slice();
-        continue;
-      }
-      const prev = current[current.length - 1];
-      const next = sampled[0];
-      const continuous = Math.hypot(prev.x - next.x, prev.y - next.y) < 10;
-      if (!continuous) {
-        if (current.length >= 2) segments.push(current);
-        current = sampled.slice();
-        continue;
-      }
-      current = mergeSamples(current, sampled);
-    }
-    if (current.length >= 2) segments.push(current);
-    return segments;
-  }
-
-  function projectFrameStrokeToCurrentErpView(stroke) {
-    const segments = projectFrameStrokeToCurrentErpViewSegments(stroke);
-    return segments.length ? segments[0] : [];
-  }
-
-  // ─── Projection caches ──────────────────────────────────────────────────────
-  // Keyed by stroke identity + view state. Invalidated when either changes.
-  // Avoids O(strokes × points × 2^depth) projection cost every frame.
-  const _erpSegCache = new Map();    // key → { pts, segs }
-  const _shotSegCache = new Map();   // key → { pts, segs }
-
-  function getCachedErpViewSegments(stroke) {
-    const geometry = stroke?.geometry;
-    if (!geometry) return [];
-    const pts = geometry.points;
-    const n = Array.isArray(pts) ? pts.length : 0;
-    const yaw = Number(editor.viewYaw ?? 0).toFixed(3);
-    const pitch = Number(editor.viewPitch ?? 0).toFixed(3);
-    const fov = Number(editor.viewFov ?? 0).toFixed(3);
-    const mode = editor.mode;
-    const cw = canvas.width;
-    const ch = canvas.height;
-    const key = `${String(stroke?.targetSpace?.frameId || "")}_${n}_${yaw}_${pitch}_${fov}_${mode}_${cw}_${ch}`;
-    const cached = _erpSegCache.get(key);
-    if (cached && cached.pts === pts) return cached.segs;
-    const segs = projectFrameStrokeToCurrentErpViewSegments(stroke);
-    _erpSegCache.set(key, { pts, segs });
-    // Limit cache size
-    if (_erpSegCache.size > 200) {
-      const oldest = _erpSegCache.keys().next().value;
-      _erpSegCache.delete(oldest);
-    }
-    return segs;
-  }
-
-  function getCachedShotRectSegments(stroke, shot, rect) {
-    const geometry = stroke?.geometry;
-    if (!geometry) return [];
-    const pts = geometry.points;
-    const n = Array.isArray(pts) ? pts.length : 0;
-    const shotId = String(shot?.id || "");
-    const key = `${String(stroke?.targetSpace?.frameId || "")}_${n}_${shotId}_${Math.round(rect?.x)}_${Math.round(rect?.y)}_${Math.round(rect?.w)}_${Math.round(rect?.h)}`;
-    const cached = _shotSegCache.get(key);
-    if (cached && cached.pts === pts) return cached.segs;
-    const segs = projectFrameStrokeToShotRectSegments(stroke, shot, rect);
-    _shotSegCache.set(key, { pts, segs });
-    if (_shotSegCache.size > 200) {
-      const oldest = _shotSegCache.keys().next().value;
-      _shotSegCache.delete(oldest);
-    }
-    return segs;
-  }
-  // ────────────────────────────────────────────────────────────────────────────
-
-  function projectFrameStrokeToCurrentErpViewSegments(stroke) {
-    const geometry = stroke?.geometry;
-    if (!geometry || geometry.geometryKind !== "freehand_open") return [];
-    const shotId = String(stroke?.targetSpace?.frameId || "");
-    const liveShot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
-    const shot = stroke?.frameSnapshot ? { ...stroke.frameSnapshot } : liveShot;
-    if (!shot) return [];
-    const points = Array.isArray(geometry.points) ? geometry.points : [];
-    if (points.length < 2) return [];
-    const projectPoint = (pt, index, list) => {
-      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, list, shot);
-      return projectWorldDirToCurrentViewSample(dirs.centerDir, dirs.offsetDir);
-    };
-    const midpoint = (a, b) => ({
-      x: (Number(a.x || 0) + Number(b.x || 0)) * 0.5,
-      y: (Number(a.y || 0) + Number(b.y || 0)) * 0.5,
-      t: (Number(a.t || 0) + Number(b.t || 0)) * 0.5,
-      targetKind: "FRAME_LOCAL",
-      frameId: String(a.frameId || b.frameId || shotId || ""),
-    });
-    const mergeSamples = (left, right) => {
-      if (!left.length) return right;
-      if (!right.length) return left;
-      const out = left.slice();
-      const last = out[out.length - 1];
-      const first = right[0];
-      if (Math.hypot(last.x - first.x, last.y - first.y) < 1e-6) out.pop();
-      return out.concat(right);
-    };
-    const subdivide = (a, b, depth = 0) => {
-      const pa = projectPoint(a, 0, [a, b]);
-      const pb = projectPoint(b, 1, [a, b]);
-      const mid = midpoint(a, b);
-      const pm = projectPoint(mid, 1, [a, mid, b]);
-      const linearMid = pa && pb ? { x: (pa.x + pb.x) * 0.5, y: (pa.y + pb.y) * 0.5 } : null;
-      const splitNeeded = depth < 7 && (
-        !pa || !pb || !pm
-        || (pa && pb && Math.hypot(pb.x - pa.x, pb.y - pa.y) > 28)
-        || (pm && linearMid && Math.hypot(pm.x - linearMid.x, pm.y - linearMid.y) > 2.5)
-      );
-      if (splitNeeded) return mergeSamples(subdivide(a, mid, depth + 1), subdivide(mid, b, depth + 1));
-      if (!pa || !pb || (editor.mode !== "unwrap" && ((pa.z || 1) <= 0 || (pb.z || 1) <= 0))) return [];
-      return [pa, pb];
-    };
-    const segments = [];
-    let current = [];
-    for (let i = 0; i < points.length - 1; i += 1) {
-      const sampled = subdivide(points[i], points[i + 1], 0);
-      if (sampled.length < 2) {
-        if (current.length >= 2) segments.push(current);
-        current = [];
-        continue;
-      }
-      if (!current.length) {
-        current = sampled.slice();
-        continue;
-      }
-      const prev = current[current.length - 1];
-      const next = sampled[0];
-      const continuous = Math.hypot(prev.x - next.x, prev.y - next.y) < 10;
-      if (!continuous) {
-        if (current.length >= 2) segments.push(current);
-        current = sampled.slice();
-        continue;
-      }
-      current = mergeSamples(current, sampled);
-    }
-    if (current.length >= 2) segments.push(current);
-    return segments;
   }
 
   function drawProjectedStrokePath(projected, stroke, options = {}) {
@@ -3647,57 +3292,6 @@ function showEditor(node, type, options = {}) {
     return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
   }
 
-  function projectFrameLassoPointsToCurrentView(points, stroke) {
-    if (!Array.isArray(points) || points.length < 3) return [];
-    const shotId = String(stroke?.targetSpace?.frameId || "");
-    const sourceShot = stroke?.frameSnapshot
-      ? { ...stroke.frameSnapshot }
-      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
-    if (!sourceShot) return [];
-    if (editor.mode === "unwrap") {
-      const r = getUnwrapRect();
-      const projected = [];
-      for (const pt of points) {
-        const dir = frameLocalPointToWorldDir(sourceShot, pt);
-        if (!dir) return [];
-        const { lon, lat } = dirToLonLat(dir);
-        projected.push({
-          x: r.x + ((((lon / (2 * Math.PI)) + 0.5 + 1) % 1) * r.w),
-          y: r.y + ((0.5 - (lat / Math.PI)) * r.h),
-        });
-      }
-      return isProjectedPolygonContinuous(projected, Math.max(120, r.w * 0.5)) ? projected : [];
-    }
-    const projected = [];
-    for (const pt of points) {
-      const dir = frameLocalPointToWorldDir(sourceShot, pt);
-      const screen = dir ? projectDir(dir) : null;
-      if (!screen || Number(screen.z || 0) <= 0) return [];
-      projected.push({ x: Number(screen.x || 0), y: Number(screen.y || 0) });
-    }
-    return isProjectedPolygonContinuous(projected, Math.max(120, Math.max(canvas.width, canvas.height) * 0.35)) ? projected : [];
-  }
-
-  function projectFrameLassoPointsToShotRect(points, stroke, targetShot, rect) {
-    if (!Array.isArray(points) || points.length < 3 || !targetShot || !rect) return [];
-    const shotId = String(stroke?.targetSpace?.frameId || "");
-    const sourceShot = stroke?.frameSnapshot
-      ? { ...stroke.frameSnapshot }
-      : (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === shotId);
-    if (!sourceShot) return [];
-    const projected = [];
-    for (const pt of points) {
-      const dir = frameLocalPointToWorldDir(sourceShot, pt);
-      const local = dir ? worldDirToFrameLocalPoint(targetShot, dir) : null;
-      if (!local) return [];
-      projected.push({
-        x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
-        y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
-      });
-    }
-    return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
-  }
-
   function drawLassoPreviewPolygon(projected, stroke, options = {}) {
     if (!Array.isArray(projected) || projected.length < 3) return;
     const layerKind = String(stroke?.layerKind || "paint");
@@ -3724,68 +3318,6 @@ function showEditor(node, type, options = {}) {
     ctx.fill();
     if (layerKind !== "mask" && toolKind !== "eraser") ctx.stroke();
     ctx.restore();
-  }
-
-  function drawFramePaintingOverlayInRect(rect, shot, includeInteraction = false, includeNative = false) {
-    const strokes = [
-      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
-      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
-    ];
-    if (includeInteraction && (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill")) {
-      strokes.push(editor.interaction.stroke);
-    }
-    strokes.forEach((stroke) => {
-      if (stroke?.geometry?.geometryKind === "lasso_fill") {
-        if (stroke?.targetSpace?.kind === "FRAME_LOCAL" && stroke === editor.interaction?.stroke) {
-          drawLassoPreviewPolygon(projectLassoPointsToFrameView(stroke.geometry.points, shot, rect), stroke, { preview: true });
-          return;
-        }
-        if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-          drawLassoPreviewPolygon(projectErpLassoPointsToFrameRect(stroke.geometry.points, shot, rect), stroke);
-        }
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-        if (!includeNative && stroke !== editor.interaction?.stroke) return;
-        drawProjectedStrokePath(projectFrameStrokeToRect(stroke, shot, rect), stroke);
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-        drawProjectedStrokePath(projectErpStrokeToFrameRect(stroke, shot, rect), stroke);
-      }
-    });
-  }
-
-  function drawCutoutPreviewPaintingOverlayInRect(rect, shot, includeInteraction = false) {
-    // Skip expensive projection during active paint stroke — right-panel preview
-    // refreshes once drawing ends. Committed paint is visible via displayPaint raster.
-    if (editor.interaction?.kind === "paint_stroke") return;
-    const strokes = [
-      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
-      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
-    ];
-    if (includeInteraction && editor.interaction?.kind === "paint_lasso_fill") {
-      strokes.push(editor.interaction.stroke);
-    }
-    strokes.forEach((stroke) => {
-      if (stroke?.geometry?.geometryKind === "lasso_fill") {
-        if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-          drawLassoPreviewPolygon(projectErpLassoPointsToFrameRect(stroke.geometry.points, shot, rect), stroke);
-          return;
-        }
-        if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-          drawLassoPreviewPolygon(projectFrameLassoPointsToShotRect(stroke.geometry.points, stroke, shot, rect), stroke);
-        }
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-        drawProjectedStrokePath(projectErpStrokeToFrameRect(stroke, shot, rect), stroke);
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-        drawProjectedStrokeSegments(getCachedShotRectSegments(stroke, shot, rect), stroke);
-      }
-    });
   }
 
   function drawFrameViewBackground() {
@@ -3851,11 +3383,6 @@ function showEditor(node, type, options = {}) {
         backgroundOpacity: 1,
       });
     }
-    // ERP strokes are fully rendered via the WebGL ERP raster above.
-    // Only use Canvas2D overlay fallback when the paint engine raster is unavailable.
-    if (!erpRaster) {
-      drawFramePaintingOverlayInRect(rect, shot, false, false);
-    }
     ctx.restore();
     ctx.save();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
@@ -3863,33 +3390,6 @@ function showEditor(node, type, options = {}) {
     ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.w - 1, rect.h - 1);
     ctx.restore();
     return true;
-  }
-
-  function drawPaintingOverlay() {
-    if (!supportsErpPainting() && !supportsFramePainting()) return;
-    if (editor.mode === "frame") return;
-    // Skip expensive cross-view projection during active paint stroke — committed strokes
-    // are already visible via the paint engine raster. Projection refreshes on pointerup.
-    if (editor.interaction?.kind === "paint_stroke") return;
-    const strokes = [
-      ...(Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
-      ...(Array.isArray(state.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
-    ];
-    strokes.forEach((stroke) => {
-      if (stroke?.geometry?.geometryKind === "lasso_fill") {
-        if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-          drawLassoPreviewPolygon(projectFrameLassoPointsToCurrentView(stroke.geometry.points, stroke), stroke);
-        }
-        return;
-      }
-      if (stroke?.targetSpace?.kind === "ERP_GLOBAL") {
-        return;
-      } else if (stroke?.targetSpace?.kind === "FRAME_LOCAL") {
-        drawProjectedStrokeSegments(getCachedErpViewSegments(stroke), stroke);
-      } else {
-        return;
-      }
-    });
   }
 
   function drawScene() {
@@ -3900,7 +3400,6 @@ function showEditor(node, type, options = {}) {
     if (type === "stickers" && !stickerSceneDrawn) {
       renderModalStickerBodyFallback();
     }
-    drawPaintingOverlay();
     if (editor.mode !== "frame") drawObjects();
     if (editor.mode !== "frame") drawCutoutOutputPreview();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
@@ -4314,7 +3813,7 @@ function showEditor(node, type, options = {}) {
         <span>Paint Rebuild</span>
         <span class="meta">${editor.primaryTool === "cursor" ? "Cursor" : (editor.primaryTool === "paint" ? `Paint · ${editor.paintTool}` : `Mask · ${editor.maskTool}`)}</span>
       </div>
-      <div class="pano-param-note">ERP_GLOBAL stores normalized u,v. FRAME_LOCAL stores normalized x,y and may keep values outside 0..1 while clipping only the rendered result.</div>
+      <div class="pano-param-note">All strokes use ERP_GLOBAL (normalized u,v).</div>
       <div class="pano-param-note">Durable strokes: paint ${counts.paintCount} / mask ${counts.maskCount}</div>
       <div class="pano-section-title">
         <span>Transform</span>
@@ -5135,24 +4634,16 @@ function showEditor(node, type, options = {}) {
     };
   }
 
-  function screenPosToFramePoint(pos, shot, ts = performance.now()) {
-    const rect = getFrameViewRect(shot);
-    if (!rect) return null;
-    return {
-      targetKind: "FRAME_LOCAL",
-      frameId: String(shot?.id || ""),
-      x: (Number(pos.x) - rect.x) / Math.max(1, rect.w),
-      y: (Number(pos.y) - rect.y) / Math.max(1, rect.h),
-      t: Number(ts || 0),
-    };
-  }
-
   // Convert a frame-view screen position to ERP UV coordinates via world direction.
   // This ensures strokes drawn in frame view are world-fixed (painting on the panorama,
   // not on the camera lens). Moving the frame after painting does not affect stroke position.
   function screenPosToFrameAsErpPoint(pos, shot, ts = performance.now()) {
-    const framePoint = screenPosToFramePoint(pos, shot, ts);
-    if (!framePoint) return null;
+    const rect = getFrameViewRect(shot);
+    if (!rect) return null;
+    const framePoint = {
+      x: (Number(pos.x) - rect.x) / Math.max(1, rect.w),
+      y: (Number(pos.y) - rect.y) / Math.max(1, rect.h),
+    };
     const dir = frameLocalPointToWorldDir(shot, framePoint);
     if (!dir) return null;
     const { lon, lat } = dirToLonLat(dir);
@@ -5181,36 +4672,8 @@ function showEditor(node, type, options = {}) {
     return true;
   }
 
-  function captureFrameSnapshot(shot) {
-    if (!shot) return null;
-    return {
-      yaw_deg: Number(shot.yaw_deg || 0),
-      pitch_deg: Number(shot.pitch_deg || 0),
-      hFOV_deg: Number(shot.hFOV_deg || 90),
-      vFOV_deg: Number(shot.vFOV_deg || 60),
-      roll_deg: Number(shot.roll_deg || 0),
-    };
-  }
-
   function captureStrokeRadiusSpec(targetSpace, sizePx) {
     const r = Number(sizePx || 0) * 0.5;
-    if (targetSpace?.kind === "FRAME_LOCAL") {
-      // radiusValue is stored as a fraction of frame-local width [0,1].
-      // Frame local [0,1] spans hFOV_deg on the sphere.
-      // ERP radiusValue r/2048 spans an angular radius of r/2048 * 360°.
-      // For angular consistency across views, we need:
-      //   radiusValue * hFOV_deg = (r/2048) * 360
-      //   radiusValue = r * 360 / (2048 * hFOV_deg)
-      // This ensures frame strokes appear the same angular size as ERP strokes
-      // when viewed together in panorama/unwrap. In frame view they appear larger
-      // because the frame is zoomed in (narrower FOV = higher magnification).
-      const shot = getActiveCutoutShot();
-      const hFovDeg = Math.max(1, Number(shot?.hFOV_deg || 90));
-      return {
-        radiusModel: "frame_local_norm",
-        radiusValue: Math.max(1e-6, r * 360 / (2048 * hFovDeg)),
-      };
-    }
     // ERP: normalize against 2048 (full equirectangular canvas reference width).
     return {
       radiusModel: "erp_uv_norm",
@@ -5241,7 +4704,6 @@ function showEditor(node, type, options = {}) {
       spacing: null,
       createdAt: Date.now(),
       color: layerKind === "paint" ? { ...editor.paintColor } : null,
-      frameSnapshot: targetSpace?.kind === "FRAME_LOCAL" ? captureFrameSnapshot(getActiveCutoutShot()) : null,
       radiusModel: radiusSpec.radiusModel,
       radiusValue: radiusSpec.radiusValue,
       geometry: {
@@ -5276,7 +4738,6 @@ function showEditor(node, type, options = {}) {
       spacing: null,
       createdAt: Date.now(),
       color: layerKind === "paint" ? { ...editor.paintColor } : null,
-      frameSnapshot: targetSpace?.kind === "FRAME_LOCAL" ? captureFrameSnapshot(getActiveCutoutShot()) : null,
       radiusModel: null,
       radiusValue: null,
       geometry: {
@@ -5332,11 +4793,11 @@ function showEditor(node, type, options = {}) {
   }
 
   function appendLassoPoint(interaction, pos, ts = performance.now()) {
-    const targetSpace = interaction?.stroke?.targetSpace || interaction?.targetSpace || null;
     let next;
-    if (targetSpace?.kind === "FRAME_LOCAL") {
-      const shot = (Array.isArray(state.shots) ? state.shots : []).find((it) => String(it?.id || "") === targetSpace.frameId) || { id: targetSpace.frameId };
-      next = screenPosToFramePoint(pos, shot, ts);
+    if (editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      if (!shot) return false;
+      next = screenPosToFrameAsErpPoint(pos, shot, ts);
     } else {
       next = screenPosToErpPoint(pos, ts);
     }

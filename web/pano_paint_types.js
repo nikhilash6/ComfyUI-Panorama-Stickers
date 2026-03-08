@@ -15,10 +15,7 @@ function normalizeTargetSpace(raw) {
   if (!raw || typeof raw !== "object") return null;
   const kind = String(raw.kind || "").trim();
   if (kind === "ERP_GLOBAL") return { kind: "ERP_GLOBAL" };
-  if (kind !== "FRAME_LOCAL") return null;
-  const frameId = String(raw.frameId || "").trim();
-  if (!frameId) return null;
-  return { kind: "FRAME_LOCAL", frameId };
+  return null;
 }
 
 function normalizePoint(raw, targetSpace) {
@@ -40,14 +37,7 @@ function normalizePoint(raw, targetSpace) {
     if (pressureLike != null) out.pressureLike = Math.max(0, pressureLike);
     return out;
   }
-  const x = finiteNumber(raw.x, null);
-  const y = finiteNumber(raw.y, null);
-  const frameId = String(raw.frameId || targetSpace.frameId || "").trim();
-  if (x == null || y == null || frameId !== targetSpace.frameId) return null;
-  const out = { targetKind: "FRAME_LOCAL", frameId, x, y, t };
-  if (widthScale != null) out.widthScale = Math.max(0, widthScale);
-  if (pressureLike != null) out.pressureLike = Math.max(0, pressureLike);
-  return out;
+  return null;
 }
 
 function normalizePointList(raw, targetSpace, minPoints = 1) {
@@ -96,26 +86,6 @@ function normalizeStroke(raw, layerKind) {
   const id = String(raw.id || "").trim();
   const actionGroupId = String(raw.actionGroupId || "").trim();
   if (!id || !actionGroupId) return null;
-  let frameSnapshot = null;
-  if (targetSpace.kind === "FRAME_LOCAL") {
-    const snap = raw.frameSnapshot;
-    if (snap && typeof snap === "object") {
-      const yaw_deg = finiteNumber(snap.yaw_deg, null);
-      const pitch_deg = finiteNumber(snap.pitch_deg, null);
-      const hFOV_deg = finiteNumber(snap.hFOV_deg, null);
-      const vFOV_deg = finiteNumber(snap.vFOV_deg, null);
-      const roll_deg = finiteNumber(snap.roll_deg, null);
-      if (yaw_deg != null && pitch_deg != null && hFOV_deg != null && vFOV_deg != null && roll_deg != null) {
-        frameSnapshot = {
-          yaw_deg,
-          pitch_deg,
-          hFOV_deg,
-          vFOV_deg,
-          roll_deg,
-        };
-      }
-    }
-  }
   const radiusValue = finiteNumber(raw.radiusValue, null);
   const radiusModel = String(raw.radiusModel || "").trim() || null;
   let color = null;
@@ -143,7 +113,6 @@ function normalizeStroke(raw, layerKind) {
     spacing: finiteNumber(raw.spacing, null),
     createdAt: Math.trunc(finiteNumber(raw.createdAt, 0)),
     color,
-    frameSnapshot,
     radiusModel,
     radiusValue: radiusValue == null ? null : Math.max(0, radiusValue),
     geometry,
