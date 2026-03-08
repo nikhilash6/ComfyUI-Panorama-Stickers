@@ -2821,9 +2821,6 @@ function showEditor(node, type, options = {}) {
 
   function getStrokePointList(stroke, key = "points") {
     const geometry = stroke?.geometry;
-    if (key === "points" && geometry?.geometryKind !== "lasso_fill") {
-      if (Array.isArray(geometry?.processedPoints) && geometry.processedPoints.length) return geometry.processedPoints;
-    }
     const points = Array.isArray(geometry?.[key]) ? geometry[key] : [];
     return points;
   }
@@ -2852,58 +2849,6 @@ function showEditor(node, type, options = {}) {
       pressureLike: lerp(getStrokePointScalar(a, "pressureLike", 1), getStrokePointScalar(b, "pressureLike", 1), t),
     });
   }
-
-  // ─── One Euro Filter (mild) ────────────────────────────────────────────────
-  // Very light jitter suppression. MIN_CUTOFF=30Hz → alpha≈0.75 at 60fps (subtle).
-  // BETA=1.0: fast strokes raise the cutoff further, so lag is near-zero when moving quickly.
-  const OEF_MIN_CUTOFF = 30.0; // Hz — base cutoff; higher = less filtering
-  const OEF_BETA       = 1.0;  // speed coefficient; high value = fast strokes barely touched
-  const OEF_D_CUTOFF   = 10.0; // Hz — derivative smoothing
-
-  function _oefAlpha(cutoffHz, dtSec) {
-    const tau = 1.0 / (2.0 * Math.PI * cutoffHz);
-    return 1.0 / (1.0 + tau / Math.max(1e-6, dtSec));
-  }
-
-  function _oefFilterAxis(s, raw, tMs) {
-    if (s.tPrev === null) {
-      s.prev = raw; s.dPrev = 0; s.tPrev = tMs;
-      return raw;
-    }
-    const dtSec = Math.max(1e-6, (tMs - s.tPrev) / 1000.0);
-    s.tPrev = tMs;
-    const dRaw = (raw - s.prev) / dtSec;
-    const alphaD = _oefAlpha(OEF_D_CUTOFF, dtSec);
-    const dFiltered = alphaD * dRaw + (1.0 - alphaD) * s.dPrev;
-    s.dPrev = dFiltered;
-    const alpha = _oefAlpha(OEF_MIN_CUTOFF + OEF_BETA * Math.abs(dFiltered), dtSec);
-    const filtered = alpha * raw + (1.0 - alpha) * s.prev;
-    s.prev = filtered;
-    return filtered;
-  }
-
-  function createOneEuroState() {
-    return {
-      u: { prev: 0, dPrev: 0, tPrev: null },
-      v: { prev: 0, dPrev: 0, tPrev: null },
-    };
-  }
-
-  function applyOneEuroFilter(state, point) {
-    const tMs = Number(point.t || 0);
-    return {
-      ...point,
-      u: _oefFilterAxis(state.u, Number(point.u || 0), tMs),
-      v: _oefFilterAxis(state.v, Number(point.v || 0), tMs),
-    };
-  }
-
-  function replayOneEuroFilter(rawPoints) {
-    if (!Array.isArray(rawPoints) || rawPoints.length === 0) return [];
-    const state = createOneEuroState();
-    return rawPoints.map((pt) => applyOneEuroFilter(state, pt));
-  }
-  // ──────────────────────────────────────────────────────────────────────────
 
   function getFreehandResampleSpacing(targetSpace, finalPass = false) {
     return finalPass ? 0.0012 : 0.0018;
@@ -2980,18 +2925,6 @@ function showEditor(node, type, options = {}) {
     for (let i = 0; i < passes; i += 1) curved = chaikinPass(curved);
     const finalPoints = buildUniformSamples(curved, Math.max(spacing * 0.75, 0.00055));
     return finalPoints;
-  }
-
-  function updateStrokeProcessedPoints(stroke, finalPass = false) {
-    const geometry = stroke?.geometry;
-    if (!geometry || geometry.geometryKind === "lasso_fill") return;
-    const rawPoints = Array.isArray(geometry.rawPoints) && geometry.rawPoints.length
-      ? geometry.rawPoints
-      : (Array.isArray(geometry.points) ? geometry.points : []);
-    const oefFiltered = replayOneEuroFilter(rawPoints);
-    const processed = processFreehandPoints(oefFiltered, stroke?.targetSpace, finalPass);
-    geometry.processedPoints = processed.map((pt) => ({ ...pt }));
-    geometry.points = geometry.processedPoints.map((pt) => ({ ...pt }));
   }
 
   function getStrokePointScalar(point, name, fallback = 1) {
