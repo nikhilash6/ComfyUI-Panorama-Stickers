@@ -6,18 +6,30 @@
 //   Active stroke      = currentStroke (ephemeral, accumulated incrementally)
 //   Display            = composed from committed + currentStroke on demand (per rAF frame)
 //
-// Rendering strategy: Incremental midpoint-bezier
+// Rendering strategy: Stamp-based soft brush
 //
-//   For paint / mask / eraser strokes:
-//     - currentStroke is ACCUMULATED, never cleared per pointermove
-//     - Each new point appends one bezier segment: O(1) per point
-//     - commit = drawImage(currentStroke -> committed). Shape cannot change on pointerup.
-//     - rebuildCommitted uses the same midpoint-bezier algorithm from rawPoints.
+//   Each freehand stroke is rendered as a sequence of pre-baked OffscreenCanvas stamp
+//   images (radial gradient) placed along the path at spacing intervals.
+//   The stamp is cached by (radiusPx, hardness, color) — LRU, max 128 entries.
 //
-//   Eraser display compositing:
-//     - currentStroke holds the eraser path drawn in white (source-over on transparent)
-//     - composeDisplayPaint applies destination-out to show the preview correctly
-//     - commit applies the same destination-out to the committed layer
+//   Live drawing (O(1) per pointermove):
+//     - Each new raw point triggers a spacing walk on the single [prev→current] segment.
+//     - Only the new stamps for that segment are drawn to currentStroke.
+//     - At commit, currentStroke is merged (drawImage) into the committed layer.
+//
+//   Rebuild (undo/redo, reload):
+//     - Full spacing walk replayed from processedPoints (or rawPoints if not set).
+//
+//   Eraser: draws white stamps to currentStroke (source-over); composeDisplayPaint
+//           applies destination-out for the live preview; commit applies destination-out
+//           to the committed layer.
+//
+//   Lasso fill: polygon fill via canvas Path2D — no stamps needed.
+//
+//   ERP seam: stamps near the u=0 / u=1 wrap boundary are mirrored so the stroke
+//             renders correctly at the panorama seam.
+
+// ─── Canvas Surface Utilities ─────────────────────────────────────────────────
 
 function createCanvasSurface(width, height) {
   const canvas = document.createElement("canvas");
@@ -36,7 +48,6 @@ function resizeSurface(surface, width, height) {
   const nextW = Math.max(1, Math.round(width));
   const nextH = Math.max(1, Math.round(height));
   if (surface.canvas.width !== nextW || surface.canvas.height !== nextH) {
-    // Assigning canvas dimensions implicitly clears the canvas.
     surface.canvas.width = nextW;
     surface.canvas.height = nextH;
     surface.ctx.imageSmoothingEnabled = true;
@@ -49,6 +60,8 @@ function clearSurface(surface) {
   surface.ctx.clearRect(0, 0, surface.canvas.width, surface.canvas.height);
 }
 
+// ─── Mask Tint Overlay ────────────────────────────────────────────────────────
+
 // Shared temp canvas for drawMaskTint — resized lazily, never shrunk.
 let _maskTintTmp = null;
 
@@ -58,119 +71,222 @@ function drawMaskTint(displayCtx, maskCanvas) {
   if (!displayCtx || !maskCanvas) return;
   const w = maskCanvas.width;
   const h = maskCanvas.height;
-  // Lazily create / grow the shared temp surface
   if (!_maskTintTmp || _maskTintTmp.canvas.width < w || _maskTintTmp.canvas.height < h) {
-    _maskTintTmp = createCanvasSurface(Math.max(w, _maskTintTmp?.canvas.width || 0), Math.max(h, _maskTintTmp?.canvas.height || 0));
+    _maskTintTmp = createCanvasSurface(
+      Math.max(w, _maskTintTmp?.canvas.width || 0),
+      Math.max(h, _maskTintTmp?.canvas.height || 0),
+    );
   }
   const tmp = _maskTintTmp;
   tmp.ctx.clearRect(0, 0, w, h);
-  // Step 1: draw mask (white marks on transparent)
   tmp.ctx.drawImage(maskCanvas, 0, 0);
-  // Step 2: source-in — keep only pixels within the mask shape, fill them green
   tmp.ctx.globalCompositeOperation = "source-in";
   tmp.ctx.fillStyle = "rgba(34, 197, 94, 0.82)";
   tmp.ctx.fillRect(0, 0, w, h);
-  tmp.ctx.globalCompositeOperation = "source-over"; // reset for next use
-  // Step 3: overlay the green mask shape onto display (leaves paint pixels intact)
+  tmp.ctx.globalCompositeOperation = "source-over";
   displayCtx.save();
   displayCtx.globalCompositeOperation = "source-over";
   displayCtx.drawImage(tmp.canvas, 0, 0, w, h);
   displayCtx.restore();
 }
 
+// ─── Coordinate Helpers ───────────────────────────────────────────────────────
+
 function getTargetCoord(point) {
   if (!point || typeof point !== "object") return { x: 0, y: 0 };
   return { x: Number(point.u || 0), y: Number(point.v || 0) };
 }
 
-// Return the best available point list for rendering.
-// Priority: processedPoints (smoothed, used by rebuild/undo) > rawPoints > points.
-// During live drawing processedPoints is empty, so rawPoints is used.
-// After commit, updateStrokeProcessedPoints fills processedPoints; subsequent rebuilds
-// (undo/redo, reload) then use the smoothed version, matching live rendering quality.
+// Return the point list for rendering.
+// Priority: rawPoints (source of truth) > points.
+// processedPoints is intentionally ignored — live and rebuild use the same raw data.
 function getRawPoints(stroke) {
   const geometry = stroke?.geometry;
   if (!geometry) return [];
-  if (Array.isArray(geometry.processedPoints) && geometry.processedPoints.length) return geometry.processedPoints;
   if (Array.isArray(geometry.rawPoints) && geometry.rawPoints.length) return geometry.rawPoints;
   if (Array.isArray(geometry.points) && geometry.points.length) return geometry.points;
   return [];
 }
 
+// ─── Brush Radius ─────────────────────────────────────────────────────────────
+
 function getRadiusPx(stroke, descriptor) {
   const radiusValue = Number(stroke?.radiusValue);
   const radiusModel = String(stroke?.radiusModel || "").trim();
-  if ((radiusModel === "frame_local_norm" || radiusModel === "erp_uv_norm") && radiusValue > 0) {
-    return Math.max(0.5, radiusValue * (descriptor?.width || 1));
+  const w = descriptor?.width || 1;
+  if ((radiusModel === "erp_uv_norm" || radiusModel === "frame_local_norm") && radiusValue > 0) {
+    // radiusValue = radius_px / reference_width (reference = 2048)
+    return Math.max(0.5, radiusValue * w);
+  }
+  if (radiusModel === "degree_norm" && radiusValue > 0) {
+    // radiusValue = angle_radius_degrees / 90; at equator, pixel_radius ≈ angle/360 * width
+    return Math.max(0.5, (radiusValue * 90 / 360) * w);
   }
   return Math.max(0.5, Number(stroke?.baseSize || stroke?.size || 10) * 0.5);
 }
 
-function strokeStyleForKind(stroke) {
-  // For eraser and mask: always white (currentStroke is then composited with dest-out or tint)
-  // For paint: use stroke color
+// Stamp spacing in pixels. Falls back to brush-type defaults if not set on the stroke.
+// Spacing = fraction of diameter. Smaller = denser stamps = smoother appearance.
+function getSpacingPx(stroke, radiusPx) {
+  const explicit = Number(stroke?.spacing);
+  if (Number.isFinite(explicit) && explicit > 0) return Math.max(1, explicit * radiusPx * 2);
+  const toolKind = String(stroke?.toolKind || "pen");
+  const denseTools = toolKind === "brush" || toolKind === "eraser";
+  const fraction = denseTools ? 0.15 : 0.2;
+  return Math.max(1, fraction * radiusPx * 2);
+}
+
+// ─── Stamp Texture Cache ──────────────────────────────────────────────────────
+
+// LRU cache: Map retains insertion order; oldest entry = first key.
+const _stampCache = new Map();
+const STAMP_CACHE_MAX = 128;
+
+// Build (or retrieve cached) stamp OffscreenCanvas for the given brush parameters.
+// The stamp is a radial gradient: full opacity out to (hardness * radius), fading to 0 at radius.
+// Color (r255, g255, b255) and opacity are baked in so the same texture is ready to draw.
+function buildStampTexture(radiusPx, hardness, r255, g255, b255, opacity) {
+  const rr = Math.max(1, Math.round(radiusPx));
+  const h = Math.max(0, Math.min(1, hardness));
+  const key = `${rr}:${h.toFixed(2)}:${r255}:${g255}:${b255}:${opacity.toFixed(3)}`;
+
+  if (_stampCache.has(key)) {
+    const stamp = _stampCache.get(key);
+    // LRU: promote to most-recent by re-inserting
+    _stampCache.delete(key);
+    _stampCache.set(key, stamp);
+    return stamp;
+  }
+
+  // Evict the oldest entry when at capacity
+  if (_stampCache.size >= STAMP_CACHE_MAX) {
+    _stampCache.delete(_stampCache.keys().next().value);
+  }
+
+  const size = rr * 2 + 2;
+  const center = rr + 1;
+  const canvas = new OffscreenCanvas(size, size);
+  const ctx = canvas.getContext("2d");
+
+  // Radial gradient: innerR = hardness boundary (hard core), outerR = brush edge
+  const innerR = h * rr;       // inside this → full opacity
+  const outerR = rr + 1;       // at this radius → fully transparent
+  const colorFull = `rgba(${r255},${g255},${b255},${opacity})`;
+  const colorZero = `rgba(${r255},${g255},${b255},0)`;
+  const grad = ctx.createRadialGradient(center, center, innerR, center, center, outerR);
+  grad.addColorStop(0, colorFull);
+  grad.addColorStop(1, colorZero);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  _stampCache.set(key, canvas);
+  return canvas;
+}
+
+// ─── Stamp Color ─────────────────────────────────────────────────────────────
+
+// Returns {r, g, b, a} for buildStampTexture.
+// Eraser and mask strokes always use white (composited with destination-out / tint later).
+// Paint strokes use the stroke color * opacity.
+function getStampColor(stroke) {
   const layerKind = String(stroke?.layerKind || "paint");
   const toolKind = String(stroke?.toolKind || "pen");
   if (toolKind === "eraser" || layerKind === "mask") {
-    return "rgba(255,255,255,1)";
+    return { r: 255, g: 255, b: 255, a: 1 };
   }
   const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
-  const alpha = Math.max(0, Math.min(1, Number(c.a ?? stroke?.opacity ?? 1)));
+  const opacity = Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
+  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1))) * opacity;
+  return {
+    r: Math.round(Math.max(0, Math.min(1, Number(c.r || 0))) * 255),
+    g: Math.round(Math.max(0, Math.min(1, Number(c.g || 0))) * 255),
+    b: Math.round(Math.max(0, Math.min(1, Number(c.b || 0))) * 255),
+    a: alpha,
+  };
+}
+
+// CSS color string for lasso fill polygon (not stamp-based).
+// Fixes opacity bug: multiplies color.a by stroke.opacity.
+function strokeStyleForKind(stroke) {
+  const layerKind = String(stroke?.layerKind || "paint");
+  const toolKind = String(stroke?.toolKind || "pen");
+  if (toolKind === "eraser" || layerKind === "mask") return "rgba(255,255,255,1)";
+  const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+  const opacity = Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
+  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1))) * opacity;
   return `rgba(${Math.round(Number(c.r || 0) * 255)},${Math.round(Number(c.g || 0) * 255)},${Math.round(Number(c.b || 0) * 255)},${alpha})`;
 }
 
-// Draw a freehand stroke using midpoint-bezier algorithm.
-// Used by rebuildCommitted to reproduce the exact same curve produced by incremental rendering.
-//
-// For non-eraser: draws directly with stroke color (source-over) → additive
-// For eraser: draws WHITE marks (source-over) → caller applies destination-out when compositing
-function drawMidpointBezierStroke(ctx, stroke, descriptor) {
-  const rawPoints = getRawPoints(stroke);
-  if (!ctx || !rawPoints.length) return;
+// ─── Curve Helpers ────────────────────────────────────────────────────────────
 
-  const w = descriptor.width;
-  const h = descriptor.height;
-  const lineWidth = Math.max(1, getRadiusPx(stroke, descriptor) * 2);
-  const style = strokeStyleForKind(stroke);
+// ─── Stamp Drawing ────────────────────────────────────────────────────────────
+
+// Draw one stamp at (cx, cy) in descriptor pixel space.
+// widthScale scales the stamp radius (for pressure-like variation).
+// Mirrors at the ERP seam (u=0 / u=1) so strokes wrap correctly.
+function _drawSingleStamp(ctx, stampTex, cx, cy, radiusPx, widthScale, descriptorW) {
+  const ws = Math.max(0.01, Number.isFinite(widthScale) ? widthScale : 1);
+  const r = Math.max(0.5, radiusPx * ws);
+  const d = r * 2;
+  ctx.drawImage(stampTex, cx - r, cy - r, d, d);
+  // ERP seam mirror: if the stamp overlaps the u=0 or u=1 boundary, draw the wrapped copy.
+  if (cx - r < 0) ctx.drawImage(stampTex, cx + descriptorW - r, cy - r, d, d);
+  if (cx + r > descriptorW) ctx.drawImage(stampTex, cx - descriptorW - r, cy - r, d, d);
+}
+
+// Draw a complete freehand stroke using the stamp engine.
+// Uses the same centripetal Catmull-Rom + midpoint-anchor algorithm as live rendering,
+// so rebuild (undo/redo) looks identical to the stroke as it was drawn.
+function drawStampStroke(ctx, stroke, descriptor) {
+  const points = getRawPoints(stroke);
+  if (!ctx || points.length === 0) return;
+
+  const W = descriptor.width;
+  const H = descriptor.height;
+  const radiusPx = getRadiusPx(stroke, descriptor);
+  const hardness = Math.max(0, Math.min(1, Number(stroke?.hardness ?? 0.9)));
+  const col = getStampColor(stroke);
+  const stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
+  const spacingPx = getSpacingPx(stroke, radiusPx);
+  const sc = { ctx, stampTex, radiusPx, spacingPx, W };
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = style;
-  ctx.fillStyle = style;
-  ctx.lineWidth = lineWidth;
 
-  const firstCoord = getTargetCoord(rawPoints[0]);
-  const fx = firstCoord.x * w;
-  const fy = firstCoord.y * h;
+  // Convert UV to pixel space
+  const pts = points.map((p) => ({ x: Number(p.u || 0) * W, y: Number(p.v || 0) * H }));
 
-  if (rawPoints.length === 1) {
-    ctx.beginPath();
-    ctx.arc(fx, fy, lineWidth * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-    return;
+  // First stamp at p0
+  _drawSingleStamp(ctx, stampTex, pts[0].x, pts[0].y, radiusPx, 1, W);
+
+  if (pts.length === 1) { ctx.restore(); return; }
+
+  // Mirror appendStrokePoint: midpoint anchors + centripetal CR
+  let pprev = pts[0];
+  let prev  = pts[0];
+  let lastMid = pts[0];
+  let dist = 0;
+
+  for (let i = 1; i < pts.length; i++) {
+    const curr = pts[i];
+    const mid = { x: (prev.x + curr.x) * 0.5, y: (prev.y + curr.y) * 0.5 };
+    if (i === 1) {
+      dist = _walkLinearStamps(sc, lastMid.x, lastMid.y, mid.x, mid.y, dist);
+    } else {
+      dist = _walkCRStamps(sc, pprev, lastMid, mid, curr, dist);
+    }
+    pprev = prev;
+    prev = curr;
+    lastMid = mid;
   }
 
-  ctx.beginPath();
-  ctx.moveTo(fx, fy);
-
-  let lastX = fx;
-  let lastY = fy;
-
-  for (let i = 1; i < rawPoints.length; i += 1) {
-    const coord = getTargetCoord(rawPoints[i]);
-    const px = coord.x * w;
-    const py = coord.y * h;
-    const midX = (lastX + px) * 0.5;
-    const midY = (lastY + py) * 0.5;
-    ctx.quadraticCurveTo(lastX, lastY, midX, midY);
-    lastX = px;
-    lastY = py;
+  // Final tail: lastMid → last raw point
+  if (pts.length === 2) {
+    _walkLinearStamps(sc, lastMid.x, lastMid.y, prev.x, prev.y, dist);
+  } else {
+    _walkCRStamps(sc, pprev, lastMid, prev, prev, dist);
   }
-  ctx.lineTo(lastX, lastY);
-  ctx.stroke();
+
   ctx.restore();
 }
 
@@ -197,18 +313,18 @@ function drawLassoFillNative(ctx, stroke, descriptor) {
   ctx.restore();
 }
 
-// For rebuild: draw stroke to the given ctx.
-// Eraser strokes are drawn as WHITE marks; caller must apply destination-out when compositing.
+// Draw a stroke to the given ctx.
+// Eraser strokes are rendered as WHITE marks; caller applies destination-out when compositing.
 function drawStrokeToSurface(ctx, stroke, descriptor) {
   const kind = String(stroke?.geometry?.geometryKind || "");
   if (kind === "lasso_fill") {
     drawLassoFillNative(ctx, stroke, descriptor);
   } else {
-    drawMidpointBezierStroke(ctx, stroke, descriptor);
+    drawStampStroke(ctx, stroke, descriptor);
   }
 }
 
-// Apply destination-out: erase committed layer where eraserCanvas has white marks.
+// Apply destination-out: erase target where eraserCanvas has white marks.
 function applyEraserToSurface(targetCtx, eraserCanvas) {
   targetCtx.save();
   targetCtx.globalCompositeOperation = "destination-out";
@@ -220,59 +336,153 @@ function targetKeyOf(descriptor) {
   return descriptor.kind === "ERP_GLOBAL" ? "erp" : `frame:${String(descriptor.frameId || "")}`;
 }
 
-// Append one point to the active freehand stroke using incremental midpoint-bezier.
-// x, y are normalized target-space coords [0,1].
-// O(1) per call — only the new segment is drawn; previous segments are not redrawn.
+// ─── Incremental Stamp Helpers ────────────────────────────────────────────────
+
+// Shared context passed to stamp-walk helpers to keep parameter counts small.
+// { ctx, stampTex, radiusPx, spacingPx, W }
+
+// Walk stamps along a straight segment (ax,ay)→(bx,by). Returns new distSinceStamp.
+function _walkLinearStamps(sc, ax, ay, bx, by, distSinceStamp) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const segLen = Math.hypot(dx, dy);
+  if (segLen < 1e-9) return distSinceStamp;
+  let toNext = sc.spacingPx - distSinceStamp;
+  while (toNext <= segLen) {
+    const t = toNext / segLen;
+    _drawSingleStamp(sc.ctx, sc.stampTex, ax + dx * t, ay + dy * t, sc.radiusPx, 1, sc.W);
+    toNext += sc.spacingPx;
+  }
+  return segLen - toNext + sc.spacingPx;
+}
+
+// Walk stamps along a centripetal Catmull-Rom segment from p1 to p2.
+// p0 and p3 are the flanking points used to compute entry/exit tangents.
+// All points are {x, y} in pixel space. Returns new distSinceStamp.
+// Centripetal parameterization (alpha=0.5) avoids overshoot at uneven point spacing.
+function _walkCRStamps(sc, p0, p1, p2, p3, distSinceStamp) {
+  // Knot intervals: sqrt of Euclidean distance (centripetal, alpha=0.5)
+  const eps = 1e-4;
+  const d01 = Math.sqrt(Math.hypot(p1.x - p0.x, p1.y - p0.y)) + eps;
+  const d12 = Math.sqrt(Math.hypot(p2.x - p1.x, p2.y - p1.y)) + eps;
+  const d23 = Math.sqrt(Math.hypot(p3.x - p2.x, p3.y - p2.y)) + eps;
+
+  const t0 = 0;
+  const t1 = d01;
+  const t2 = t1 + d12;
+  const t3 = t2 + d23;
+  const dt = t2 - t1;
+
+  // Walk 16 linear sub-segments along the CR curve from p1 to p2
+  const N = 16;
+  let dist = distSinceStamp;
+  let prevX = p1.x;
+  let prevY = p1.y;
+
+  for (let i = 1; i <= N; i++) {
+    const t = t1 + dt * i / N;
+
+    // Barry-Goldman non-uniform Catmull-Rom evaluation
+    const A1x = ((t1 - t) * p0.x + (t - t0) * p1.x) / (t1 - t0);
+    const A1y = ((t1 - t) * p0.y + (t - t0) * p1.y) / (t1 - t0);
+    const A2x = ((t2 - t) * p1.x + (t - t1) * p2.x) / (t2 - t1);
+    const A2y = ((t2 - t) * p1.y + (t - t1) * p2.y) / (t2 - t1);
+    const A3x = ((t3 - t) * p2.x + (t - t2) * p3.x) / (t3 - t2);
+    const A3y = ((t3 - t) * p2.y + (t - t2) * p3.y) / (t3 - t2);
+
+    const B1x = ((t2 - t) * A1x + (t - t0) * A2x) / (t2 - t0);
+    const B1y = ((t2 - t) * A1y + (t - t0) * A2y) / (t2 - t0);
+    const B2x = ((t3 - t) * A2x + (t - t1) * A3x) / (t3 - t1);
+    const B2y = ((t3 - t) * A2y + (t - t1) * A3y) / (t3 - t1);
+
+    const Cx = ((t2 - t) * B1x + (t - t1) * B2x) / (t2 - t1);
+    const Cy = ((t2 - t) * B1y + (t - t1) * B2y) / (t2 - t1);
+
+    dist = _walkLinearStamps(sc, prevX, prevY, Cx, Cy, dist);
+    prevX = Cx;
+    prevY = Cy;
+  }
+  return dist;
+}
+
+// ─── Incremental Stamp Append ─────────────────────────────────────────────────
+
+// Append one point to the active freehand stroke using centripetal Catmull-Rom stamp placement.
+// x, y are normalized target-space coords [0, 1].
+//
+// Algorithm: midpoint anchors + centripetal CR (mirrors drawStampStroke exactly).
+//   P0        → stamp at P0; initialize pprev=prev=P0, lastMid=P0
+//   P1        → linear walk from lastMid to mid(P0,P1); shift history
+//   P2 .. Pn  → CR walk from lastMid to mid(Pn-1,Pn), guided by pprev and Pn
+//   commit    → CR tail from lastMid to last raw point (ghost = last raw point)
+//
+// activeStroke state:
+//   pprev           — two raw points ago (pixel space {x,y})
+//   prev            — one raw point ago  (pixel space {x,y})
+//   lastMidX/Y      — midpoint anchor stamps were last drawn up to
+//   radiusPx, stampTex, spacingPx, distSinceStamp
+//   isEraser, layerKind, pointCount
 function appendStrokePoint(target, x, y, stroke) {
   const ctx = target.currentStroke.ctx;
   if (!ctx) return;
 
-  const w = target.descriptor.width;
-  const h = target.descriptor.height;
-  const px = x * w;
-  const py = y * h;
+  const desc = target.descriptor;
+  const px = x * desc.width;
+  const py = y * desc.height;
   const as = target.activeStroke;
 
-  if (!as?.pathStarted) {
-    // First point: configure style, draw an immediate dot, then open the path for subsequent segments.
-    // Without the immediate dot, single taps and very short strokes would be invisible until commit.
-    const lineWidth = Math.max(1, getRadiusPx(stroke, target.descriptor) * 2);
-    const style = strokeStyleForKind(stroke);
+  if (!as) {
+    // First point: place initial stamp, initialize CR history.
+    const radiusPx = getRadiusPx(stroke, desc);
+    const hardness = Math.max(0, Math.min(1, Number(stroke?.hardness ?? 0.9)));
+    const col = getStampColor(stroke);
+    const stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
+    const spacingPx = getSpacingPx(stroke, radiusPx);
     const isEraser = String(stroke?.toolKind || "") === "eraser";
     const layerKind = String(stroke?.layerKind || "paint");
 
-    ctx.save();
     ctx.globalCompositeOperation = "source-over";
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = style;
-    ctx.fillStyle = style;
-    ctx.lineWidth = lineWidth;
+    _drawSingleStamp(ctx, stampTex, px, py, radiusPx, 1, desc.width);
 
-    // Draw immediate dot so the first point is visible before any movement.
-    ctx.beginPath();
-    ctx.arc(px, py, lineWidth * 0.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Open path for incremental bezier segments.
-    ctx.beginPath();
-    ctx.moveTo(px, py);
-
-    target.activeStroke = { lastX: px, lastY: py, lineWidth, isEraser, layerKind, pathStarted: true, hasSegments: false };
+    target.activeStroke = {
+      pprev: { x: px, y: py },
+      prev:  { x: px, y: py },
+      lastMidX: px, lastMidY: py,
+      radiusPx, stampTex, spacingPx,
+      distSinceStamp: 0,
+      isEraser, layerKind,
+      pointCount: 1,
+    };
     target.displayDirty = true;
     return;
   }
 
-  // Subsequent point: draw bezier to midpoint, leave path open for next segment
-  const midX = (as.lastX + px) * 0.5;
-  const midY = (as.lastY + py) * 0.5;
-  ctx.quadraticCurveTo(as.lastX, as.lastY, midX, midY);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(midX, midY);
-  as.lastX = px;
-  as.lastY = py;
-  as.hasSegments = true;
+  const midX = (as.prev.x + px) * 0.5;
+  const midY = (as.prev.y + py) * 0.5;
+
+  ctx.globalCompositeOperation = "source-over";
+  const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, W: desc.width };
+
+  if (as.pointCount === 1) {
+    // Second point: linear from first stamp to first midpoint anchor.
+    as.distSinceStamp = _walkLinearStamps(sc, as.lastMidX, as.lastMidY, midX, midY, as.distSinceStamp);
+  } else {
+    // Third+ point: centripetal CR from lastMid to newMid, guided by pprev and curr.
+    as.distSinceStamp = _walkCRStamps(
+      sc,
+      as.pprev,
+      { x: as.lastMidX, y: as.lastMidY },
+      { x: midX, y: midY },
+      { x: px, y: py },
+      as.distSinceStamp,
+    );
+  }
+
+  as.pprev = as.prev;
+  as.prev  = { x: px, y: py };
+  as.lastMidX = midX;
+  as.lastMidY = midY;
+  as.pointCount++;
   target.displayDirty = true;
 }
 
@@ -295,7 +505,7 @@ export function createPaintEngineManager() {
   let activeTargetKey = "";
   let activeLayerKind = "";
 
-  // ERP_GLOBAL is the only painting target. All strokes are stored in ERP UV space.
+  // ERP_GLOBAL is the only painting target.
   function ensureTarget(_descriptor) {
     return erpTarget;
   }
@@ -320,7 +530,6 @@ export function createPaintEngineManager() {
       } else {
         // Mask eraser: show paint + (mask minus eraser)
         dCtx.drawImage(target.committedPaint.canvas, 0, 0);
-        // Build temporary mask-minus-eraser for tint display
         const tmp = createCanvasSurface(target.committedMask.canvas.width, target.committedMask.canvas.height);
         tmp.ctx.drawImage(target.committedMask.canvas, 0, 0);
         applyEraserToSurface(tmp.ctx, target.currentStroke.canvas);
@@ -353,7 +562,7 @@ export function createPaintEngineManager() {
     ];
 
     allStrokes.forEach((stroke) => {
-      // Only ERP_GLOBAL strokes are supported. Legacy FRAME_LOCAL strokes are ignored.
+      // Only ERP_GLOBAL strokes are supported. Legacy FRAME_LOCAL strokes are silently ignored.
       if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") return;
 
       const descriptor = erpTarget.descriptor;
@@ -377,7 +586,7 @@ export function createPaintEngineManager() {
     composeDisplayPaint(erpTarget);
   }
 
-  // Begin a new stroke: clear currentStroke canvas, initialize incremental state.
+  // Begin a new stroke: clear currentStroke canvas, reset active stroke state.
   function beginStroke(stroke, descriptor) {
     const target = ensureTarget(descriptor);
     activeTargetKey = targetKeyOf(target.descriptor);
@@ -387,48 +596,37 @@ export function createPaintEngineManager() {
     target.displayDirty = true;
   }
 
-  // Commit the active stroke: finalize path, merge currentStroke into committed layer.
-  // O(1) — no re-render. Shape is identical to live preview.
+  // Commit the active stroke: merge currentStroke bitmap into the committed layer.
   function commitActiveStroke(stroke, descriptor) {
     const target = ensureTarget(descriptor);
     const as = target.activeStroke;
 
-    // Finalize path
-    if (as?.pathStarted) {
+    // Draw the pending tail: stamps have been placed up to lastMid; draw lastMid → last raw point.
+    if (as && as.pointCount > 1) {
       const ctx = target.currentStroke.ctx;
-      if (as.hasSegments) {
-        // Draw final segment to the last raw point
-        ctx.lineTo(as.lastX, as.lastY);
-        ctx.stroke();
+      ctx.globalCompositeOperation = "source-over";
+      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, W: target.descriptor.width };
+      if (as.pointCount === 2) {
+        // Only one linear segment was drawn; tail is also linear.
+        _walkLinearStamps(sc, as.lastMidX, as.lastMidY, as.prev.x, as.prev.y, as.distSinceStamp);
       } else {
-        // Single tap: no segments were drawn, render a dot
-        ctx.arc(as.lastX, as.lastY, as.lineWidth * 0.5, 0, Math.PI * 2);
-        ctx.fill();
+        // CR tail with ghost end (prev duplicated) to smoothly close the curve.
+        _walkCRStamps(sc, as.pprev, { x: as.lastMidX, y: as.lastMidY }, as.prev, as.prev, as.distSinceStamp);
       }
-      ctx.restore(); // paired with ctx.save() in appendStrokePoint first-point branch
     }
 
-    // Merge currentStroke into committed layer
     const layerKind = String(stroke?.layerKind || "paint");
     const surface = layerKind === "mask" ? target.committedMask : target.committedPaint;
 
     if (as?.isEraser) {
-      // Eraser: apply currentStroke (white marks) as destination-out
+      // Eraser: apply the white stamp bitmap as destination-out
       applyEraserToSurface(surface.ctx, target.currentStroke.canvas);
     } else {
-      // For paint/mask: prefer processedPoints if available so the committed layer
-      // matches what rebuildCommitted will produce (undo/redo/reload are then stable).
-      // This is a one-time "finalize" smoothing step at pointerup.
-      // If processedPoints are not yet filled, fall back to the live bitmap.
-      const procPoints = stroke?.geometry?.processedPoints;
-      if (Array.isArray(procPoints) && procPoints.length >= 1) {
-        drawMidpointBezierStroke(surface.ctx, stroke, target.descriptor);
-      } else {
-        surface.ctx.drawImage(target.currentStroke.canvas, 0, 0);
-      }
+      // Merge the live stamp bitmap directly into the committed layer.
+      // rebuildCommitted will use processedPoints for future undo/redo replays.
+      surface.ctx.drawImage(target.currentStroke.canvas, 0, 0);
     }
 
-    // Reset
     clearSurface(target.currentStroke);
     target.activeStroke = null;
     activeTargetKey = "";
@@ -439,10 +637,6 @@ export function createPaintEngineManager() {
 
   function cancelActiveStroke(descriptor) {
     const target = ensureTarget(descriptor);
-    if (target.activeStroke?.pathStarted) {
-      // Restore the ctx state that was saved in appendStrokePoint first-point branch
-      target.currentStroke.ctx.restore();
-    }
     clearSurface(target.currentStroke);
     target.activeStroke = null;
     activeLayerKind = "";
@@ -462,7 +656,7 @@ export function createPaintEngineManager() {
       target.displayDirty = true;
       composeDisplayPaint(target);
     }
-    // For freehand: appendStrokePoint handles it; this is a no-op.
+    // For freehand: appendStrokePoint handles it incrementally.
   }
 
   function getErpTarget() {

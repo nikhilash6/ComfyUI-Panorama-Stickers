@@ -2853,6 +2853,58 @@ function showEditor(node, type, options = {}) {
     });
   }
 
+  // ─── One Euro Filter (mild) ────────────────────────────────────────────────
+  // Very light jitter suppression. MIN_CUTOFF=30Hz → alpha≈0.75 at 60fps (subtle).
+  // BETA=1.0: fast strokes raise the cutoff further, so lag is near-zero when moving quickly.
+  const OEF_MIN_CUTOFF = 30.0; // Hz — base cutoff; higher = less filtering
+  const OEF_BETA       = 1.0;  // speed coefficient; high value = fast strokes barely touched
+  const OEF_D_CUTOFF   = 10.0; // Hz — derivative smoothing
+
+  function _oefAlpha(cutoffHz, dtSec) {
+    const tau = 1.0 / (2.0 * Math.PI * cutoffHz);
+    return 1.0 / (1.0 + tau / Math.max(1e-6, dtSec));
+  }
+
+  function _oefFilterAxis(s, raw, tMs) {
+    if (s.tPrev === null) {
+      s.prev = raw; s.dPrev = 0; s.tPrev = tMs;
+      return raw;
+    }
+    const dtSec = Math.max(1e-6, (tMs - s.tPrev) / 1000.0);
+    s.tPrev = tMs;
+    const dRaw = (raw - s.prev) / dtSec;
+    const alphaD = _oefAlpha(OEF_D_CUTOFF, dtSec);
+    const dFiltered = alphaD * dRaw + (1.0 - alphaD) * s.dPrev;
+    s.dPrev = dFiltered;
+    const alpha = _oefAlpha(OEF_MIN_CUTOFF + OEF_BETA * Math.abs(dFiltered), dtSec);
+    const filtered = alpha * raw + (1.0 - alpha) * s.prev;
+    s.prev = filtered;
+    return filtered;
+  }
+
+  function createOneEuroState() {
+    return {
+      u: { prev: 0, dPrev: 0, tPrev: null },
+      v: { prev: 0, dPrev: 0, tPrev: null },
+    };
+  }
+
+  function applyOneEuroFilter(state, point) {
+    const tMs = Number(point.t || 0);
+    return {
+      ...point,
+      u: _oefFilterAxis(state.u, Number(point.u || 0), tMs),
+      v: _oefFilterAxis(state.v, Number(point.v || 0), tMs),
+    };
+  }
+
+  function replayOneEuroFilter(rawPoints) {
+    if (!Array.isArray(rawPoints) || rawPoints.length === 0) return [];
+    const state = createOneEuroState();
+    return rawPoints.map((pt) => applyOneEuroFilter(state, pt));
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
   function getFreehandResampleSpacing(targetSpace, finalPass = false) {
     return finalPass ? 0.0012 : 0.0018;
   }
@@ -2936,7 +2988,8 @@ function showEditor(node, type, options = {}) {
     const rawPoints = Array.isArray(geometry.rawPoints) && geometry.rawPoints.length
       ? geometry.rawPoints
       : (Array.isArray(geometry.points) ? geometry.points : []);
-    const processed = processFreehandPoints(rawPoints, stroke?.targetSpace, finalPass);
+    const oefFiltered = replayOneEuroFilter(rawPoints);
+    const processed = processFreehandPoints(oefFiltered, stroke?.targetSpace, finalPass);
     geometry.processedPoints = processed.map((pt) => ({ ...pt }));
     geometry.points = geometry.processedPoints.map((pt) => ({ ...pt }));
   }
@@ -4715,11 +4768,9 @@ function showEditor(node, type, options = {}) {
       geometry: {
         geometryKind: "freehand_open",
         rawPoints: preparedPoints.map((pt) => ({ ...pt })),
-        processedPoints: preparedPoints.map((pt) => ({ ...pt })),
         points: preparedPoints.map((pt) => ({ ...pt })),
       },
     };
-    updateStrokeProcessedPoints(stroke, false);
     return stroke;
   }
 
@@ -4773,10 +4824,11 @@ function showEditor(node, type, options = {}) {
     }
     const rawPoints = interaction.stroke.geometry.rawPoints || interaction.stroke.geometry.points;
     const points = interaction.stroke.geometry.points;
-    const prev = points[points.length - 1];
-    if (prev) {
-      const du = Math.abs(Number(next.u ?? next.x ?? 0) - Number(prev.u ?? prev.x ?? 0));
-      const dv = Math.abs(Number(next.v ?? next.y ?? 0) - Number(prev.v ?? prev.y ?? 0));
+    // Dedup against raw coords so OEF smoothing doesn't cause points to be incorrectly skipped
+    const prevRaw = rawPoints[rawPoints.length - 1];
+    if (prevRaw) {
+      const du = Math.abs(Number(next.u ?? next.x ?? 0) - Number(prevRaw.u ?? prevRaw.x ?? 0));
+      const dv = Math.abs(Number(next.v ?? next.y ?? 0) - Number(prevRaw.v ?? prevRaw.y ?? 0));
       if (du < 0.0015 && dv < 0.0015) return false;
     }
     const sample = {
@@ -4787,13 +4839,11 @@ function showEditor(node, type, options = {}) {
     };
     rawPoints.push({ ...sample });
     points.push({ ...sample });
-    // Incremental rendering: send new point directly to the engine (O(1), no full re-render)
+    // Incremental rendering: send raw point to engine (O(1), no full re-render)
     const targetDescriptor = getActivePaintTargetDescriptor(interaction);
     if (targetDescriptor) {
       const engineTarget = editor.paintEngine.ensureTarget(targetDescriptor);
-      const cx = Number(sample.u ?? sample.x ?? 0);
-      const cy = Number(sample.v ?? sample.y ?? 0);
-      editor.paintEngine.appendStrokePoint(engineTarget, cx, cy, interaction.stroke);
+      editor.paintEngine.appendStrokePoint(engineTarget, Number(sample.u ?? 0), Number(sample.v ?? 0), interaction.stroke);
     }
     return true;
   }
@@ -4833,8 +4883,7 @@ function showEditor(node, type, options = {}) {
       getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
       return true;
     }
-    updateStrokeProcessedPoints(interaction.stroke, false);
-    const points = geometry.processedPoints || geometry.points || [];
+    const points = geometry.rawPoints || geometry.points || [];
     if (points.length < 1) return false;
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
