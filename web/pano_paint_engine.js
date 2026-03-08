@@ -514,8 +514,25 @@ export function createPaintEngineManager() {
     return target;
   }
 
+  // Sync frame surfaces to match the given descriptors without touching the ERP surface.
+  // Called when only the frame list changes (add/remove/resize) — avoids a full rebuildCommitted.
+  function syncFrameTargets(frameDescriptors = []) {
+    const frameMap = new Map(frameDescriptors.map((item) => [String(item.id || ""), item]));
+    // Ensure surfaces exist for all current descriptors.
+    frameMap.forEach((descriptor) => {
+      ensureTarget(descriptor);
+    });
+    // Remove surfaces for frames that no longer exist.
+    const toDelete = [];
+    frameTargets.forEach((_, id) => {
+      if (!frameMap.has(id)) toDelete.push(id);
+    });
+    toDelete.forEach((id) => frameTargets.delete(id));
+  }
+
   return {
     rebuildCommitted,
+    syncFrameTargets,
     beginStroke,
     appendStrokePoint,
     updateActiveStroke,

@@ -1298,6 +1298,8 @@ function showEditor(node, type, options = {}) {
     paintEngine: createPaintEngineManager(),
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
+    _lastPaintStrokeKey: "",
+    _sortedItemsCache: null,
     paintCaches: { revisionKey: "", erp: null, frames: new Map() },
     panelLastValues: null,
     panelWasEnabled: false,
@@ -2585,7 +2587,14 @@ function showEditor(node, type, options = {}) {
 
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
-    const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    const rawList = getList();
+    if (!editor._sortedItemsCache || editor._sortedItemsCache.src !== rawList) {
+      editor._sortedItemsCache = {
+        src: rawList,
+        sorted: [...rawList].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0)),
+      };
+    }
+    const items = editor._sortedItemsCache.sorted;
     for (const item of items) {
       const selected = item.id === editor.selectedId;
       const g = objectGeom(item);
@@ -2721,13 +2730,33 @@ function showEditor(node, type, options = {}) {
     ctx.clip();
 
     const img = getConnectedErpImage();
+    const previewRect = { x: px, y: py, w: pw, h: ph };
+    const erpPreviewRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
+
+    const renderPreviewPaint = () => {
+      if (erpPreviewRaster) {
+        renderCutoutViewToContext2D({
+          owner: node,
+          cacheKey: "modal_cutout_output_preview_paint",
+          ctx,
+          rect: previewRect,
+          img: erpPreviewRaster,
+          view: cutoutView,
+          backgroundRevision: getPaintingRevisionKey(),
+          backgroundOpacity: 1,
+        });
+      } else {
+        drawCutoutPreviewPaintingOverlayInRect(previewRect, shot, false);
+      }
+    };
+
     if (!img || !img.complete || !(img.naturalWidth || img.width)) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
       ctx.fillRect(px, py, pw, ph);
       ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
       ctx.lineWidth = 1;
       ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
-      drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
+      renderPreviewPaint();
       ctx.restore();
       placeOutputPreviewToggle();
       return;
@@ -2739,7 +2768,7 @@ function showEditor(node, type, options = {}) {
       ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
       ctx.lineWidth = 1;
       ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
-      drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
+      renderPreviewPaint();
       ctx.restore();
       placeOutputPreviewToggle();
       return;
@@ -2749,7 +2778,7 @@ function showEditor(node, type, options = {}) {
       owner: node,
       cacheKey: "modal_cutout_output_preview",
       ctx,
-      rect: { x: px, y: py, w: pw, h: ph },
+      rect: previewRect,
       img,
       view: cutoutView,
     });
@@ -2757,12 +2786,12 @@ function showEditor(node, type, options = {}) {
       ctx,
       node,
       img,
-      { x: px, y: py, w: pw, h: ph },
+      previewRect,
       shot,
       mix > 0.65 ? "high" : "balanced",
     );
     void fallbackDrawn;
-    drawCutoutPreviewPaintingOverlayInRect({ x: px, y: py, w: pw, h: ph }, shot, false);
+    renderPreviewPaint();
     ctx.restore();
     placeOutputPreviewToggle();
   }
@@ -2960,12 +2989,15 @@ function showEditor(node, type, options = {}) {
   }
 
   function getPaintingRevisionKey() {
-    // O(frame_count) instead of O(stroke_count × point_count).
-    // paintStrokeRevision is incremented on every stroke commit, undo/redo, and clear all.
-    const frames = (Array.isArray(state.shots) ? state.shots : [])
+    // Tracks stroke changes only (commit, undo/redo, clear all).
+    // Frame list changes are tracked separately via getFrameListKey().
+    return String(editor.paintStrokeRevision);
+  }
+
+  function getFrameListKey() {
+    return (Array.isArray(state.shots) ? state.shots : [])
       .map((s) => `${s?.id}:${s?.out_w}x${s?.out_h}`)
       .join(",");
-    return `${editor.paintStrokeRevision}:${frames}`;
   }
 
   function getPaintEngineFrameDescriptors() {
@@ -2981,10 +3013,23 @@ function showEditor(node, type, options = {}) {
   }
 
   function rebuildPaintEngineIfNeeded() {
-    const revisionKey = getPaintingRevisionKey();
-    if (editor.paintEngineRevisionKey === revisionKey) return;
-    editor.paintEngineRevisionKey = revisionKey;
-    editor.paintEngine?.rebuildCommitted(state, getPaintEngineFrameDescriptors());
+    const strokeKey = getPaintingRevisionKey();
+    const frameKey = getFrameListKey();
+    const fullKey = `${strokeKey}|${frameKey}`;
+    if (editor.paintEngineRevisionKey === fullKey) return;
+
+    const strokeChanged = editor._lastPaintStrokeKey !== strokeKey;
+    editor.paintEngineRevisionKey = fullKey;
+    editor._lastPaintStrokeKey = strokeKey;
+
+    if (strokeChanged) {
+      // Strokes changed (commit/undo/redo/clear) → full rebuild of all surfaces.
+      editor.paintEngine?.rebuildCommitted(state, getPaintEngineFrameDescriptors());
+    } else {
+      // Only frame list changed (add/remove/resize) → sync frame surfaces only.
+      // ERP surface is untouched, avoiding O(n_strokes × n_points) rebuild.
+      editor.paintEngine?.syncFrameTargets(getPaintEngineFrameDescriptors());
+    }
   }
 
   function getActivePaintTargetDescriptor(interaction = null) {
@@ -3806,9 +3851,11 @@ function showEditor(node, type, options = {}) {
         backgroundOpacity: 1,
       });
     }
-    // ERP strokes drawn from other views are shown via the ERP raster above.
-    // Only overlay committed ERP strokes that originated from non-native paths (lasso fill etc).
-    drawFramePaintingOverlayInRect(rect, shot, false, false);
+    // ERP strokes are fully rendered via the WebGL ERP raster above.
+    // Only use Canvas2D overlay fallback when the paint engine raster is unavailable.
+    if (!erpRaster) {
+      drawFramePaintingOverlayInRect(rect, shot, false, false);
+    }
     ctx.restore();
     ctx.save();
     ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
