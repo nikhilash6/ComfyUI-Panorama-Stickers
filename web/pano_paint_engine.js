@@ -223,15 +223,23 @@ function strokeStyleForKind(stroke) {
 
 // Draw one stamp at (cx, cy) in descriptor pixel space.
 // widthScale scales the stamp radius (for pressure-like variation).
+// descriptorH is used to compute ERP latitude correction: near the poles, the horizontal
+// axis of ERP is compressed relative to the vertical axis, so the stamp is stretched
+// horizontally by 1/cos(lat) to appear as a circle on the sphere.
 // Mirrors at the ERP seam (u=0 / u=1) so strokes wrap correctly.
-function _drawSingleStamp(ctx, stampTex, cx, cy, radiusPx, widthScale, descriptorW) {
+// desc = { width, height } — descriptor pixel dimensions.
+// ERP latitude correction: stamps are horizontally stretched by 1/cos(lat) so they
+// appear as circles on the sphere rather than ellipses squished near the poles.
+function _drawSingleStamp(ctx, stampTex, cx, cy, radiusPx, widthScale, desc) {
   const ws = Math.max(0.01, Number.isFinite(widthScale) ? widthScale : 1);
-  const r = Math.max(0.5, radiusPx * ws);
-  const d = r * 2;
-  ctx.drawImage(stampTex, cx - r, cy - r, d, d);
-  // ERP seam mirror: if the stamp overlaps the u=0 or u=1 boundary, draw the wrapped copy.
-  if (cx - r < 0) ctx.drawImage(stampTex, cx + descriptorW - r, cy - r, d, d);
-  if (cx + r > descriptorW) ctx.drawImage(stampTex, cx - descriptorW - r, cy - r, d, d);
+  const rv = Math.max(0.5, radiusPx * ws);
+  const lat = (0.5 - cy / Math.max(1, desc.height)) * Math.PI;
+  const cosLat = Math.max(0.05, Math.cos(lat));
+  const rh = rv / cosLat;
+  const W = desc.width;
+  ctx.drawImage(stampTex, cx - rh, cy - rv, rh * 2, rv * 2);
+  if (cx - rh < 0) ctx.drawImage(stampTex, cx + W - rh, cy - rv, rh * 2, rv * 2);
+  if (cx + rh > W) ctx.drawImage(stampTex, cx - W - rh, cy - rv, rh * 2, rv * 2);
 }
 
 // Draw a complete freehand stroke using the stamp engine.
@@ -248,7 +256,7 @@ function drawStampStroke(ctx, stroke, descriptor) {
   const col = getStampColor(stroke);
   const stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
   const spacingPx = getSpacingPx(stroke, radiusPx);
-  const sc = { ctx, stampTex, radiusPx, spacingPx, W };
+  const sc = { ctx, stampTex, radiusPx, spacingPx, desc: descriptor };
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
@@ -257,7 +265,7 @@ function drawStampStroke(ctx, stroke, descriptor) {
   const pts = points.map((p) => ({ x: Number(p.u || 0) * W, y: Number(p.v || 0) * H }));
 
   // First stamp at p0
-  _drawSingleStamp(ctx, stampTex, pts[0].x, pts[0].y, radiusPx, 1, W);
+  _drawSingleStamp(ctx, stampTex, pts[0].x, pts[0].y, radiusPx, 1, descriptor);
 
   if (pts.length === 1) { ctx.restore(); return; }
 
@@ -339,7 +347,7 @@ function targetKeyOf(descriptor) {
 // ─── Incremental Stamp Helpers ────────────────────────────────────────────────
 
 // Shared context passed to stamp-walk helpers to keep parameter counts small.
-// { ctx, stampTex, radiusPx, spacingPx, W }
+// { ctx, stampTex, radiusPx, spacingPx, desc }  where desc = { width, height }
 
 // Walk stamps along a straight segment (ax,ay)→(bx,by). Returns new distSinceStamp.
 function _walkLinearStamps(sc, ax, ay, bx, by, distSinceStamp) {
@@ -350,7 +358,7 @@ function _walkLinearStamps(sc, ax, ay, bx, by, distSinceStamp) {
   let toNext = sc.spacingPx - distSinceStamp;
   while (toNext <= segLen) {
     const t = toNext / segLen;
-    _drawSingleStamp(sc.ctx, sc.stampTex, ax + dx * t, ay + dy * t, sc.radiusPx, 1, sc.W);
+    _drawSingleStamp(sc.ctx, sc.stampTex, ax + dx * t, ay + dy * t, sc.radiusPx, 1, sc.desc);
     toNext += sc.spacingPx;
   }
   return segLen - toNext + sc.spacingPx;
@@ -442,7 +450,7 @@ function appendStrokePoint(target, x, y, stroke) {
     const layerKind = String(stroke?.layerKind || "paint");
 
     ctx.globalCompositeOperation = "source-over";
-    _drawSingleStamp(ctx, stampTex, px, py, radiusPx, 1, desc.width);
+    _drawSingleStamp(ctx, stampTex, px, py, radiusPx, 1, desc);
 
     target.activeStroke = {
       pprev: { x: px, y: py },
@@ -461,7 +469,7 @@ function appendStrokePoint(target, x, y, stroke) {
   const midY = (as.prev.y + py) * 0.5;
 
   ctx.globalCompositeOperation = "source-over";
-  const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, W: desc.width };
+  const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc };
 
   if (as.pointCount === 1) {
     // Second point: linear from first stamp to first midpoint anchor.
@@ -605,7 +613,7 @@ export function createPaintEngineManager() {
     if (as && as.pointCount > 1) {
       const ctx = target.currentStroke.ctx;
       ctx.globalCompositeOperation = "source-over";
-      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, W: target.descriptor.width };
+      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc: target.descriptor };
       if (as.pointCount === 2) {
         // Only one linear segment was drawn; tail is also linear.
         _walkLinearStamps(sc, as.lastMidX, as.lastMidY, as.prev.x, as.prev.y, as.distSinceStamp);
