@@ -536,6 +536,28 @@
   margin-left: 6px;
   white-space: nowrap;
 }
+.pano-paint-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 4px;
+  border-left: 1px solid rgba(255,255,255,0.12);
+}
+.pano-paint-size-label {
+  font-size: 11px;
+  color: var(--pano-text-secondary);
+  white-space: nowrap;
+}
+.pano-paint-size-slider {
+  width: 80px;
+  cursor: pointer;
+}
+.pano-paint-size-value {
+  font-size: 11px;
+  color: var(--pano-text-primary, #fff);
+  min-width: 24px;
+  text-align: right;
+}
 .pano-side-footer {
   margin-top: auto;
   display: flex;
