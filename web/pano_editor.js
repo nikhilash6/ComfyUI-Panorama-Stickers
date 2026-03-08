@@ -2271,11 +2271,13 @@ function showEditor(node, type, options = {}) {
     rebuildPaintEngineIfNeeded();
     const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
     if (erpRaster) {
-      // During active paint stroke, append point count to backgroundRevision so WebGL
-      // re-uploads displayPaint every frame (live stroke preview). Otherwise use the
-      // committed revision key so texture upload is skipped when nothing changed.
-      const activePoints = editor.interaction?.kind === "paint_stroke"
-        ? `_live${editor.interaction.stroke?.geometry?.rawPoints?.length ?? 0}`
+      // During active paint stroke or lasso fill, append point count to backgroundRevision so
+      // WebGL re-uploads displayPaint every frame (live preview). Otherwise use the committed
+      // revision key so texture upload is skipped when nothing changed.
+      const _iKind = editor.interaction?.kind;
+      const _iGeo = editor.interaction?.stroke?.geometry;
+      const activePoints = (_iKind === "paint_stroke" || _iKind === "paint_lasso_fill")
+        ? `_live${_iGeo?.rawPoints?.length ?? _iGeo?.points?.length ?? 0}`
         : "";
       renderErpViewToContext2D({
         owner: node,
@@ -3369,8 +3371,10 @@ function showEditor(node, type, options = {}) {
     // the correct slice of the panorama paint for the current frame orientation.
     const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
     if (erpRaster) {
-      const activePoints = editor.interaction?.kind === "paint_stroke"
-        ? `_live${editor.interaction.stroke?.geometry?.rawPoints?.length ?? 0}`
+      const _iKind = editor.interaction?.kind;
+      const _iGeo = editor.interaction?.stroke?.geometry;
+      const activePoints = (_iKind === "paint_stroke" || _iKind === "paint_lasso_fill")
+        ? `_live${_iGeo?.rawPoints?.length ?? _iGeo?.points?.length ?? 0}`
         : "";
       renderCutoutViewToContext2D({
         owner: node,
@@ -4507,6 +4511,7 @@ function showEditor(node, type, options = {}) {
     const [item] = sorted.splice(idx, 1);
     sorted.push(item);
     sorted.forEach((s, i) => { s.z_index = i; });
+    editor._sortedItemsCache = null;
     pushHistory();
     updateSelectionMenu();
     requestDraw();
@@ -4524,6 +4529,7 @@ function showEditor(node, type, options = {}) {
     const [item] = sorted.splice(idx, 1);
     sorted.unshift(item);
     sorted.forEach((s, i) => { s.z_index = i; });
+    editor._sortedItemsCache = null;
     pushHistory();
     updateSelectionMenu();
     requestDraw();
