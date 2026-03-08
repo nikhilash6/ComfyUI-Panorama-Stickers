@@ -43,14 +43,6 @@ def _paint_draw_color(stroke: dict):
     return _stroke_color_rgba(stroke)
 
 
-def _erp_point_to_canvas(point: dict, width: int, height: int) -> tuple[float, float]:
-    return float(point["u"]) * float(width), float(point["v"]) * float(height)
-
-
-def _frame_point_to_canvas(point: dict, width: int, height: int) -> tuple[float, float]:
-    return float(point["x"]) * float(width), float(point["y"]) * float(height)
-
-
 def _unwrap_erp_points(points: list[dict]) -> list[list[dict]]:
     if not points:
         return []
@@ -76,31 +68,16 @@ def _unwrap_erp_points(points: list[dict]) -> list[list[dict]]:
 def _stroke_segments_for_erp_geometry(stroke: dict, width: int, height: int) -> list[list[tuple[float, float]]]:
     geometry = stroke.get("geometry") or {}
     kind = str(geometry.get("geometryKind") or "")
-    if kind == "rect_fill":
-        p0 = geometry["p0"]
-        p1 = geometry["p1"]
-        x0 = min(float(p0["u"]), float(p1["u"]))
-        x1 = max(float(p0["u"]), float(p1["u"]))
-        y0 = min(float(p0["v"]), float(p1["v"]))
-        y1 = max(float(p0["v"]), float(p1["v"]))
-        if x1 - x0 > 0.5:
-            return [
-                [(x0 * width, y0 * height), (width, y0 * height), (width, y1 * height), (x0 * width, y1 * height)],
-                [(0.0, y0 * height), (x1 * width, y0 * height), (x1 * width, y1 * height), (0.0, y1 * height)],
-            ]
-        return [[(x0 * width, y0 * height), (x1 * width, y0 * height), (x1 * width, y1 * height), (x0 * width, y1 * height)]]
-    if kind in {"freehand_open", "freehand_closed", "lasso_fill"}:
-        points = geometry.get("points") or []
-        segments = []
-        for group in _unwrap_erp_points(points):
-            coords = [((float(pt["u"]) % 1.0) * width, float(pt["v"]) * height) for pt in group]
-            segments.append(coords)
-            shifted_left = [(((float(pt["u"]) - 1.0) % 1.0) * width, float(pt["v"]) * height) for pt in group]
-            shifted_right = [(((float(pt["u"]) + 1.0) % 1.0) * width, float(pt["v"]) * height) for pt in group]
-            segments.append(shifted_left)
-            segments.append(shifted_right)
-        return segments
-    return []
+    if kind not in {"freehand_open", "freehand_closed", "lasso_fill"}:
+        return []
+    points = geometry.get("points") or []
+    segments = []
+    for group in _unwrap_erp_points(points):
+        coords = [((float(pt["u"]) % 1.0) * width, float(pt["v"]) * height) for pt in group]
+        segments.append(coords)
+        segments.append([(((float(pt["u"]) - 1.0) % 1.0) * width, float(pt["v"]) * height) for pt in group])
+        segments.append([(((float(pt["u"]) + 1.0) % 1.0) * width, float(pt["v"]) * height) for pt in group])
+    return segments
 
 
 def _dir_from_erp_point(point: dict) -> np.ndarray:
@@ -135,25 +112,9 @@ def _project_dir_to_cutout(dir_vec: np.ndarray, shot: dict) -> tuple[float, floa
 
 def _stroke_segments_for_cutout_geometry(stroke: dict, width: int, height: int, shot: dict) -> list[list[tuple[float, float]]]:
     geometry = stroke.get("geometry") or {}
-    target_space = stroke.get("targetSpace") or {}
     kind = str(geometry.get("geometryKind") or "")
-    if target_space.get("kind") == "FRAME_LOCAL":
-        if str(target_space.get("frameId") or "") != str(shot.get("id") or ""):
-            return []
-
-        def pt_canvas(point):
-            return _frame_point_to_canvas(point, width, height)
-
-        if kind == "rect_fill":
-            p0 = geometry["p0"]
-            p1 = geometry["p1"]
-            x0 = min(float(p0["x"]), float(p1["x"])) * width
-            x1 = max(float(p0["x"]), float(p1["x"])) * width
-            y0 = min(float(p0["y"]), float(p1["y"])) * height
-            y1 = max(float(p0["y"]), float(p1["y"])) * height
-            return [[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]]
-        points = geometry.get("points") or []
-        return [[pt_canvas(point) for point in points]]
+    if kind not in {"freehand_open", "freehand_closed", "lasso_fill"}:
+        return []
 
     def project_point(point):
         projected = _project_dir_to_cutout(_dir_from_erp_point(point), shot)
@@ -161,16 +122,6 @@ def _stroke_segments_for_cutout_geometry(stroke: dict, width: int, height: int, 
             return None
         return projected[0] * width, projected[1] * height
 
-    if kind == "rect_fill":
-        p0 = project_point(geometry["p0"])
-        p1 = project_point(geometry["p1"])
-        if p0 is None or p1 is None:
-            return []
-        x0 = min(p0[0], p1[0])
-        x1 = max(p0[0], p1[0])
-        y0 = min(p0[1], p1[1])
-        y1 = max(p0[1], p1[1])
-        return [[(x0, y0), (x1, y0), (x1, y1), (x0, y1)]]
     points = geometry.get("points") or []
     coords = []
     for point in points:
@@ -180,7 +131,7 @@ def _stroke_segments_for_cutout_geometry(stroke: dict, width: int, height: int, 
                 break
             continue
         coords.append(projected)
-    return [coords] if len(coords) >= 1 else []
+    return [coords] if coords else []
 
 
 def _draw_stroke_rgba(draw: ImageDraw.ImageDraw, stroke: dict, segments: list[list[tuple[float, float]]], width: int):

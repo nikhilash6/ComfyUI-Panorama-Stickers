@@ -33,19 +33,18 @@ def test_render_painting_to_erp_returns_independent_paint_and_mask():
                 "actionGroupId": "ag_2",
                 "targetSpace": {"kind": "ERP_GLOBAL"},
                 "layerKind": "mask",
-                "toolKind": "rect_fill_drag",
+                "toolKind": "pen",
                 "brushPresetId": None,
                 "color": None,
-                "size": 4,
+                "size": 20,
                 "opacity": 1.0,
                 "hardness": None,
                 "flow": None,
                 "spacing": None,
                 "createdAt": 1,
                 "geometry": {
-                    "geometryKind": "rect_fill",
-                    "p0": {"u": 0.6, "v": 0.3, "t": 0},
-                    "p1": {"u": 0.8, "v": 0.6, "t": 1},
+                    "geometryKind": "freehand_open",
+                    "points": [{"u": 0.6, "v": 0.3, "t": 0}, {"u": 0.8, "v": 0.3, "t": 1}],
                 },
             }],
         },
@@ -62,4 +61,4 @@ def test_render_painting_to_erp_returns_independent_paint_and_mask():
     composited = alpha_composite_over_rgb(base, paint_rgba)
     assert composited.shape == base.shape
     assert float(np.max(composited[..., 0])) > 0.0
-    assert float(np.max(composited[..., 1])) == 0.0
+    assert float(np.max(composited[..., 1])) < 1e-6

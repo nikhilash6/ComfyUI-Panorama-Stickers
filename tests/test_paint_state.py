@@ -33,10 +33,9 @@ def test_normalize_painting_state_splits_layers_and_geometry():
             "strokes": [{
                 "id": "mask_1",
                 "actionGroupId": "ag_2",
-                "targetSpace": {"kind": "FRAME_LOCAL", "frameId": "frame_a"},
+                "targetSpace": {"kind": "ERP_GLOBAL"},
                 "layerKind": "mask",
-                "toolKind": "rect_fill_drag",
-                "color": {"r": 1, "g": 0, "b": 0, "a": 1},
+                "toolKind": "pen",
                 "size": 8,
                 "opacity": 1.0,
                 "hardness": None,
@@ -44,22 +43,23 @@ def test_normalize_painting_state_splits_layers_and_geometry():
                 "spacing": None,
                 "createdAt": 456,
                 "geometry": {
-                    "geometryKind": "rect_fill",
-                    "p0": {"frameId": "frame_a", "x": -0.2, "y": 0.1, "t": 0},
-                    "p1": {"frameId": "frame_a", "x": 1.2, "y": 0.9, "t": 1},
+                    "geometryKind": "freehand_open",
+                    "points": [
+                        {"u": 0.3, "v": 0.4, "t": 0},
+                        {"u": 0.5, "v": 0.4, "t": 1},
+                    ],
                 },
             }],
         },
     })
 
     assert state["paint"]["strokes"][0]["geometry"]["geometryKind"] == "lasso_fill"
-    assert state["mask"]["strokes"][0]["geometry"]["geometryKind"] == "rect_fill"
+    assert state["mask"]["strokes"][0]["geometry"]["geometryKind"] == "freehand_open"
     assert state["mask"]["strokes"][0]["color"] is None
-    assert state["mask"]["strokes"][0]["geometry"]["p0"]["x"] == -0.2
-    assert state["mask"]["strokes"][0]["geometry"]["p1"]["x"] == 1.2
+    assert state["mask"]["strokes"][0]["targetSpace"] == {"kind": "ERP_GLOBAL"}
 
 
-def test_normalize_painting_state_rejects_mismatched_geometry_and_view_coords():
+def test_normalize_painting_state_rejects_unknown_target_space_and_bad_coords():
     state = normalize_painting_state({
         "paint": {
             "strokes": [{
@@ -67,13 +67,14 @@ def test_normalize_painting_state_rejects_mismatched_geometry_and_view_coords():
                 "actionGroupId": "ag_1",
                 "targetSpace": {"kind": "ERP_GLOBAL"},
                 "layerKind": "paint",
-                "toolKind": "rect_fill_drag",
+                "toolKind": "pen",
                 "color": {"r": 1.0, "g": 1.0, "b": 1.0, "a": 1.0},
                 "size": 4,
                 "opacity": 1.0,
                 "createdAt": 0,
                 "geometry": {
                     "geometryKind": "freehand_open",
+                    # ERP_GLOBAL target but points use x/y instead of u/v → rejected
                     "points": [{"x": 10, "y": 20, "t": 0}],
                 },
             }],

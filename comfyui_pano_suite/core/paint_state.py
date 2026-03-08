@@ -41,51 +41,24 @@ def _normalize_target_space(raw):
     kind = str(raw.get("kind") or "").strip()
     if kind == "ERP_GLOBAL":
         return {"kind": "ERP_GLOBAL"}
-    if kind == "FRAME_LOCAL":
-        frame_id = str(raw.get("frameId") or "").strip()
-        if not frame_id:
-            return None
-        return {"kind": "FRAME_LOCAL", "frameId": frame_id}
     return None
 
 
-def _normalize_target_point(raw, target_space):
-    if not isinstance(raw, dict) or not isinstance(target_space, dict):
+def _normalize_target_point(raw, _target_space):
+    if not isinstance(raw, dict):
         return None
     t = _finite_float(raw.get("t", 0.0))
-    if t is None:
+    u = _finite_float(raw.get("u"))
+    v = _finite_float(raw.get("v"))
+    if t is None or u is None or v is None:
         return None
+    u = float(u % 1.0)
+    if abs(u - 1.0) < 1e-9:
+        u = 0.0
+    v = max(0.0, min(1.0, float(v)))
+    out = {"targetKind": "ERP_GLOBAL", "u": u, "v": v, "t": float(t)}
     width_scale = _finite_float(raw.get("widthScale"))
     pressure_like = _finite_float(raw.get("pressureLike"))
-    if target_space["kind"] == "ERP_GLOBAL":
-        u = _finite_float(raw.get("u"))
-        v = _finite_float(raw.get("v"))
-        if u is None or v is None:
-            return None
-        u = float(u % 1.0)
-        if abs(u - 1.0) < 1e-9:
-            u = 0.0
-        v = max(0.0, min(1.0, float(v)))
-        out = {"targetKind": "ERP_GLOBAL", "u": u, "v": v, "t": float(t)}
-        if width_scale is not None:
-            out["widthScale"] = max(0.0, float(width_scale))
-        if pressure_like is not None:
-            out["pressureLike"] = max(0.0, float(pressure_like))
-        return out
-    x = _finite_float(raw.get("x"))
-    y = _finite_float(raw.get("y"))
-    if x is None or y is None:
-        return None
-    frame_id = str(raw.get("frameId") or target_space.get("frameId") or "").strip()
-    if frame_id != str(target_space.get("frameId") or "").strip():
-        return None
-    out = {
-        "targetKind": "FRAME_LOCAL",
-        "frameId": frame_id,
-        "x": float(x),
-        "y": float(y),
-        "t": float(t),
-    }
     if width_scale is not None:
         out["widthScale"] = max(0.0, float(width_scale))
     if pressure_like is not None:
@@ -137,6 +110,30 @@ def _normalize_geometry(raw, target_space, tool_kind, allow_lasso):
     }
 
 
+def _resolve_stroke_color(raw_color, layer_kind, tool_kind):
+    """Return (color, is_valid). is_valid=False means color was required but missing."""
+    if layer_kind == "mask":
+        return None, True
+    color = _normalize_color(raw_color, allow_color=True)
+    if tool_kind != "eraser" and color is None:
+        return None, False
+    return color, True
+
+
+def _normalize_stroke_scalars(raw):
+    """Return (stroke_id, action_group_id, size, opacity, created_at) or None."""
+    stroke_id = str(raw.get("id") or "").strip()
+    action_group_id = str(raw.get("actionGroupId") or "").strip()
+    if not stroke_id or not action_group_id:
+        return None
+    size = _finite_float(raw.get("size"))
+    opacity = _finite_float(raw.get("opacity"))
+    if size is None or opacity is None:
+        return None
+    created_at = _finite_int(raw.get("createdAt"))
+    return stroke_id, action_group_id, size, opacity, 0 if created_at is None else created_at
+
+
 def _normalize_color(raw, allow_color):
     if not allow_color:
         return None
@@ -162,56 +159,25 @@ def _normalize_stroke(raw, layer_kind):
     if str(raw.get("layerKind") or "") != layer_kind:
         return None
     tool_kind = str(raw.get("toolKind") or "").strip()
-    if layer_kind == "paint":
-        if tool_kind not in PAINT_TOOL_KINDS:
-            return None
-    else:
-        if tool_kind not in MASK_TOOL_KINDS:
-            return None
+    valid_tools = PAINT_TOOL_KINDS if layer_kind == "paint" else MASK_TOOL_KINDS
+    if tool_kind not in valid_tools:
+        return None
     target_space = _normalize_target_space(raw.get("targetSpace"))
     if target_space is None:
         return None
     geometry = _normalize_geometry(raw.get("geometry"), target_space, tool_kind, allow_lasso=(layer_kind == "paint"))
     if geometry is None:
         return None
-    color = _normalize_color(raw.get("color"), allow_color=(layer_kind == "paint"))
-    if layer_kind == "paint" and tool_kind != "eraser" and tool_kind != "lasso_fill" and color is None:
+    color, color_ok = _resolve_stroke_color(raw.get("color"), layer_kind, tool_kind)
+    if not color_ok:
         return None
-    if layer_kind == "paint" and tool_kind in {"lasso_fill"} and color is None:
+    scalars = _normalize_stroke_scalars(raw)
+    if scalars is None:
         return None
-    if layer_kind == "mask":
-        color = None
-    stroke_id = str(raw.get("id") or "").strip()
-    action_group_id = str(raw.get("actionGroupId") or "").strip()
-    if not stroke_id or not action_group_id:
-        return None
-    created_at = _finite_int(raw.get("createdAt"))
-    if created_at is None:
-        created_at = 0
-    size = _finite_float(raw.get("size"))
-    opacity = _finite_float(raw.get("opacity"))
-    if size is None or opacity is None:
-        return None
+    stroke_id, action_group_id, size, opacity, created_at = scalars
     radius_value = _finite_float(raw.get("radiusValue"))
     radius_model = str(raw.get("radiusModel") or "").strip() or None
-    frame_snapshot = None
-    if target_space.get("kind") == "FRAME_LOCAL":
-        snap = raw.get("frameSnapshot")
-        if isinstance(snap, dict):
-            yaw_deg = _finite_float(snap.get("yaw_deg"))
-            pitch_deg = _finite_float(snap.get("pitch_deg"))
-            hFOV_deg = _finite_float(snap.get("hFOV_deg"))
-            vFOV_deg = _finite_float(snap.get("vFOV_deg"))
-            roll_deg = _finite_float(snap.get("roll_deg"))
-            if None not in (yaw_deg, pitch_deg, hFOV_deg, vFOV_deg, roll_deg):
-                frame_snapshot = {
-                    "yaw_deg": float(yaw_deg),
-                    "pitch_deg": float(pitch_deg),
-                    "hFOV_deg": float(hFOV_deg),
-                    "vFOV_deg": float(vFOV_deg),
-                    "roll_deg": float(roll_deg),
-                }
-    out = {
+    return {
         "id": stroke_id,
         "actionGroupId": action_group_id,
         "targetSpace": target_space,
@@ -225,12 +191,10 @@ def _normalize_stroke(raw, layer_kind):
         "flow": _finite_float(raw.get("flow")),
         "spacing": _finite_float(raw.get("spacing")),
         "createdAt": int(created_at),
-        "frameSnapshot": frame_snapshot,
         "radiusModel": radius_model,
         "radiusValue": None if radius_value is None else max(0.0, float(radius_value)),
         "geometry": geometry,
     }
-    return out
 
 
 def _normalize_layer(raw, layer_kind):
