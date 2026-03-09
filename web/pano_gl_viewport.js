@@ -72,9 +72,12 @@ export function renderSceneToContext2D(options = {}) {
   const backgroundRevision = options.backgroundRevision ?? imageRevisionKey(backgroundSource);
   const backgroundOpacity = Number(options.backgroundOpacity ?? 1);
 
-  // Result cache: if view + size + revisions are identical, skip WebGL and reuse last output.
+  // Result cache: only applies when scene has no stickers and no textures (e.g. cutout/ERP
+  // background-only renders). Sticker scenes are not cached because scene/texture state is not
+  // included in the key and would produce stale hits when stickers change.
+  const sceneIsEmpty = scene.stickers.length === 0 && textures.length === 0;
   const renderKey = `${Math.round(rect.w)}x${Math.round(rect.h)}|${dpr}|${viewRevisionKey(view)}|${backgroundRevision}|${backgroundOpacity.toFixed(3)}`;
-  if (entry.lastRenderKey === renderKey && entry.cachedCanvas) {
+  if (sceneIsEmpty && entry.lastRenderKey === renderKey && entry.cachedCanvas) {
     ctx.drawImage(entry.cachedCanvas, rect.x, rect.y, rect.w, rect.h);
     return true;
   }
@@ -92,21 +95,23 @@ export function renderSceneToContext2D(options = {}) {
   });
   if (!surface) return false;
 
-  // Copy WebGL surface to per-entry 2D cache canvas so subsequent hits avoid GPU pipeline.
-  // Must clearRect before drawImage: the WebGL surface has transparent pixels where gl.clear()
-  // left rgba(0,0,0,0), and source-over drawImage would let stale pixels from the previous
-  // render bleed through those transparent areas, accumulating content across frames.
-  const sw = surface.width;
-  const sh = surface.height;
-  if (!entry.cachedCanvas || entry.cachedCanvas.width !== sw || entry.cachedCanvas.height !== sh) {
-    entry.cachedCanvas = document.createElement("canvas");
-    entry.cachedCanvas.width = sw;
-    entry.cachedCanvas.height = sh;
+  // For empty scenes, copy the WebGL surface to a per-entry 2D cache canvas so subsequent hits
+  // avoid the GPU pipeline. Must clearRect before drawImage: the WebGL surface has transparent
+  // pixels where gl.clear() left rgba(0,0,0,0), and source-over drawImage would let stale pixels
+  // from the previous render bleed through those transparent areas, accumulating across frames.
+  if (sceneIsEmpty) {
+    const sw = surface.width;
+    const sh = surface.height;
+    if (!entry.cachedCanvas || entry.cachedCanvas.width !== sw || entry.cachedCanvas.height !== sh) {
+      entry.cachedCanvas = document.createElement("canvas");
+      entry.cachedCanvas.width = sw;
+      entry.cachedCanvas.height = sh;
+    }
+    const cacheCtx = entry.cachedCanvas.getContext("2d");
+    cacheCtx.clearRect(0, 0, sw, sh);
+    cacheCtx.drawImage(surface, 0, 0);
+    entry.lastRenderKey = renderKey;
   }
-  const cacheCtx = entry.cachedCanvas.getContext("2d");
-  cacheCtx.clearRect(0, 0, sw, sh);
-  cacheCtx.drawImage(surface, 0, 0);
-  entry.lastRenderKey = renderKey;
 
   ctx.drawImage(surface, rect.x, rect.y, rect.w, rect.h);
   return true;
