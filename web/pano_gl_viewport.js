@@ -20,7 +20,7 @@ function getRendererEntry(owner, key) {
   }
   let entry = cache.get(key);
   if (!entry) {
-    entry = { renderer: shared.renderer };
+    entry = { renderer: shared.renderer, lastRenderKey: null, cachedCanvas: null };
     cache.set(key, entry);
   }
   return entry;
@@ -33,6 +33,15 @@ function imageRevisionKey(img) {
     Number(img.naturalWidth || img.videoWidth || img.width || 0),
     Number(img.naturalHeight || img.videoHeight || img.height || 0),
   ].join("|");
+}
+
+function viewRevisionKey(view) {
+  const mode = String(view?.mode || "panorama");
+  if (mode === "unwrap") return "unwrap";
+  if (mode === "cutout") {
+    return `c|${Number(view.yawDeg || 0).toFixed(4)}|${Number(view.pitchDeg || 0).toFixed(4)}|${Number(view.rollDeg || 0).toFixed(4)}|${Number(view.hFovDeg || 90).toFixed(4)}|${Number(view.vFovDeg || 60).toFixed(4)}`;
+  }
+  return `p|${Number(view.yawDeg || 0).toFixed(4)}|${Number(view.pitchDeg || 0).toFixed(4)}|${Number(view.fovDeg || 100).toFixed(4)}`;
 }
 
 function resolveRect(options = {}) {
@@ -61,6 +70,15 @@ export function renderSceneToContext2D(options = {}) {
   const renderer = entry.renderer;
   const dpr = Math.max(1, Number(options.dpr || window.devicePixelRatio || 1));
   const backgroundRevision = options.backgroundRevision ?? imageRevisionKey(backgroundSource);
+  const backgroundOpacity = Number(options.backgroundOpacity ?? 1);
+
+  // Result cache: if view + size + revisions are identical, skip WebGL and reuse last output.
+  const renderKey = `${Math.round(rect.w)}x${Math.round(rect.h)}|${dpr}|${viewRevisionKey(view)}|${backgroundRevision}|${backgroundOpacity.toFixed(3)}`;
+  if (entry.lastRenderKey === renderKey && entry.cachedCanvas) {
+    ctx.drawImage(entry.cachedCanvas, rect.x, rect.y, rect.w, rect.h);
+    return true;
+  }
+
   const surface = renderer.renderScene({
     width: rect.w,
     height: rect.h,
@@ -70,9 +88,21 @@ export function renderSceneToContext2D(options = {}) {
     textures,
     scene,
     view,
-    backgroundOpacity: Number(options.backgroundOpacity ?? 1),
+    backgroundOpacity,
   });
   if (!surface) return false;
+
+  // Copy WebGL surface to per-entry 2D cache canvas so subsequent hits avoid GPU pipeline.
+  const sw = surface.width;
+  const sh = surface.height;
+  if (!entry.cachedCanvas || entry.cachedCanvas.width !== sw || entry.cachedCanvas.height !== sh) {
+    entry.cachedCanvas = document.createElement("canvas");
+    entry.cachedCanvas.width = sw;
+    entry.cachedCanvas.height = sh;
+  }
+  entry.cachedCanvas.getContext("2d").drawImage(surface, 0, 0);
+  entry.lastRenderKey = renderKey;
+
   ctx.drawImage(surface, rect.x, rect.y, rect.w, rect.h);
   return true;
 }
