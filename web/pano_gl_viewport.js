@@ -93,6 +93,9 @@ export function renderSceneToContext2D(options = {}) {
   if (!surface) return false;
 
   // Copy WebGL surface to per-entry 2D cache canvas so subsequent hits avoid GPU pipeline.
+  // Must clearRect before drawImage: the WebGL surface has transparent pixels where gl.clear()
+  // left rgba(0,0,0,0), and source-over drawImage would let stale pixels from the previous
+  // render bleed through those transparent areas, accumulating content across frames.
   const sw = surface.width;
   const sh = surface.height;
   if (!entry.cachedCanvas || entry.cachedCanvas.width !== sw || entry.cachedCanvas.height !== sh) {
@@ -100,7 +103,9 @@ export function renderSceneToContext2D(options = {}) {
     entry.cachedCanvas.width = sw;
     entry.cachedCanvas.height = sh;
   }
-  entry.cachedCanvas.getContext("2d").drawImage(surface, 0, 0);
+  const cacheCtx = entry.cachedCanvas.getContext("2d");
+  cacheCtx.clearRect(0, 0, sw, sh);
+  cacheCtx.drawImage(surface, 0, 0);
   entry.lastRenderKey = renderKey;
 
   ctx.drawImage(surface, rect.x, rect.y, rect.w, rect.h);
@@ -108,28 +113,32 @@ export function renderSceneToContext2D(options = {}) {
 }
 
 export function renderErpViewToContext2D(options = {}) {
+  let view;
+  if (options.mode === "cutout") {
+    view = {
+      mode: "cutout",
+      yawDeg: Number(options.yawDeg || 0),
+      pitchDeg: Number(options.pitchDeg || 0),
+      rollDeg: Number(options.rollDeg || 0),
+      hFovDeg: Number(options.hFovDeg || 90),
+      vFovDeg: Number(options.vFovDeg || 60),
+    };
+  } else if (options.mode === "unwrap") {
+    view = { mode: "unwrap" };
+  } else {
+    view = {
+      mode: "panorama",
+      yawDeg: Number(options.yawDeg || 0),
+      pitchDeg: Number(options.pitchDeg || 0),
+      fovDeg: Number(options.fovDeg || 100),
+    };
+  }
   return renderSceneToContext2D({
     ...options,
     cacheKey: options.cacheKey || options.mode || "erp_view",
     scene: { stickers: [], selectedId: null, hoveredId: null },
     textures: [],
-    view: options.mode === "cutout"
-      ? {
-          mode: "cutout",
-          yawDeg: Number(options.yawDeg || 0),
-          pitchDeg: Number(options.pitchDeg || 0),
-          rollDeg: Number(options.rollDeg || 0),
-          hFovDeg: Number(options.hFovDeg || 90),
-          vFovDeg: Number(options.vFovDeg || 60),
-        }
-      : options.mode === "unwrap"
-        ? { mode: "unwrap" }
-        : {
-            mode: "panorama",
-            yawDeg: Number(options.yawDeg || 0),
-            pitchDeg: Number(options.pitchDeg || 0),
-          fovDeg: Number(options.fovDeg || 100),
-        },
+    view,
   });
 }
 
