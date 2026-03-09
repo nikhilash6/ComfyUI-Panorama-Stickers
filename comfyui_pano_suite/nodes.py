@@ -460,7 +460,15 @@ class PanoramaCutoutNode(io.ComfyNode):
             out = cutout_from_erp(src, yaw, pitch, hfov, vfov, roll, ow, oh)
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
-            paint_rgba, mask_bw = render_painting_to_cutout(state.get("painting"), shot, ow, oh)
+            paint_rgba, mask_bw = render_painting_to_cutout(
+                state.get("painting"),
+                shot,
+                ow,
+                oh,
+                erp_width=src.shape[1],
+                erp_height=src.shape[0],
+                painting_raster=state.get("painting_raster"),
+            )
             out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
             mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]

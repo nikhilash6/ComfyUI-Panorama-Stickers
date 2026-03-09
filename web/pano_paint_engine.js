@@ -60,12 +60,48 @@ function clearSurface(surface) {
   surface.ctx.clearRect(0, 0, surface.canvas.width, surface.canvas.height);
 }
 
-// ─── Mask Tint Overlay ────────────────────────────────────────────────────────
+// ─── Mask Hatch Overlay ───────────────────────────────────────────────────────
 
 // Shared temp canvas for drawMaskTint — resized lazily, never shrunk.
 let _maskTintTmp = null;
+// Cached small tile canvas for the diagonal stripe pattern.
+let _maskHatchTile = null;
+// Cached CanvasPattern for the hatch tile (bound to _maskTintTmp.ctx).
+let _maskHatchPattern = null;
+let _maskHatchPatternCtx = null;
+// Shared temp canvas reused for eraser compositing (composeDisplayPaint + rebuildCommitted).
+let _eraserTmp = null;
+// Shared temp canvas reused for low-opacity stroke compositing (drawStrokeToSurface).
+let _strokeOpacityTmp = null;
 
-// Overlay a green tint over mask-shaped pixels on displayCtx.
+// Returns a small canvas with a 45° diagonal stripe pattern.
+// Cached after first creation; reused for every drawMaskTint call.
+function getMaskHatchTile() {
+  if (_maskHatchTile) return _maskHatchTile;
+  // lineWidth=6, sz=17: perpendicular period = 17/√2 ≈ 12px → stripe≈6px, gap≈6px (equal).
+  const lw = 6;
+  const sz = 17;
+  const c = document.createElement("canvas");
+  c.width = sz;
+  c.height = sz;
+  const ctx = c.getContext("2d");
+  // Dark base so the non-stripe gaps are visibly darker, not fully transparent.
+  ctx.fillStyle = "rgba(0, 0, 0, 0.25)";
+  ctx.fillRect(0, 0, sz, sz);
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+  ctx.lineWidth = lw;
+  ctx.lineCap = "square";
+  ctx.beginPath();
+  // Three parallel segments to make the sz×sz tile tile seamlessly at 45°.
+  ctx.moveTo(0, 0);             ctx.lineTo(sz, sz);
+  ctx.moveTo(-sz / 2, sz / 2);  ctx.lineTo(sz / 2, sz + sz / 2);
+  ctx.moveTo(sz / 2, -sz / 2);  ctx.lineTo(sz + sz / 2, sz / 2);
+  ctx.stroke();
+  _maskHatchTile = c;
+  return c;
+}
+
+// Overlay a diagonal-stripe (hatch) pattern over mask-shaped pixels on displayCtx.
 // Does NOT affect non-mask pixels (paint pixels remain unchanged).
 function drawMaskTint(displayCtx, maskCanvas) {
   if (!displayCtx || !maskCanvas) return;
@@ -81,7 +117,11 @@ function drawMaskTint(displayCtx, maskCanvas) {
   tmp.ctx.clearRect(0, 0, w, h);
   tmp.ctx.drawImage(maskCanvas, 0, 0);
   tmp.ctx.globalCompositeOperation = "source-in";
-  tmp.ctx.fillStyle = "rgba(34, 197, 94, 0.82)";
+  if (_maskHatchPatternCtx !== tmp.ctx) {
+    _maskHatchPattern = tmp.ctx.createPattern(getMaskHatchTile(), "repeat");
+    _maskHatchPatternCtx = tmp.ctx;
+  }
+  tmp.ctx.fillStyle = _maskHatchPattern;
   tmp.ctx.fillRect(0, 0, w, h);
   tmp.ctx.globalCompositeOperation = "source-over";
   displayCtx.save();
@@ -628,13 +668,16 @@ function drawStrokeToSurface(ctx, stroke, descriptor) {
   if (opacity >= 0.999) {
     drawStampStroke(ctx, stroke, descriptor);
   } else {
-    // Two-step composite: draw stamps at full flow into a temp surface,
+    // Two-step composite: draw stamps at full flow into a shared temp surface,
     // then composite at stroke opacity. Ensures correct flat/accumulate behaviour on rebuild.
-    const tmp = createCanvasSurface(descriptor.width, descriptor.height);
-    drawStampStroke(tmp.ctx, stroke, descriptor);
+    if (!_strokeOpacityTmp || _strokeOpacityTmp.canvas.width < descriptor.width || _strokeOpacityTmp.canvas.height < descriptor.height) {
+      _strokeOpacityTmp = createCanvasSurface(descriptor.width, descriptor.height);
+    }
+    clearSurface(_strokeOpacityTmp);
+    drawStampStroke(_strokeOpacityTmp.ctx, stroke, descriptor);
     ctx.save();
     ctx.globalAlpha = opacity;
-    ctx.drawImage(tmp.canvas, 0, 0);
+    ctx.drawImage(_strokeOpacityTmp.canvas, 0, 0, descriptor.width, descriptor.height);
     ctx.restore();
   }
 }
@@ -856,12 +899,17 @@ export function createPaintEngineManager() {
         applyEraserToSurface(dCtx, target.currentStroke.canvas);
         drawMaskTint(dCtx, target.committedMask.canvas);
       } else {
-        // Mask eraser: show paint + (mask minus eraser)
+        // Mask eraser: show paint + (mask minus eraser) composited into shared temp.
         dCtx.drawImage(target.committedPaint.canvas, 0, 0);
-        const tmp = createCanvasSurface(target.committedMask.canvas.width, target.committedMask.canvas.height);
-        tmp.ctx.drawImage(target.committedMask.canvas, 0, 0);
-        applyEraserToSurface(tmp.ctx, target.currentStroke.canvas);
-        drawMaskTint(dCtx, tmp.canvas);
+        const mw = target.committedMask.canvas.width;
+        const mh = target.committedMask.canvas.height;
+        if (!_eraserTmp || _eraserTmp.canvas.width < mw || _eraserTmp.canvas.height < mh) {
+          _eraserTmp = createCanvasSurface(mw, mh);
+        }
+        clearSurface(_eraserTmp);
+        _eraserTmp.ctx.drawImage(target.committedMask.canvas, 0, 0);
+        applyEraserToSurface(_eraserTmp.ctx, target.currentStroke.canvas);
+        drawMaskTint(dCtx, _eraserTmp.canvas);
       }
       return;
     }
@@ -879,7 +927,6 @@ export function createPaintEngineManager() {
     } else if (activeLayerKind === "mask") {
       drawMaskTint(dCtx, target.currentStroke.canvas);
     }
-    if (!isActive) return;
   }
 
   function rebuildCommitted(state) {
@@ -904,10 +951,13 @@ export function createPaintEngineManager() {
       const isEraser = toolKind === "eraser";
 
       if (isEraser) {
-        const tmp = createCanvasSurface(descriptor.width, descriptor.height);
-        drawStrokeToSurface(tmp.ctx, stroke, descriptor);
+        if (!_eraserTmp || _eraserTmp.canvas.width < descriptor.width || _eraserTmp.canvas.height < descriptor.height) {
+          _eraserTmp = createCanvasSurface(descriptor.width, descriptor.height);
+        }
+        clearSurface(_eraserTmp);
+        drawStrokeToSurface(_eraserTmp.ctx, stroke, descriptor);
         const surface = layerKind === "mask" ? erpTarget.committedMask : erpTarget.committedPaint;
-        applyEraserToSurface(surface.ctx, tmp.canvas);
+        applyEraserToSurface(surface.ctx, _eraserTmp.canvas);
       } else if (layerKind === "mask") {
         drawStrokeToSurface(erpTarget.committedMask.ctx, stroke, descriptor);
       } else {

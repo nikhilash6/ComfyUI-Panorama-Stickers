@@ -56,6 +56,9 @@ const ICON = {
   eye_dashed: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6.51404 3.15793C7.48217 2.87411 8.51776 2.87411 9.48589 3.15793L9.90787 1.71851C8.66422 1.35392 7.33571 1.35392 6.09206 1.71851L6.51404 3.15793ZM10.848 3.78166C11.2578 4.04682 11.6393 4.37568 11.9783 4.76932L13.046 6.00934L14.1827 5.03056L13.1149 3.79054C12.6818 3.28761 12.1918 2.86449 11.6628 2.52224L10.848 3.78166ZM4.02168 4.76932C4.36065 4.37568 4.74209 4.04682 5.15195 3.78166L4.33717 2.52225C3.80815 2.86449 3.3181 3.28761 2.88503 3.79054L1.81723 5.03056L2.95389 6.00934L4.02168 4.76932ZM14.1138 7.24936L14.7602 7.99999L14.1138 8.75062L15.2505 9.72941L16.3183 8.48938V7.5106L15.2505 6.27058L14.1138 7.24936ZM1.88609 7.24936L1.23971 7.99999L1.88609 8.75062L0.749437 9.72941L-0.318359 8.48938V7.5106L0.749436 6.27058L1.88609 7.24936ZM13.0461 9.99064L11.9783 11.2307C11.6393 11.6243 11.2578 11.9532 10.848 12.2183L11.6628 13.4777C12.1918 13.1355 12.6818 12.7124 13.1149 12.2094L14.1827 10.9694L13.0461 9.99064ZM4.02168 11.2307L2.95389 9.99064L1.81723 10.9694L2.88503 12.2094C3.3181 12.7124 3.80815 13.1355 4.33717 13.4777L5.15195 12.2183C4.7421 11.9532 4.36065 11.6243 4.02168 11.2307ZM9.90787 14.2815L9.48589 12.8421C8.51776 13.1259 7.48217 13.1259 6.51405 12.8421L6.09206 14.2815C7.33572 14.6461 8.66422 14.6461 9.90787 14.2815ZM6.49997 7.99999C6.49997 7.17157 7.17154 6.49999 7.99997 6.49999C8.82839 6.49999 9.49997 7.17157 9.49997 7.99999C9.49997 8.82842 8.82839 9.49999 7.99997 9.49999C7.17154 9.49999 6.49997 8.82842 6.49997 7.99999ZM7.99997 4.99999C6.34311 4.99999 4.99997 6.34314 4.99997 7.99999C4.99997 9.65685 6.34311 11 7.99997 11C9.65682 11 11 9.65685 11 7.99999C11 6.34314 9.65682 4.99999 7.99997 4.99999Z' fill='currentColor'/></svg>",
   fullscreen: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M1 5.25V6H2.5V5.25V2.5H5.25H6V1H5.25H2C1.44772 1 1 1.44772 1 2V5.25ZM5.25 14.9994H6V13.4994H5.25H2.5V10.7494V9.99939H1V10.7494V13.9994C1 14.5517 1.44772 14.9994 2 14.9994H5.25ZM15 10V10.75V14C15 14.5523 14.5523 15 14 15H10.75H10V13.5H10.75H13.5V10.75V10H15ZM10.75 1H10V2.5H10.75H13.5V5.25V6H15V5.25V2C15 1.44772 14.5523 1 14 1H10.75Z' fill='currentColor'/></svg>",
   camera: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M1.5 3.5H3.5L5 1H11L12.5 3.5H14.5H16V5V12.5C16 13.8807 14.8807 15 13.5 15H2.5C1.11929 15 0 13.8807 0 12.5V5V3.5H1.5ZM4.78624 4.27174L5.84929 2.5H10.1507L11.2138 4.27174L11.6507 5H12.5H14.5V12.5C14.5 13.0523 14.0523 13.5 13.5 13.5H2.5C1.94772 13.5 1.5 13.0523 1.5 12.5V5H3.5H4.34929L4.78624 4.27174ZM9.75 8.5C9.75 9.4665 8.9665 10.25 8 10.25C7.0335 10.25 6.25 9.4665 6.25 8.5C6.25 7.5335 7.0335 6.75 8 6.75C8.9665 6.75 9.75 7.5335 9.75 8.5ZM11.25 8.5C11.25 10.2949 9.79493 11.75 8 11.75C6.20507 11.75 4.75 10.2949 4.75 8.5C4.75 6.70507 6.20507 5.25 8 5.25C9.79493 5.25 11.25 6.70507 11.25 8.5Z' fill='currentColor'/></svg>",
+  // Source: vercel.com/geist/icons
+  plus_circle: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.5 8C14.5 11.5899 11.5899 14.5 8 14.5C4.41015 14.5 1.5 11.5899 1.5 8C1.5 4.41015 4.41015 1.5 8 1.5C11.5899 1.5 14.5 4.41015 14.5 8ZM16 8C16 12.4183 12.4183 16 8 16C3.58172 16 0 12.4183 0 8C0 3.58172 3.58172 0 8 0C12.4183 0 16 3.58172 16 8ZM8.75 4.25V5V7.25H11H11.75V8.75H11H8.75V11V11.75L7.25 11.75V11V8.75H5H4.25V7.25H5H7.25V5V4.25H8.75Z' fill='currentColor'/></svg>",
+  crosshair: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M7.25 11.75L7.25 14.4572C4.2595 14.1136 1.88638 11.7405 1.5428 8.75H4.25H5V7.25H4.25H1.5428C1.88638 4.2595 4.2595 1.88638 7.25 1.5428V4.25V5H8.75V4.25V1.5428C11.7405 1.88638 14.1136 4.2595 14.4572 7.25L11.75 7.25H11V8.75L11.75 8.75H14.4572C14.1136 11.7405 11.7405 14.1136 8.75 14.4572V11.75L8.75 11H7.25V11.75ZM15.9653 8.75C15.6102 12.5697 12.5697 15.6102 8.75 15.9653V16H8H7.25V15.9653C3.43032 15.6102 0.389836 12.5697 0.0346937 8.75H0V8V7.25H0.0346937C0.389836 3.43032 3.43032 0.389836 7.25 0.0346937V0H8H8.75V0.0346937C12.5697 0.389836 15.6102 3.43032 15.9653 7.25H16V8V8.75H15.9653Z' fill='currentColor'/></svg>",
   fullscreen_close: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6 1V1.75V5C6 5.55229 5.55228 6 5 6H1.75H1V4.5H1.75H4.5V1.75V1H6ZM14.25 6H15V4.5H14.25H11.5V1.75V1H10V1.75V5C10 5.55228 10.4477 6 11 6H14.25ZM10 14.25V15H11.5V14.25V11.5H14.29H15.04V10H14.29H11C10.4477 10 10 10.4477 10 11V14.25ZM1.75 10H1V11.5H1.75H4.5V14.25V15H6V14.25V11C6 10.4477 5.55229 10 5 10H1.75Z' fill='currentColor'/></svg>",
   close: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3.7 3.7 12.3 12.3M12.3 3.7 3.7 12.3'/></svg>",
   copy: "<svg viewBox='0 0 16 16' aria-hidden='true'><rect x='5.2' y='5.2' width='7.8' height='7.8' rx='1.4'/><rect x='3' y='3' width='7.8' height='7.8' rx='1.4'/></svg>",
@@ -1252,8 +1255,10 @@ function showEditor(node, type, options = {}) {
         <button class="pano-btn pano-btn-icon${"cursor" === "cursor" ? " active" : ""}" type="button" data-tool-mode="cursor" aria-label="Cursor" aria-pressed="true" data-tip="Cursor">${ICON.cursor_tool}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="paint" aria-label="Paint" aria-pressed="false" data-tip="Paint">${ICON.palette_tool}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false" data-tip="Mask">${ICON.circle_dashed_tool}</button>
-        <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="${type === "stickers" ? "Add Image" : "Add Frame"}" data-tip="${type === "stickers" ? "Add image" : "Add frame"}">${ICON.add}</button>
-        ${type === "cutout" ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="look-at-frame" aria-label="Look at Frame" data-tip="Look at frame">${ICON.camera}</button>` : ""}
+        ${type === "cutout"
+          ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-or-look" aria-label="Add Frame" data-tip="Add frame">${ICON.plus_circle}</button>`
+          : `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="Add Image" data-tip="Add image">${ICON.add}</button>`
+        }
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
@@ -1365,7 +1370,7 @@ function showEditor(node, type, options = {}) {
   const fovValueEl = root.querySelector("[data-fov-value]");
   const selectionMenu = root.querySelector("[data-selection-menu]");
   const outputPreviewToggleBtn = root.querySelector("[data-action='toggle-output-preview-size']");
-  const lookAtFrameBtn = root.querySelector("[data-action='look-at-frame']");
+  const addOrLookBtn = root.querySelector("[data-tool-ui-action='add-or-look']");
   const frameViewBtn = root.querySelector("[data-view='frame']");
   const fullscreenBtn = root.querySelector("[data-action='toggle-fullscreen']");
   const tooltipEl = root.querySelector("[data-tooltip]");
@@ -1454,6 +1459,7 @@ function showEditor(node, type, options = {}) {
     customPaintColor: { r: 0, g: 1, b: 0, a: 1 },
     customPaintHistory: [],
     customPaintSessionStart: null,
+    paintRasterSnapshotRevision: null,
     pointerPos: { x: 0, y: 0, inside: false },
     interaction: null,
     hqFrames: 0,
@@ -1942,10 +1948,17 @@ function showEditor(node, type, options = {}) {
     editor.viewPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
   }
   function syncLookAtFrameButtonState() {
-    if (!lookAtFrameBtn) return;
-    const enabled = type === "cutout" && getList().length > 0;
-    lookAtFrameBtn.disabled = !enabled;
-    lookAtFrameBtn.setAttribute("aria-disabled", enabled ? "false" : "true");
+    if (!addOrLookBtn) return;
+    const hasFrames = type === "cutout" && getList().length > 0;
+    if (hasFrames) {
+      addOrLookBtn.innerHTML = ICON.crosshair;
+      addOrLookBtn.setAttribute("aria-label", "Look at frame");
+      addOrLookBtn.setAttribute("data-tip", "Look at frame");
+    } else {
+      addOrLookBtn.innerHTML = ICON.plus_circle;
+      addOrLookBtn.setAttribute("aria-label", "Add frame");
+      addOrLookBtn.setAttribute("data-tip", "Add frame");
+    }
   }
 
   function syncViewToggleState() {
@@ -4862,11 +4875,45 @@ function showEditor(node, type, options = {}) {
 
   function commitState() {
     if (readOnly) return;
+    syncPaintingRasterSnapshot();
     const text = JSON.stringify(state);
     if (stateWidget) {
       stateWidget.value = text;
       stateWidget.callback?.(text);
     }
+  }
+
+  function syncPaintingRasterSnapshot() {
+    const counts = paintingStrokeCount(state.painting);
+    if (counts.paintCount <= 0 && counts.maskCount <= 0) {
+      state.painting_raster = null;
+      editor.paintRasterSnapshotRevision = null;
+      return;
+    }
+    const rev = getPaintingRevisionKey();
+    if (editor.paintRasterSnapshotRevision === rev && state.painting_raster) return;
+    rebuildPaintEngineIfNeeded();
+    const erpTarget = editor.paintEngine?.getErpTarget?.() || null;
+    const paintCanvas = erpTarget?.committedPaint?.canvas || null;
+    const maskCanvas = erpTarget?.committedMask?.canvas || null;
+    if (!paintCanvas || !maskCanvas) return;
+    let paintAsset = null;
+    let maskAsset = null;
+    try {
+      if (counts.paintCount > 0) paintAsset = { type: "dataurl", value: paintCanvas.toDataURL("image/png") };
+      if (counts.maskCount > 0) maskAsset = { type: "dataurl", value: maskCanvas.toDataURL("image/png") };
+    } catch {
+      return;
+    }
+    state.painting_raster = {
+      version: 1,
+      width: Number(paintCanvas.width || 0),
+      height: Number(paintCanvas.height || 0),
+      revision: rev,
+      paint: paintAsset,
+      mask: maskAsset,
+    };
+    editor.paintRasterSnapshotRevision = rev;
   }
   function persistUiSettings() {
     state.ui_settings = saveSharedUiSettings(state.ui_settings);
@@ -5303,8 +5350,10 @@ function showEditor(node, type, options = {}) {
       getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
       return true;
     }
-    const points = geometry.rawPoints || geometry.points || [];
-    if (points.length < 1) return false;
+    const rawPoints = geometry.rawPoints || geometry.points || [];
+    if (rawPoints.length < 1) return false;
+    // ADR 0006: processedPoints is durable; rasterizer (Python) uses it directly.
+    geometry.processedPoints = processFreehandPoints(rawPoints, interaction.stroke.targetSpace, true);
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
   }
@@ -6021,21 +6070,6 @@ function showEditor(node, type, options = {}) {
       (type === "stickers" ? addImageSticker() : addCutoutFrame());
     };
   }
-  if (lookAtFrameBtn) {
-    lookAtFrameBtn.onclick = () => {
-      if (getList().length === 0) return;
-      const target = getSelected() || getList()[0];
-      if (!target) return;
-      editor.selectedId = target.id || null;
-      state.active.selected_shot_id = editor.selectedId;
-      const targetYaw = wrapYaw(Number(target.yaw_deg || 0));
-      const targetPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
-      startViewTween(targetYaw, targetPitch, editor.viewFov);
-      updateSidePanel();
-      updateSelectionMenu();
-      requestDraw();
-    };
-  }
   const clearBtn = root.querySelector("[data-action='clear']");
   if (clearBtn) {
     clearBtn.onclick = () => {
@@ -6073,7 +6107,13 @@ function showEditor(node, type, options = {}) {
     toolRail.querySelectorAll("[data-tool-mode]").forEach((btn) => {
       btn.onclick = () => {
         if (readOnly) return;
-        editor.primaryTool = String(btn.getAttribute("data-tool-mode") || "cursor");
+        const newTool = String(btn.getAttribute("data-tool-mode") || "cursor");
+        editor.primaryTool = newTool;
+        if (newTool === "paint" || newTool === "mask") {
+          editor.selectedId = null;
+          if (type === "stickers") state.active.selected_sticker_id = null;
+          else state.active.selected_shot_id = null;
+        }
         syncPaintUi();
         updateSidePanel();
         requestDraw();
@@ -6086,19 +6126,22 @@ function showEditor(node, type, options = {}) {
         if (action === "undo") restoreHistory(-1);
         else if (action === "redo") restoreHistory(1);
         else if (action === "clear") clearAll();
-        else if (action === "add") (type === "stickers" ? addImageSticker() : addCutoutFrame());
-        else if (action === "look-at-frame") {
-          if (getList().length === 0) return;
-          const target = getSelected() || getList()[0];
-          if (!target) return;
-          editor.selectedId = target.id || null;
-          state.active.selected_shot_id = editor.selectedId;
-          const targetYaw = wrapYaw(Number(target.yaw_deg || 0));
-          const targetPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
-          startViewTween(targetYaw, targetPitch, editor.viewFov);
-          updateSidePanel();
-          updateSelectionMenu();
-          requestDraw();
+        else if (action === "add") addImageSticker();
+        else if (action === "add-or-look") {
+          if (getList().length === 0) {
+            addCutoutFrame();
+          } else {
+            const target = getSelected() || getList()[0];
+            if (!target) return;
+            editor.selectedId = target.id || null;
+            state.active.selected_shot_id = editor.selectedId;
+            const targetYaw = wrapYaw(Number(target.yaw_deg || 0));
+            const targetPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
+            startViewTween(targetYaw, targetPitch, editor.viewFov);
+            updateSidePanel();
+            updateSelectionMenu();
+            requestDraw();
+          }
         }
       };
     });

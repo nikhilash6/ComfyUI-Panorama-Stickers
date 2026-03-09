@@ -1996,9 +1996,29 @@ function attachLegacyStickersPreview(node) {
   };
 }
 
-// Returns the committedPaint canvas for a node's paint state, or null if there are no strokes.
-// Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
+function getNodePreviewRasterImage(node, asset, cacheKey) {
+  const value = String(asset?.value || "");
+  if (!value.startsWith("data:image")) return null;
+  let entry = node[cacheKey];
+  if (!entry || entry.src !== value) {
+    const img = new Image();
+    img.decoding = "async";
+    img.onload = () => node.__panoDomPreview?.requestDraw?.();
+    img.src = value;
+    entry = { src: value, img };
+    node[cacheKey] = entry;
+  }
+  return entry.img.complete && (entry.img.naturalWidth || entry.img.width) ? entry.img : null;
+}
+
+// Returns the display paint canvas for a node's paint state, or null if there are no strokes.
+// Prefers the committed raster snapshot written by the editor so the node preview matches modal output.
 function getNodePreviewPaintCanvas(node, state) {
+  const rasterPaint = getNodePreviewRasterImage(node, state?.painting_raster?.paint, "__panoPreviewPaintRaster");
+  if (rasterPaint) {
+    node.__panoPreviewPaintRevision = String(state?.painting_raster?.revision || state?.painting_raster?.paint?.value || "");
+    return rasterPaint;
+  }
   const strokes = state?.painting?.paint?.strokes;
   if (!Array.isArray(strokes) || strokes.length === 0) return null;
 
@@ -2007,14 +2027,14 @@ function getNodePreviewPaintCanvas(node, state) {
     node.__panoPreviewPaintRevision = null;
   }
 
-  const last = strokes[strokes.length - 1];
-  const rev = `${strokes.length}|${last?.id ?? ""}`;
-  if (node.__panoPreviewPaintRevision !== rev) {
-    node.__panoPreviewPaintRevision = rev;
+  // Use array reference identity: parseState() returns a new object on any JSON change,
+  // so any stroke edit (including undo/redo) produces a new strokes reference.
+  if (node.__panoPreviewPaintRevision !== strokes) {
+    node.__panoPreviewPaintRevision = strokes;
     node.__panoPreviewPaintEngine.rebuildCommitted(state);
   }
 
-  return node.__panoPreviewPaintEngine.getErpTarget().committedPaint.canvas;
+  return node.__panoPreviewPaintEngine.getErpTarget().displayPaint.canvas;
 }
 
 // Returns a canvas with bgImg and the paint layer pre-composited (ERP space).
@@ -2032,6 +2052,7 @@ function buildBgPaintCanvas(node, bgImg, paintCanvas, paintRev) {
       comp.width = bgW;
       comp.height = bgH;
       node.__panoPreviewBgPaint = comp;
+      // Canvas resize resets context state — revKey will also be stale, so always repaint below.
     }
     const compCtx = comp.getContext("2d");
     compCtx.clearRect(0, 0, bgW, bgH);
@@ -2086,9 +2107,7 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     );
     const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
     const paintCanvas = getNodePreviewPaintCanvas(node, state);
-    const bgSource = (bgReady && paintCanvas)
-      ? buildBgPaintCanvas(node, bgImg, paintCanvas, node.__panoPreviewPaintRevision)
-      : (bgReady ? bgImg : paintCanvas);
+    const bgSource = bgReady ? bgImg : paintCanvas;
     let statusType = "none";
     let hintText = "Open editor and add frame";
 
@@ -2118,6 +2137,18 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
       });
       const liveDrawnValidated = !!glDrawn || (!!fallbackDrawn && hasValidCutoutStats(node));
       if (liveDrawnValidated) {
+        if (paintCanvas) {
+          renderCutoutViewToContext2D({
+            owner: node,
+            cacheKey: "runtime_cutout_paint",
+            ctx,
+            rect: contain,
+            img: paintCanvas,
+            view: cutoutView,
+            backgroundRevision: String(node.__panoPreviewPaintRevision || ""),
+            backgroundOpacity: 1,
+          });
+        }
       } else if (ownOutReady) {
         ctx.drawImage(ownOut, contain.x, contain.y, contain.w, contain.h);
       } else {

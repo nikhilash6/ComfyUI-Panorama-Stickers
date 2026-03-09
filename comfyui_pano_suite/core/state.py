@@ -15,6 +15,7 @@ DEFAULT_STATE = {
     "stickers": [],
     "shots": [],
     "painting": empty_painting_state(),
+    "painting_raster": None,
     "active": {
         "selected_sticker_id": None,
         "selected_shot_id": None,
@@ -47,6 +48,8 @@ def merge_state(state_in: str | None, internal_state: str | None, fallback_prese
     if "shots" not in state or not isinstance(state["shots"], list):
         state["shots"] = []
     state["painting"] = normalize_painting_state(state.get("painting"))
+    if state.get("painting_raster") is not None and not isinstance(state.get("painting_raster"), dict):
+        state["painting_raster"] = None
     if "active" not in state or not isinstance(state["active"], dict):
         state["active"] = deepcopy(DEFAULT_STATE["active"])
     if "selected_sticker_id" not in state["active"]:

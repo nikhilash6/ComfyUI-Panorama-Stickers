@@ -9,7 +9,7 @@ EMPTY_PAINTING_STATE = {
 }
 
 PAINT_TOOL_KINDS = {"pen", "marker", "brush", "eraser", "lasso_fill"}
-MASK_TOOL_KINDS = {"pen", "eraser"}
+MASK_TOOL_KINDS = {"pen", "eraser", "lasso_fill"}
 GEOMETRY_KINDS = {"freehand_open", "freehand_closed", "lasso_fill"}
 
 
@@ -165,7 +165,7 @@ def _normalize_stroke(raw, layer_kind):
     target_space = _normalize_target_space(raw.get("targetSpace"))
     if target_space is None:
         return None
-    geometry = _normalize_geometry(raw.get("geometry"), target_space, tool_kind, allow_lasso=(layer_kind == "paint"))
+    geometry = _normalize_geometry(raw.get("geometry"), target_space, tool_kind, allow_lasso=(layer_kind in {"paint", "mask"}))
     if geometry is None:
         return None
     color, color_ok = _resolve_stroke_color(raw.get("color"), layer_kind, tool_kind)
