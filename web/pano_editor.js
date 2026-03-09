@@ -2591,9 +2591,11 @@ function showEditor(node, type, options = {}) {
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
     const rawList = getList();
-    if (!editor._sortedItemsCache || editor._sortedItemsCache.src !== rawList) {
+    const orderKey = rawList.map((item) => `${String(item?.id || "")}:${Number(item?.z_index || 0)}`).join("|");
+    if (!editor._sortedItemsCache || editor._sortedItemsCache.src !== rawList || editor._sortedItemsCache.orderKey !== orderKey) {
       editor._sortedItemsCache = {
         src: rawList,
+        orderKey,
         sorted: [...rawList].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0)),
       };
     }
@@ -2735,6 +2737,12 @@ function showEditor(node, type, options = {}) {
     const img = getConnectedErpImage();
     const previewRect = { x: px, y: py, w: pw, h: ph };
     const erpPreviewRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
+    const getLivePaintRevisionSuffix = () => {
+      const interactionKind = String(editor.interaction?.kind || "");
+      const geometry = editor.interaction?.stroke?.geometry || null;
+      if (interactionKind !== "paint_stroke" && interactionKind !== "paint_lasso_fill") return "";
+      return `_live${geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0}`;
+    };
 
     const renderPreviewPaint = () => {
       if (erpPreviewRaster) {
@@ -2745,7 +2753,7 @@ function showEditor(node, type, options = {}) {
           rect: previewRect,
           img: erpPreviewRaster,
           view: cutoutView,
-          backgroundRevision: getPaintingRevisionKey(),
+          backgroundRevision: getPaintingRevisionKey() + getLivePaintRevisionSuffix(),
           backgroundOpacity: 1,
         });
       }

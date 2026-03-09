@@ -2,6 +2,7 @@ import * as appModule from "../../scripts/app.js";
 import { api } from "../../scripts/api.js";
 import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
 import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
+import { createPaintEngineManager } from "./pano_paint_engine.js";
 import {
   createPanoInteractionController,
   PANO_DRAG_SENSITIVITY,
@@ -1995,6 +1996,52 @@ function attachLegacyStickersPreview(node) {
   };
 }
 
+// Returns the committedPaint canvas for a node's paint state, or null if there are no strokes.
+// Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
+function getNodePreviewPaintCanvas(node, state) {
+  const strokes = state?.painting?.paint?.strokes;
+  if (!Array.isArray(strokes) || strokes.length === 0) return null;
+
+  if (!node.__panoPreviewPaintEngine) {
+    node.__panoPreviewPaintEngine = createPaintEngineManager();
+    node.__panoPreviewPaintRevision = null;
+  }
+
+  const last = strokes[strokes.length - 1];
+  const rev = `${strokes.length}|${last?.id ?? ""}`;
+  if (node.__panoPreviewPaintRevision !== rev) {
+    node.__panoPreviewPaintRevision = rev;
+    node.__panoPreviewPaintEngine.rebuildCommitted(state);
+  }
+
+  return node.__panoPreviewPaintEngine.getErpTarget().committedPaint.canvas;
+}
+
+// Returns a canvas with bgImg and the paint layer pre-composited (ERP space).
+// Cached and invalidated when either bg or paint changes.
+function buildBgPaintCanvas(node, bgImg, paintCanvas, paintRev) {
+  const bgW = Math.max(1, Number(bgImg.naturalWidth || bgImg.width || 0));
+  const bgH = Math.max(1, Number(bgImg.naturalHeight || bgImg.height || 0));
+  const bgSrc = String(bgImg.currentSrc || bgImg.src || "");
+  const revKey = `${bgSrc}|${bgW}x${bgH}|${paintRev}`;
+
+  let comp = node.__panoPreviewBgPaint;
+  if (!comp || comp.__revKey !== revKey || comp.width !== bgW || comp.height !== bgH) {
+    if (!comp || comp.width !== bgW || comp.height !== bgH) {
+      comp = document.createElement("canvas");
+      comp.width = bgW;
+      comp.height = bgH;
+      node.__panoPreviewBgPaint = comp;
+    }
+    const compCtx = comp.getContext("2d");
+    compCtx.clearRect(0, 0, bgW, bgH);
+    compCtx.drawImage(bgImg, 0, 0, bgW, bgH);
+    compCtx.drawImage(paintCanvas, 0, 0, bgW, bgH);
+    comp.__revKey = revKey;
+  }
+  return comp;
+}
+
 function drawCanvas(node, canvas, fovBtn, interaction = null) {
   const mode = String(node.__panoPreviewMode || "stickers");
   ensureRenderCache(node, mode);
@@ -2038,6 +2085,10 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
       () => node.__panoDomPreview?.requestDraw?.(),
     );
     const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
+    const paintCanvas = getNodePreviewPaintCanvas(node, state);
+    const bgSource = (bgReady && paintCanvas)
+      ? buildBgPaintCanvas(node, bgImg, paintCanvas, node.__panoPreviewPaintRevision)
+      : (bgReady ? bgImg : paintCanvas);
     let statusType = "none";
     let hintText = "Open editor and add frame";
 
@@ -2048,21 +2099,22 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
         statusType = "empty";
         hintText = "Open editor and add frame";
       }
-    } else if (bgReady) {
+    } else if (bgReady || paintCanvas) {
       const glDrawn = renderCutoutViewToContext2D({
         owner: node,
         cacheKey: "runtime_cutout_bg",
         ctx,
         rect: contain,
-        img: bgImg,
+        img: bgSource,
         view: cutoutView,
       });
-      const fallbackDrawn = !glDrawn && !!drawCutoutProjectionPreview(ctx, node, bgImg, contain, shot, "draft");
+      const fallbackDrawn = !glDrawn && !!drawCutoutProjectionPreview(ctx, node, bgSource, contain, shot, "draft");
       const rawLiveDrawn = glDrawn || fallbackDrawn;
       panoPreviewLog(node, "cutout.path", {
         glDrawn: !!glDrawn,
         fallbackDrawn: !!fallbackDrawn,
         hasShot: !!shot,
+        hasPaint: !!paintCanvas,
       });
       const liveDrawnValidated = !!glDrawn || (!!fallbackDrawn && hasValidCutoutStats(node));
       if (liveDrawnValidated) {
@@ -2121,17 +2173,30 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     const scene = buildRuntimePreviewScene(node, state);
     const textures = buildRuntimePreviewTextures(node, state, scene);
     const view = buildPanoramaViewParamsFromRuntime(node.__panoPreviewView);
+
+    // Composite paint strokes into the background before WebGL rendering so
+    // stickers remain on top and no extra GL context is needed.
+    const paintCanvas = getNodePreviewPaintCanvas(node, state);
+    const bgSource = (bgReady && paintCanvas)
+      ? buildBgPaintCanvas(node, bgImg, paintCanvas, node.__panoPreviewPaintRevision)
+      : bgImg;
+    const bgRevision = bgSource !== bgImg
+      ? String(bgSource.__revKey || "")
+      : bgImg
+        ? [
+            String(bgImg.currentSrc || bgImg.src || ""),
+            Number(bgImg.naturalWidth || bgImg.width || 0),
+            Number(bgImg.naturalHeight || bgImg.height || 0),
+          ].join("|")
+        : "";
+
     const drawn = bgReady ? renderSceneToContext2D({
       owner: node,
       cacheKey: "runtime_dom_scene",
       ctx,
       rect,
-      backgroundSource: bgImg,
-      backgroundRevision: [
-        String(bgImg.currentSrc || bgImg.src || ""),
-        Number(bgImg.naturalWidth || bgImg.width || 0),
-        Number(bgImg.naturalHeight || bgImg.height || 0),
-      ].join("|"),
+      backgroundSource: bgSource,
+      backgroundRevision: bgRevision,
       textures,
       scene,
       view,
@@ -2141,8 +2206,13 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     if (bgReady && drawn) {
       setRenderLoading(node, false, "");
     } else if (bgReady) {
-      drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgImg, STANDALONE_MESH_LOW);
+      drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, bgSource, STANDALONE_MESH_LOW);
       setRenderLoading(node, false, "");
+    } else if (paintCanvas) {
+      // No background image but paint exists — project paint over dark base.
+      drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, paintCanvas, STANDALONE_MESH_LOW);
+      const loading = !!bgImg && !bgReady;
+      setRenderLoading(node, loading, String(bgImg?.src || ""));
     } else {
       const loading = !!bgImg && !bgReady;
       setRenderLoading(node, loading, String(bgImg?.src || ""));
