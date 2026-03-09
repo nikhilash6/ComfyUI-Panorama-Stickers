@@ -26,6 +26,13 @@ const EXTERNAL_STICKER_ID = "sticker_image_1";
 const EXTERNAL_STICKER_SOURCE_KIND = "external_image";
 const EXTERNAL_STICKER_PREVIEW_KEY = "pano_sticker_input_images";
 const ENABLE_STICKERS_NODE_PREVIEW = false;
+const PAINT_COLOR_SWATCHES = [
+  { id: "green", label: "Green", color: { r: 0, g: 1, b: 0, a: 1 } },
+  { id: "red", label: "Red", color: { r: 1, g: 0, b: 0, a: 1 } },
+  { id: "blue", label: "Blue", color: { r: 0, g: 0, b: 1, a: 1 } },
+  { id: "black", label: "Black", color: { r: 0, g: 0, b: 0, a: 1 } },
+  { id: "white", label: "White", color: { r: 1, g: 1, b: 1, a: 1 } },
+];
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 const ICON = {
@@ -55,6 +62,17 @@ const ICON = {
   chevron: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='m4.5 6.5 3.5 3.5 3.5-3.5'/></svg>",
   pen: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='m11.8 2.2 2 2-7.6 7.6-2.7.7.7-2.7z'/><path d='m10.7 3.3 2 2'/></svg>",
   mask: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3 8c1.4-2 3.2-3 5-3s3.6 1 5 3c-1.4 2-3.2 3-5 3S4.4 10 3 8Z'/><path d='M8 6.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 0 0 0-3Z'/></svg>",
+  cursor_tool: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3 2.5 12.2 8l-4 1.2 1.8 4.3-1.8.8-1.9-4.3-2.6 2.2z' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.35'/></svg>",
+  palette_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M12 22a10 10 0 1 1 0-20 10 10 0 0 1 0 20Z'/><path d='M7 13.5a2.5 2.5 0 0 0 2.5 2.5H11a2 2 0 0 1 0 4h-1'/><circle cx='7.5' cy='8.5' r='.9' fill='currentColor' stroke='none'/><circle cx='12' cy='6.5' r='.9' fill='currentColor' stroke='none'/><circle cx='16.5' cy='8.5' r='.9' fill='currentColor' stroke='none'/></svg>",
+  circle_dashed_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M10.1 2.6A9.9 9.9 0 0 1 13.9 2.6'/><path d='M17.8 4.2a9.9 9.9 0 0 1 2 2.8'/><path d='M21.4 10.1a9.9 9.9 0 0 1 0 3.8'/><path d='M19.8 17.8a9.9 9.9 0 0 1-2.8 2'/><path d='M13.9 21.4a9.9 9.9 0 0 1-3.8 0'/><path d='M6.2 19.8a9.9 9.9 0 0 1-2-2.8'/><path d='M2.6 13.9a9.9 9.9 0 0 1 0-3.8'/><path d='M4.2 6.2a9.9 9.9 0 0 1 2.8-2'/></svg>",
+  pencil_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='m3 21 3.8-1 10-10a2.1 2.1 0 0 0-3-3L3.8 17z'/><path d='m14.5 6.5 3 3'/></svg>",
+  brush_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M14.5 4.5c1.4-1.4 3.6-1.4 5 0s1.4 3.6 0 5l-5.7 5.7c-.5.5-1.2.8-1.9.8H9.8'/><path d='M9.5 13.5c-2.5 0-4.5 2-4.5 4.5 0 1-.8 1.8-1.8 1.8H3'/><path d='M8.5 12.5 11 15'/></svg>",
+  // Source: Lucide paintbrush-vertical
+  paintbrush_vertical_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'><path d='M10 2v2'/><path d='M14 2v4'/><path d='M17 2a1 1 0 0 1 1 1v9H6V3a1 1 0 0 1 1-1z'/><path d='M6 12a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v2.9a2 2 0 1 0 4 0V17a1 1 0 0 1 1-1h2a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1'/></svg>",
+  highlighter_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='m14 4 6 6'/><path d='m4 20 4.5-1 9-9-3.5-3.5-9 9z'/><path d='M13 7 17 11'/><path d='M3 21h7'/></svg>",
+  spray_can_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M10 6h6'/><path d='M12 3h2a2 2 0 0 1 2 2v1'/><path d='M9 8h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z'/><path d='M5 10h.01'/><path d='M3 14h.01'/><path d='M5 18h.01'/></svg>",
+  eraser_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='m7 13.5 6.8-6.8a2.2 2.2 0 0 1 3.1 0l2.4 2.4a2.2 2.2 0 0 1 0 3.1l-6.8 6.8a2.2 2.2 0 0 1-1.5.6H7.8a2.2 2.2 0 0 1-1.6-.6l-1.5-1.5a2.2 2.2 0 0 1 0-3.1L7 13.5Z'/><path d='M13.5 19.5H21'/></svg>",
+  lasso_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M7.2 18.8C4.6 18 3 16.2 3 14c0-3.9 4-7 9-7s9 3.1 9 7-4 7-9 7c-1.1 0-2.2-.1-3.1-.4'/><path d='M7 17c1 0 1.8.8 1.8 1.8S8 20.6 7 20.6s-1.8-.8-1.8-1.8S6 17 7 17Z'/></svg>",
 };
 
 function easeInOutCubic(t) {
@@ -111,6 +129,63 @@ function dist2(a, b) {
 }
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+function colorToCss(color, alphaOverride = null) {
+  const alpha = alphaOverride == null ? Number(color?.a ?? 1) : Number(alphaOverride);
+  return `rgba(${Math.round(clamp(Number(color?.r ?? 0), 0, 1) * 255)}, ${Math.round(clamp(Number(color?.g ?? 0), 0, 1) * 255)}, ${Math.round(clamp(Number(color?.b ?? 0), 0, 1) * 255)}, ${clamp(alpha, 0, 1)})`;
+}
+function colorsApproximatelyEqual(a, b, eps = 0.015) {
+  if (!a || !b) return false;
+  return Math.abs(Number(a.r ?? 0) - Number(b.r ?? 0)) <= eps
+    && Math.abs(Number(a.g ?? 0) - Number(b.g ?? 0)) <= eps
+    && Math.abs(Number(a.b ?? 0) - Number(b.b ?? 0)) <= eps
+    && Math.abs(Number(a.a ?? 1) - Number(b.a ?? 1)) <= eps;
+}
+function cloneColor(color) {
+  return {
+    r: clamp(Number(color?.r ?? 0), 0, 1),
+    g: clamp(Number(color?.g ?? 0), 0, 1),
+    b: clamp(Number(color?.b ?? 0), 0, 1),
+    a: clamp(Number(color?.a ?? 1), 0, 1),
+  };
+}
+function isPresetPaintColor(color) {
+  return PAINT_COLOR_SWATCHES.some((swatch) => colorsApproximatelyEqual(color, swatch.color));
+}
+function hsv01ToRgb(h, s, v) {
+  const hue = ((Number(h) % 1) + 1) % 1;
+  const sat = clamp(Number(s), 0, 1);
+  const val = clamp(Number(v), 0, 1);
+  if (sat <= 1e-6) return { r: val, g: val, b: val };
+  const i = Math.floor(hue * 6);
+  const f = hue * 6 - i;
+  const p = val * (1 - sat);
+  const q = val * (1 - f * sat);
+  const t = val * (1 - (1 - f) * sat);
+  switch (i % 6) {
+    case 0: return { r: val, g: t, b: p };
+    case 1: return { r: q, g: val, b: p };
+    case 2: return { r: p, g: val, b: t };
+    case 3: return { r: p, g: q, b: val };
+    case 4: return { r: t, g: p, b: val };
+    default: return { r: val, g: p, b: q };
+  }
+}
+function rgb01ToHsv(color) {
+  const r = clamp(Number(color?.r ?? 0), 0, 1);
+  const g = clamp(Number(color?.g ?? 0), 0, 1);
+  const b = clamp(Number(color?.b ?? 0), 0, 1);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  let h = 0;
+  if (delta > 1e-6) {
+    if (max === r) h = ((g - b) / delta + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / delta + 2) / 6;
+    else h = ((r - g) / delta + 4) / 6;
+  }
+  const s = max <= 1e-6 ? 0 : delta / max;
+  return { h, s, v: max };
 }
 function formatParamValue(v) {
   const n = Number(v);
@@ -1174,32 +1249,62 @@ function showEditor(node, type, options = {}) {
       </div>
       ${previewMode ? "" : `
       <div class="pano-floating-left" data-tool-rail>
-        <button class="pano-btn pano-btn-icon${"cursor" === "cursor" ? " active" : ""}" type="button" data-tool-mode="cursor" aria-label="Cursor" aria-pressed="true">${ICON.chevron}</button>
-        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="paint" aria-label="Paint" aria-pressed="false">${ICON.pen}</button>
-        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false">${ICON.mask}</button>
+        <button class="pano-btn pano-btn-icon${"cursor" === "cursor" ? " active" : ""}" type="button" data-tool-mode="cursor" aria-label="Cursor" aria-pressed="true" data-tip="Cursor">${ICON.cursor_tool}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="paint" aria-label="Paint" aria-pressed="false" data-tip="Paint">${ICON.palette_tool}</button>
+        <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false" data-tip="Mask">${ICON.circle_dashed_tool}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="${type === "stickers" ? "Add Image" : "Add Frame"}" data-tip="${type === "stickers" ? "Add image" : "Add frame"}">${ICON.add}</button>
         ${type === "cutout" ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="look-at-frame" aria-label="Look at Frame" data-tip="Look at frame">${ICON.camera}</button>` : ""}
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
       </div>
+      <div class="pano-paint-color-float" data-paint-color-row hidden>
+        ${PAINT_COLOR_SWATCHES.map((swatch) => `<button class="pano-paint-color-dot" type="button" data-paint-color-swatch="${swatch.id}" aria-label="${swatch.label}" data-tip="${swatch.label}" style="--swatch:${colorToCss(swatch.color, 1)}"></button>`).join("")}
+        <button class="pano-paint-color-dot pano-paint-color-dot-rainbow" type="button" data-paint-color-custom aria-label="Custom color" data-tip="Custom color"></button>
+        <div class="pano-paint-color-pop" data-paint-color-pop hidden>
+          <div class="pano-paint-color-pop-head">
+            <span class="pano-paint-color-preview" data-paint-color-preview></span>
+            <span class="pano-paint-color-pop-label">Custom Color</span>
+          </div>
+          <div class="pano-paint-color-field">
+            <div class="pano-paint-sv-panel" data-paint-color-sv>
+              <div class="pano-paint-sv-cursor" data-paint-color-sv-cursor></div>
+            </div>
+            <div class="pano-paint-hue-strip" data-paint-hue-strip>
+              <div class="pano-paint-hue-handle" data-paint-hue-handle></div>
+            </div>
+          </div>
+          <label class="pano-paint-color-field">
+            <span>Opacity</span>
+            <div class="pano-paint-alpha-wrap">
+              <input type="range" min="0" max="100" step="1" value="100" data-paint-alpha-slider>
+              <span data-paint-alpha-value>100%</span>
+            </div>
+          </label>
+          <div class="pano-paint-color-history" data-paint-color-history-wrap>
+            <div class="pano-paint-color-history-list" data-paint-color-history></div>
+          </div>
+        </div>
+      </div>
       <div class="pano-paint-footer" data-paint-footer hidden>
         <div class="pano-paint-footer-group" data-paint-group="paint" hidden>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Soft Brush" data-tip="Soft Brush">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="crayon" aria-label="Pastel" data-tip="Pastel">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.clear}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pencil_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Soft Brush" data-tip="Soft Brush">${ICON.spray_can_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.highlighter_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="crayon" aria-label="Pastel" data-tip="Pastel">${ICON.paintbrush_vertical_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.eraser_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.lasso_tool}</button>
         </div>
         <div class="pano-paint-footer-group" data-paint-group="mask" hidden>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.clear}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pencil_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.eraser_tool}</button>
         </div>
-        <div class="pano-paint-size-row">
-          <span class="pano-paint-size-label">Size</span>
+        <div class="pano-paint-size-row" data-paint-size-row hidden>
           <input class="pano-paint-size-slider" data-paint-size-slider type="range" min="1" max="120" step="1" value="10">
           <span class="pano-paint-size-value" data-paint-size-value>10</span>
+        </div>
+        <div class="pano-paint-clear-row" data-paint-clear-row hidden>
+          <button class="pano-btn pano-btn-icon pano-paint-layer-clear" type="button" data-paint-layer-clear-current aria-label="Clear Current Layer" data-tip="Clear current">${ICON.clear}</button>
         </div>
       </div>`}
       <div class="pano-floating-top">
@@ -1248,6 +1353,20 @@ function showEditor(node, type, options = {}) {
   const tooltipEl = root.querySelector("[data-tooltip]");
   const toolRail = root.querySelector("[data-tool-rail]");
   const paintFooter = root.querySelector("[data-paint-footer]");
+  const paintColorRow = root.querySelector("[data-paint-color-row]");
+  const paintColorPop = root.querySelector("[data-paint-color-pop]");
+  const paintColorPreview = root.querySelector("[data-paint-color-preview]");
+  const paintColorSv = root.querySelector("[data-paint-color-sv]");
+  const paintColorSvCursor = root.querySelector("[data-paint-color-sv-cursor]");
+  const paintHueStrip = root.querySelector("[data-paint-hue-strip]");
+  const paintHueHandle = root.querySelector("[data-paint-hue-handle]");
+  const paintAlphaSlider = root.querySelector("[data-paint-alpha-slider]");
+  const paintAlphaValue = root.querySelector("[data-paint-alpha-value]");
+  const paintColorHistoryWrap = root.querySelector("[data-paint-color-history-wrap]");
+  const paintColorHistory = root.querySelector("[data-paint-color-history]");
+  const paintSizeRow = root.querySelector("[data-paint-size-row]");
+  const paintClearRow = root.querySelector("[data-paint-clear-row]");
+  const paintLayerClearCurrentBtn = root.querySelector("[data-paint-layer-clear-current]");
   const paintSizeSlider = root.querySelector("[data-paint-size-slider]");
   const paintSizeValue = root.querySelector("[data-paint-size-value]");
   if (type === "cutout") canvas.style.opacity = "0";
@@ -1255,12 +1374,42 @@ function showEditor(node, type, options = {}) {
     side?.remove();
     root.classList.add("pano-modal-readonly");
   }
+  const commitCustomPaintHistory = () => {
+    if (!editor.customPaintSessionStart) return;
+    if (colorsApproximatelyEqual(editor.customPaintSessionStart, editor.customPaintColor)) {
+      editor.customPaintSessionStart = null;
+      return;
+    }
+    if (isPresetPaintColor(editor.customPaintColor)) {
+      editor.customPaintSessionStart = null;
+      return;
+    }
+    const next = [
+      cloneColor(editor.customPaintColor),
+      ...editor.customPaintHistory.filter((item) => !colorsApproximatelyEqual(item, editor.customPaintColor)),
+    ];
+    editor.customPaintHistory = next.slice(0, 7);
+    editor.customPaintSessionStart = null;
+  };
+  const closePaintColorPop = (commitHistory = false) => {
+    if (!paintColorPop || paintColorPop.hidden) return;
+    if (commitHistory) commitCustomPaintHistory();
+    else editor.customPaintSessionStart = null;
+    paintColorPop.hidden = true;
+  };
+  const openPaintColorPop = () => {
+    if (!paintColorPop) return;
+    if (paintColorPop.hidden) editor.customPaintSessionStart = cloneColor(editor.customPaintColor);
+    paintColorPop.hidden = false;
+  };
   root.addEventListener("pointerdown", (ev) => {
     hideTooltip();
     if (ev.target.closest(".pano-picker")) return;
+    if (ev.target.closest("[data-paint-color-row]")) return;
     root.querySelectorAll(".pano-picker-pop").forEach((el) => {
       el.hidden = true;
     });
+    closePaintColorPop(true);
     if (type === "cutout" && editor.cutoutAspectOpen && !ev.target.closest(".pano-aspect-popover") && !ev.target.closest("[data-action='aspect']")) {
       editor.cutoutAspectOpen = false;
       editor.menuMode = "";
@@ -1282,7 +1431,10 @@ function showEditor(node, type, options = {}) {
     maskTool: "pen",
     brushSizes: { pen: 20, marker: 20, brush: 20, crayon: 20 },
     activeBrushPresetId: DEFAULT_BRUSH_PRESET_ID,
-    paintColor: { r: 1, g: 0.25, b: 0.25, a: 1 },
+    paintColor: { r: 0, g: 1, b: 0, a: 1 },
+    customPaintColor: { r: 0, g: 1, b: 0, a: 1 },
+    customPaintHistory: [],
+    customPaintSessionStart: null,
     interaction: null,
     hqFrames: 0,
     viewInertia: { vx: 0, vy: 0, active: false },
@@ -3580,6 +3732,13 @@ function showEditor(node, type, options = {}) {
         const mode = group.getAttribute("data-paint-group");
         group.hidden = mode !== editor.primaryTool;
       });
+      if (paintSizeRow) paintSizeRow.hidden = editor.primaryTool !== "paint";
+      if (paintClearRow) paintClearRow.hidden = !(editor.primaryTool === "paint" || editor.primaryTool === "mask");
+      if (paintLayerClearCurrentBtn) {
+        const label = editor.primaryTool === "mask" ? "Clear mask" : "Clear paint";
+        paintLayerClearCurrentBtn.setAttribute("aria-label", label);
+        paintLayerClearCurrentBtn.setAttribute("data-tip", label);
+      }
       paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
         btn.classList.toggle("active", btn.getAttribute("data-paint-tool") === editor.paintTool && editor.primaryTool === "paint");
       });
@@ -3587,8 +3746,83 @@ function showEditor(node, type, options = {}) {
         btn.classList.toggle("active", btn.getAttribute("data-mask-tool") === editor.maskTool && editor.primaryTool === "mask");
       });
     }
-    const currentSize = editor.brushSizes[editor.activeBrushPresetId] ?? 10;
-    if (paintSizeSlider) paintSizeSlider.value = String(currentSize);
+    if (paintColorRow) {
+      const showColorRow = editor.primaryTool === "paint";
+      const colorEnabled = showColorRow && editor.paintTool !== "eraser";
+      paintColorRow.hidden = !showColorRow;
+      paintColorRow.classList.toggle("disabled", !colorEnabled);
+      if (!colorEnabled && paintColorPop) paintColorPop.hidden = true;
+      const matchedSwatchId = PAINT_COLOR_SWATCHES.find((swatch) => colorsApproximatelyEqual(editor.paintColor, swatch.color))?.id || "";
+      paintColorRow.querySelectorAll("[data-paint-color-swatch]").forEach((btn) => {
+        const active = btn.getAttribute("data-paint-color-swatch") === matchedSwatchId;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+        btn.disabled = !colorEnabled;
+      });
+      const customBtn = paintColorRow.querySelector("[data-paint-color-custom]");
+      if (customBtn) {
+        const customActive = !matchedSwatchId;
+        customBtn.classList.toggle("active", customActive);
+        customBtn.style.setProperty("--custom-color", colorToCss(editor.customPaintColor, 1));
+        customBtn.setAttribute("aria-pressed", customActive ? "true" : "false");
+        customBtn.disabled = !colorEnabled;
+      }
+      if (paintAlphaSlider) paintAlphaSlider.value = String(Math.round(clamp(Number(editor.customPaintColor?.a ?? 1), 0, 1) * 100));
+      if (paintAlphaValue) paintAlphaValue.textContent = `${Math.round(clamp(Number(editor.customPaintColor?.a ?? 1), 0, 1) * 100)}%`;
+      if (paintColorPreview) paintColorPreview.style.background = colorToCss(editor.customPaintColor);
+      if (paintColorPop) {
+        const hsv = rgb01ToHsv(editor.customPaintColor);
+        paintColorPop.style.setProperty("--picker-hue-color", colorToCss({ ...hsv01ToRgb(hsv.h, 1, 1), a: 1 }, 1));
+        paintColorPop.style.setProperty("--picker-sat", `${clamp(hsv.s, 0, 1) * 100}%`);
+        paintColorPop.style.setProperty("--picker-val", `${(1 - clamp(hsv.v, 0, 1)) * 100}%`);
+        paintColorPop.style.setProperty("--picker-hue", `${clamp(hsv.h, 0, 1) * 100}%`);
+      }
+      if (paintColorSvCursor) {
+        const hsv = rgb01ToHsv(editor.customPaintColor);
+        paintColorSvCursor.style.left = `${clamp(hsv.s, 0, 1) * 100}%`;
+        paintColorSvCursor.style.top = `${(1 - clamp(hsv.v, 0, 1)) * 100}%`;
+      }
+      if (paintHueHandle) {
+        const hsv = rgb01ToHsv(editor.customPaintColor);
+        paintHueHandle.style.left = `${clamp(hsv.h, 0, 1) * 100}%`;
+      }
+      if (paintColorHistoryWrap && paintColorHistory) {
+        const slots = Array.from({ length: 7 }, (_, index) => editor.customPaintHistory[index] || null);
+        paintColorHistory.innerHTML = slots.map((color, index) => `
+          <button class="pano-paint-color-history-dot${color ? "" : " empty"}" type="button" data-paint-history-index="${index}" ${color ? `style="--swatch:${colorToCss(color, 1)}"` : ""} aria-label="Recent color ${index + 1}" ${color ? "" : "disabled"}></button>
+        `).join("");
+        paintColorHistory.querySelectorAll("[data-paint-history-index]").forEach((btn) => {
+          btn.onclick = () => {
+            const idx = Number(btn.getAttribute("data-paint-history-index"));
+            const color = editor.customPaintHistory[idx];
+            if (!color) return;
+            editor.customPaintColor = cloneColor(color);
+            editor.paintColor = cloneColor(color);
+            syncPaintUi();
+          };
+        });
+      }
+    }
+    if (paintColorRow && paintFooter && stageWrap) {
+      if (paintColorRow.hidden || paintFooter.hidden) {
+        paintColorRow.style.left = "";
+        paintColorRow.style.bottom = "";
+      } else {
+        const stageRect = stageWrap.getBoundingClientRect();
+        const footerRect = paintFooter.getBoundingClientRect();
+        const centerX = ((footerRect.left + footerRect.right) * 0.5) - stageRect.left;
+        const bottom = stageRect.bottom - footerRect.top + 10;
+        paintColorRow.style.left = `${Math.round(centerX)}px`;
+        paintColorRow.style.bottom = `${Math.round(bottom)}px`;
+      }
+    }
+    const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
+    const currentSize = editor.brushSizes[sizePresetId] ?? 10;
+    if (paintSizeSlider) {
+      paintSizeSlider.value = String(currentSize);
+      const pct = ((currentSize - 1) / 119) * 100;
+      paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
+    }
     if (paintSizeValue) paintSizeValue.textContent = String(currentSize);
   }
 
@@ -4404,6 +4638,33 @@ function showEditor(node, type, options = {}) {
     requestDraw();
   }
 
+  async function clearPaintingLayer(layerKind) {
+    if (readOnly) return;
+    const kind = layerKind === "mask" ? "mask" : "paint";
+    const label = kind === "mask" ? "Mask" : "Paint";
+    const strokes = getPaintingLayerList(kind);
+    if (!strokes.length && !(editor.interaction?.kind === "draw" && editor.interaction?.layerKind === kind)) return;
+    const ok = await showCanvasConfirm(
+      `Clear ${label}`,
+      `This will remove all ${kind} strokes in the current node.`,
+      `Clear ${label}`,
+    );
+    if (!ok) return;
+    if (editor.interaction?.kind === "draw" && editor.interaction?.layerKind === kind) {
+      const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
+      if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
+      editor.interaction = null;
+    }
+    strokes.length = 0;
+    editor.paintStrokeRevision += 1;
+    pushHistory();
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    syncPaintUi();
+    requestDraw();
+  }
+
   function duplicateSelected() {
     if (readOnly) return;
     if (type !== "stickers") return;
@@ -4721,8 +4982,15 @@ function showEditor(node, type, options = {}) {
     };
   }
 
+  function getBrushPresetIdForTool(toolKind) {
+    const kind = String(toolKind || "").trim();
+    if (kind === "eraser") return DEFAULT_BRUSH_PRESET_ID;
+    if (BRUSH_PRESETS[kind]) return kind;
+    return editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
+  }
+
   function buildFreehandStrokeRecord(layerKind, toolKind, points, targetSpace) {
-    const presetId = editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
+    const presetId = getBrushPresetIdForTool(toolKind);
     const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
     const rawSize = editor.brushSizes[presetId] ?? 10;
     const size = Math.max(1, rawSize) * Math.max(0.1, preset.sizeScale ?? 1);
@@ -4761,7 +5029,7 @@ function showEditor(node, type, options = {}) {
       widthScale: Number.isFinite(Number(pt?.widthScale)) ? Math.max(0, Number(pt.widthScale)) : 1,
       pressureLike: Number.isFinite(Number(pt?.pressureLike)) ? Math.max(0, Number(pt.pressureLike)) : 1,
     }));
-    const presetId = editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
+    const presetId = getBrushPresetIdForTool(toolKind);
     const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
     const stroke = {
       id: makePaintId(layerKind),
@@ -5034,7 +5302,7 @@ function showEditor(node, type, options = {}) {
       tooltip.timer = 0;
     }
     tooltip.target = null;
-    tooltipEl.classList.remove("show");
+    tooltipEl.classList.remove("show", "pano-tooltip-footer", "pano-tooltip-tool-rail");
   }
 
   function showTooltipFor(el) {
@@ -5047,8 +5315,26 @@ function showEditor(node, type, options = {}) {
     const pad = 8;
     const mw = tooltipEl.offsetWidth || 100;
     const mh = tooltipEl.offsetHeight || 24;
+    const inToolRail = !!el.closest(".pano-floating-left");
+    const inFooter = !!el.closest(".pano-paint-footer") || !!el.closest(".pano-paint-color-float");
+    tooltipEl.classList.remove("pano-tooltip-footer", "pano-tooltip-tool-rail");
     let x = rect.left - hostRect.left + rect.width * 0.5 - mw * 0.5;
     let y = rect.top - hostRect.top - mh - 8;
+    if (inToolRail) {
+      tooltipEl.classList.add("pano-tooltip-tool-rail");
+      x = rect.right - hostRect.left + 10;
+      y = rect.top - hostRect.top + rect.height * 0.5 - mh * 0.5;
+      x = clamp(x, pad, Math.max(pad, hostRect.width - mw - pad));
+      y = clamp(y, pad, Math.max(pad, hostRect.height - mh - pad));
+    } else if (inFooter) {
+      tooltipEl.classList.add("pano-tooltip-footer");
+      const footerHost = el.closest(".pano-paint-footer");
+      const footerRect = footerHost ? footerHost.getBoundingClientRect() : rect;
+      x = footerRect.left - hostRect.left + footerRect.width * 0.5 - mw * 0.5;
+      y = footerRect.bottom - hostRect.top + 5;
+      x = clamp(x, pad, Math.max(pad, hostRect.width - mw - pad));
+      y = Math.max(pad, y);
+    }
     x = clamp(x, pad, Math.max(pad, hostRect.width - mw - pad));
     y = Math.max(pad, y);
     tooltipEl.style.left = `${x}px`;
@@ -5065,7 +5351,7 @@ function showEditor(node, type, options = {}) {
         if (tooltip.timer) clearTimeout(tooltip.timer);
         tooltip.timer = window.setTimeout(() => {
           if (tooltip.target === el) showTooltipFor(el);
-        }, 1000);
+        }, 220);
       });
       el.addEventListener("pointerleave", () => {
         if (tooltip.target === el) tooltip.target = null;
@@ -5650,12 +5936,101 @@ function showEditor(node, type, options = {}) {
         requestDraw();
       };
     });
+    if (paintLayerClearCurrentBtn) {
+      paintLayerClearCurrentBtn.onclick = () => {
+        clearPaintingLayer(editor.primaryTool === "mask" ? "mask" : "paint");
+      };
+    }
   }
   if (paintSizeSlider) {
     paintSizeSlider.oninput = () => {
       const v = Math.max(1, Math.min(120, Math.round(Number(paintSizeSlider.value))));
-      editor.brushSizes[editor.activeBrushPresetId] = v;
+      const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
+      editor.brushSizes[sizePresetId] = v;
+      const pct = ((v - 1) / 119) * 100;
+      paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
       if (paintSizeValue) paintSizeValue.textContent = String(v);
+    };
+  }
+  if (paintColorRow) {
+    paintColorRow.querySelectorAll("[data-paint-color-swatch]").forEach((btn) => {
+      btn.onclick = () => {
+        const swatch = PAINT_COLOR_SWATCHES.find((item) => item.id === btn.getAttribute("data-paint-color-swatch"));
+        if (!swatch) return;
+        editor.paintColor = cloneColor(swatch.color);
+        closePaintColorPop(true);
+        syncPaintUi();
+      };
+    });
+    const customBtn = paintColorRow.querySelector("[data-paint-color-custom]");
+    if (customBtn) {
+      customBtn.onclick = (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        if (paintColorPop && !paintColorPop.hidden) closePaintColorPop(true);
+        else openPaintColorPop();
+        syncPaintUi();
+      };
+    }
+  }
+  const updatePaintColorFromSv = (clientX, clientY) => {
+    if (!paintColorSv) return;
+    const rect = paintColorSv.getBoundingClientRect();
+    const sat = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    const val = 1 - clamp((clientY - rect.top) / Math.max(1, rect.height), 0, 1);
+    const hsv = rgb01ToHsv(editor.customPaintColor);
+    const next = { ...hsv01ToRgb(hsv.h, sat, val), a: Number(editor.customPaintColor?.a ?? 1) };
+    editor.customPaintColor = cloneColor(next);
+    editor.paintColor = cloneColor(next);
+    syncPaintUi();
+  };
+  const updatePaintColorFromHue = (clientX) => {
+    if (!paintHueStrip) return;
+    const rect = paintHueStrip.getBoundingClientRect();
+    const hue = clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    const hsv = rgb01ToHsv(editor.customPaintColor);
+    const next = { ...hsv01ToRgb(hue, hsv.s, hsv.v), a: Number(editor.customPaintColor?.a ?? 1) };
+    editor.customPaintColor = cloneColor(next);
+    editor.paintColor = cloneColor(next);
+    syncPaintUi();
+  };
+  const bindDrag = (startEvent, onMove) => {
+    const pointerId = startEvent.pointerId;
+    onMove(startEvent);
+    const handleMove = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      onMove(moveEvent);
+    };
+    const finish = (endEvent) => {
+      if (endEvent.pointerId !== pointerId) return;
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+  };
+  if (paintColorSv) {
+    paintColorSv.onpointerdown = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      bindDrag(ev, (moveEvent) => updatePaintColorFromSv(moveEvent.clientX, moveEvent.clientY));
+    };
+  }
+  if (paintHueStrip) {
+    paintHueStrip.onpointerdown = (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      bindDrag(ev, (moveEvent) => updatePaintColorFromHue(moveEvent.clientX));
+    };
+  }
+  if (paintAlphaSlider) {
+    paintAlphaSlider.oninput = () => {
+      const next = { ...editor.customPaintColor, a: clamp(Number(paintAlphaSlider.value) / 100, 0, 1) };
+      editor.customPaintColor = cloneColor(next);
+      editor.paintColor = cloneColor(next);
+      syncPaintUi();
     };
   }
   const syncFullscreenButton = () => {

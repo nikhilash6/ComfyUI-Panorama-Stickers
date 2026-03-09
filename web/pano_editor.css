@@ -328,12 +328,26 @@
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
   opacity: 0;
   visibility: hidden;
-  transition: opacity 100ms ease, visibility 100ms ease;
-  z-index: 4;
+  transition: opacity 100ms ease;
+  z-index: 8;
 }
 .pano-tooltip.show {
   opacity: 1;
   visibility: visible;
+}
+.pano-tooltip.pano-tooltip-footer {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--pano-text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+}
+.pano-tooltip.pano-tooltip-tool-rail {
+  padding: 7px 10px;
+  border-radius: var(--pano-space-md);
+  background: color-mix(in srgb, var(--pano-surface-1) 94%, black);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34);
 }
 .pano-canvas-confirm {
   position: absolute;
@@ -521,6 +535,9 @@
   background: var(--pano-float-bg);
   backdrop-filter: blur(12px);
 }
+.pano-paint-footer[hidden] {
+  display: none;
+}
 .pano-paint-footer-group {
   display: flex;
   align-items: center;
@@ -529,6 +546,217 @@
 }
 .pano-paint-footer-group[hidden] {
   display: none;
+}
+.pano-paint-color-float {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  background: rgba(18, 20, 26, 0.4);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.35);
+  backdrop-filter: blur(12px);
+}
+.pano-paint-color-float[hidden] {
+  display: none;
+}
+.pano-paint-color-float.disabled {
+  opacity: 0.42;
+  filter: saturate(0.55);
+}
+.pano-paint-color-dot {
+  position: relative;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.pano-paint-color-dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--swatch, #fff);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.16);
+  pointer-events: none;
+}
+.pano-paint-color-dot::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 0 transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+.pano-paint-color-dot:hover {
+  filter: saturate(1.04);
+}
+.pano-paint-color-dot:disabled {
+  cursor: default;
+}
+.pano-paint-color-dot:disabled:hover {
+  filter: none;
+}
+.pano-paint-color-dot.active {
+  filter: saturate(1.06);
+}
+.pano-paint-color-dot.active::before {
+  inset: 4px;
+}
+.pano-paint-color-dot.active::after {
+  box-shadow: inset 0 0 0 2.5px var(--swatch, #fff);
+  opacity: 1;
+}
+.pano-paint-color-dot-rainbow {
+}
+.pano-paint-color-dot-rainbow::before {
+  background:
+    radial-gradient(circle at center, var(--custom-color, rgba(255,64,64,1)) 0 38%, rgba(255,255,255,0.08) 39%, transparent 43%),
+    conic-gradient(from 90deg, #ff4d4d, #ffb84d, #ffe54d, #5fd14f, #39c5ff, #6b78ff, #bf62ff, #ff4db8, #ff4d4d);
+}
+.pano-paint-color-pop {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 14px);
+  transform: translateX(-50%);
+  min-width: 220px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(20, 20, 23, 0.98);
+  box-shadow: 0 16px 40px rgba(0,0,0,0.42), inset 0 0 0 1px rgba(255,255,255,0.08);
+  display: grid;
+  gap: 10px;
+  z-index: 6;
+}
+.pano-paint-color-pop[hidden] {
+  display: none;
+}
+.pano-paint-color-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pano-paint-color-preview {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.24);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.22);
+}
+.pano-paint-color-pop-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--pano-text);
+}
+.pano-paint-color-field {
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--pano-muted);
+}
+.pano-paint-sv-panel {
+  position: relative;
+  width: 100%;
+  height: 104px;
+  border-radius: 10px;
+  overflow: hidden;
+  background:
+    linear-gradient(to top, #000, transparent),
+    linear-gradient(to right, #fff, var(--picker-hue-color, #00ff00));
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+}
+.pano-paint-sv-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.12), transparent 35%);
+  pointer-events: none;
+}
+.pano-paint-sv-cursor {
+  position: absolute;
+  left: var(--picker-sat, 100%);
+  top: var(--picker-val, 0%);
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.95);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.45), 0 3px 8px rgba(0,0,0,0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.pano-paint-hue-strip {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+  cursor: pointer;
+}
+.pano-paint-hue-handle {
+  position: absolute;
+  left: var(--picker-hue, 33%);
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,0.95);
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.45), 0 3px 8px rgba(0,0,0,0.35);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.pano-paint-alpha-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.pano-paint-alpha-wrap span {
+  min-width: 36px;
+  text-align: right;
+  color: var(--pano-text);
+  font-size: 11px;
+}
+.pano-paint-color-history {
+  margin-top: 2px;
+}
+.pano-paint-color-history-list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.pano-paint-color-history-dot {
+  width: 15px;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  padding: 0;
+  border: 0;
+  background: var(--swatch, #fff);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.14), inset 0 1px 1px rgba(255,255,255,0.12);
+}
+.pano-paint-color-history-dot:hover {
+  transform: translateY(-1px) scale(1.06);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.18), inset 0 1px 1px rgba(255,255,255,0.16);
+}
+.pano-paint-color-history-dot.empty {
+  background: rgba(255,255,255,0.045);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  cursor: default;
+}
+.pano-paint-color-history-dot.empty:hover {
+  transform: none;
 }
 .pano-paint-footer-note {
   color: var(--pano-text-secondary);
@@ -539,24 +767,63 @@
 .pano-paint-size-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  margin-right: 8px;
   padding-left: 4px;
   border-left: 1px solid rgba(255,255,255,0.12);
 }
-.pano-paint-size-label {
-  font-size: 11px;
-  color: var(--pano-text-secondary);
-  white-space: nowrap;
-}
 .pano-paint-size-slider {
-  width: 80px;
+  width: 88px;
   cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, var(--pano-accent) 0%, var(--pano-accent) var(--v, 50%), rgba(255,255,255,0.16) var(--v, 50%));
+  height: 3px;
+  border-radius: 999px;
+  padding: 0;
+}
+.pano-paint-size-slider::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 999px;
+  background: transparent;
+}
+.pano-paint-size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  border: 0;
+  background: radial-gradient(circle at center, var(--pano-accent) 0 5.5px, transparent 6px);
+  margin-top: -8px;
+}
+.pano-paint-size-slider::-moz-range-track {
+  height: 3px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.1);
+}
+.pano-paint-size-slider::-moz-range-progress {
+  height: 3px;
+  border-radius: 999px;
+  background: var(--pano-accent);
+}
+.pano-paint-size-slider::-moz-range-thumb {
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  border: 0;
+  background: radial-gradient(circle at center, var(--pano-accent) 0 5.5px, transparent 6px);
+}
+.pano-paint-size-slider:focus-visible {
+  outline: none;
 }
 .pano-paint-size-value {
   font-size: 11px;
   color: var(--pano-text-primary, #fff);
-  min-width: 24px;
+  min-width: 22px;
   text-align: right;
+}
+.pano-paint-size-row .pano-paint-layer-clear {
+  margin-left: 4px;
 }
 .pano-side-footer {
   margin-top: auto;
