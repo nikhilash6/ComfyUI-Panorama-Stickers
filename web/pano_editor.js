@@ -10,6 +10,7 @@ import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
 import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
+import { BRUSH_PRESETS, DEFAULT_BRUSH_PRESET_ID, applyPresetToStroke } from "./pano_brush_presets.js";
 import { createHistoryController } from "./pano_paint_history.js";
 import { createPaintEngineManager } from "./pano_paint_engine.js";
 import { normalizePaintingState } from "./pano_paint_types.js";
@@ -1185,8 +1186,9 @@ function showEditor(node, type, options = {}) {
       <div class="pano-paint-footer" data-paint-footer hidden>
         <div class="pano-paint-footer-group" data-paint-group="paint" hidden>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Soft Brush" data-tip="Soft Brush">${ICON.pen}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.pen}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Brush" data-tip="Brush">${ICON.pen}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="crayon" aria-label="Pastel" data-tip="Pastel">${ICON.pen}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.clear}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.pen}</button>
         </div>
@@ -1278,7 +1280,8 @@ function showEditor(node, type, options = {}) {
     primaryTool: "cursor",
     paintTool: "pen",
     maskTool: "pen",
-    paintBrushSize: 10,
+    brushSizes: { pen: 20, marker: 20, brush: 20, crayon: 20 },
+    activeBrushPresetId: DEFAULT_BRUSH_PRESET_ID,
     paintColor: { r: 1, g: 0.25, b: 0.25, a: 1 },
     interaction: null,
     hqFrames: 0,
@@ -3382,6 +3385,41 @@ function showEditor(node, type, options = {}) {
     return true;
   }
 
+  // Draw dashed outline for the lasso fill region while the user is still drawing.
+  // The fill itself is rendered at 50% by the paint engine (lassoPreviewActive).
+  // This overlay adds a visible dashed border on the 2D canvas.
+  function drawLassoOutlineOverlay() {
+    if (editor.interaction?.kind !== "paint_lasso_fill") return;
+    const stroke = editor.interaction.stroke;
+    const points = stroke?.geometry?.points;
+    let projected;
+    if (editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      const rect = getFrameViewRect(shot);
+      projected = projectErpLassoPointsToFrameRect(points, shot, rect);
+    } else {
+      projected = projectLassoPointsToCurrentView(points);
+    }
+    if (!Array.isArray(projected) || projected.length < 3) return;
+
+    const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+    const cr = Math.round(Number(c.r || 0) * 255);
+    const cg = Math.round(Number(c.g || 0) * 255);
+    const cb = Math.round(Number(c.b || 0) * 255);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(Number(projected[0].x || 0), Number(projected[0].y || 0));
+    for (let i = 1; i < projected.length; i++) ctx.lineTo(Number(projected[i].x || 0), Number(projected[i].y || 0));
+    ctx.closePath();
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.strokeStyle = `rgba(${cr},${cg},${cb},1)`;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
+
   function drawScene() {
     if (editor.mode === "frame") drawFrameViewBackground();
     else if (editor.mode === "unwrap") drawGridUnwrap(false);
@@ -3392,6 +3430,7 @@ function showEditor(node, type, options = {}) {
     }
     if (editor.mode !== "frame") drawObjects();
     if (editor.mode !== "frame") drawCutoutOutputPreview();
+    drawLassoOutlineOverlay();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
     updateSelectionMenu();
     if (!runtime.hasPresentedFrame) {
@@ -3540,8 +3579,9 @@ function showEditor(node, type, options = {}) {
         btn.classList.toggle("active", btn.getAttribute("data-mask-tool") === editor.maskTool && editor.primaryTool === "mask");
       });
     }
-    if (paintSizeSlider) paintSizeSlider.value = String(editor.paintBrushSize);
-    if (paintSizeValue) paintSizeValue.textContent = String(editor.paintBrushSize);
+    const currentSize = editor.brushSizes[editor.activeBrushPresetId] ?? 10;
+    if (paintSizeSlider) paintSizeSlider.value = String(currentSize);
+    if (paintSizeValue) paintSizeValue.textContent = String(currentSize);
   }
 
   function addParamRow(container, selected, key, label, min, max, step, enabled = true) {
@@ -4674,7 +4714,10 @@ function showEditor(node, type, options = {}) {
   }
 
   function buildFreehandStrokeRecord(layerKind, toolKind, points, targetSpace) {
-    const size = Math.max(1, Number(editor.paintBrushSize || 10));
+    const presetId = editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
+    const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+    const rawSize = editor.brushSizes[presetId] ?? 10;
+    const size = Math.max(1, rawSize) * Math.max(0.1, preset.sizeScale ?? 1);
     const radiusSpec = captureStrokeRadiusSpec(targetSpace, size);
     const preparedPoints = points.map((pt) => ({
       ...pt,
@@ -4688,12 +4731,7 @@ function showEditor(node, type, options = {}) {
       targetSpace: targetSpace && typeof targetSpace === "object" ? { ...targetSpace } : { kind: "ERP_GLOBAL" },
       layerKind,
       toolKind,
-      brushPresetId: toolKind,
       size,
-      opacity: toolKind === "marker" ? 0.7 : 1,
-      hardness: toolKind === "brush" ? 0.35 : 0.9,
-      flow: null,
-      spacing: null,
       createdAt: Date.now(),
       color: layerKind === "paint" ? { ...editor.paintColor } : null,
       radiusModel: radiusSpec.radiusModel,
@@ -4704,6 +4742,7 @@ function showEditor(node, type, options = {}) {
         points: preparedPoints.map((pt) => ({ ...pt })),
       },
     };
+    applyPresetToStroke(stroke, preset);
     return stroke;
   }
 
@@ -4714,18 +4753,15 @@ function showEditor(node, type, options = {}) {
       widthScale: Number.isFinite(Number(pt?.widthScale)) ? Math.max(0, Number(pt.widthScale)) : 1,
       pressureLike: Number.isFinite(Number(pt?.pressureLike)) ? Math.max(0, Number(pt.pressureLike)) : 1,
     }));
-    return {
+    const presetId = editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
+    const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+    const stroke = {
       id: makePaintId(layerKind),
       actionGroupId: makePaintId("ag"),
       targetSpace: targetSpace && typeof targetSpace === "object" ? { ...targetSpace } : { kind: "ERP_GLOBAL" },
       layerKind,
       toolKind,
-      brushPresetId: toolKind,
       size: 10,
-      opacity: 1,
-      hardness: 1,
-      flow: null,
-      spacing: null,
       createdAt: Date.now(),
       color: layerKind === "paint" ? { ...editor.paintColor } : null,
       radiusModel: null,
@@ -4735,6 +4771,8 @@ function showEditor(node, type, options = {}) {
         points: preparedPoints.map((pt) => ({ ...pt })),
       },
     };
+    applyPresetToStroke(stroke, preset);
+    return stroke;
   }
 
   function getPaintingLayerList(layerKind) {
@@ -5587,7 +5625,9 @@ function showEditor(node, type, options = {}) {
     paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
       btn.onclick = () => {
         editor.primaryTool = "paint";
-        editor.paintTool = String(btn.getAttribute("data-paint-tool") || "pen");
+        const tool = String(btn.getAttribute("data-paint-tool") || "pen");
+        editor.paintTool = tool;
+        if (BRUSH_PRESETS[tool]) editor.activeBrushPresetId = tool;
         syncPaintUi();
         updateSidePanel();
         requestDraw();
@@ -5606,7 +5646,7 @@ function showEditor(node, type, options = {}) {
   if (paintSizeSlider) {
     paintSizeSlider.oninput = () => {
       const v = Math.max(1, Math.min(120, Math.round(Number(paintSizeSlider.value))));
-      editor.paintBrushSize = v;
+      editor.brushSizes[editor.activeBrushPresetId] = v;
       if (paintSizeValue) paintSizeValue.textContent = String(v);
     };
   }

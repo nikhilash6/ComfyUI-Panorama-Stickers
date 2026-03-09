@@ -183,11 +183,242 @@ function buildStampTexture(radiusPx, hardness, r255, g255, b255, opacity) {
   return canvas;
 }
 
+// ─── Chisel Stamp Texture ────────────────────────────────────────────────────
+
+// Build (or retrieve cached) chisel stamp for the given brush parameters.
+// Shape: stadium (discorectangle) — two semicircular caps joined by a flat rectangle.
+//   rx = half-width (long axis), ry = half-height (short axis, = radiusPx).
+//   halfFlat = rx - ry  — half-length of the flat middle section.
+// Interior alpha modulation:
+//   edge lift  — stamps are more opaque near the shape boundary (ink piles at nib edge).
+//   centre dip — stamps are slightly hollow at the very centre.
+// The angle is NOT baked in; rotation is applied at draw time via ctx.rotate().
+// col = { r, g, b, a } where a = flow (already incorporates color.a * flow from getStampColor).
+// fiber ∈ [0,1]: anisotropic nib-channel noise — elongated streaks along nib axis (x), ~1.5px wide in y.
+function buildChiselTexture(rx, ry, hardness, col, edgeLift, centerDip, fiber) {
+  const { r: r255, g: g255, b: b255, a: flow } = col;
+  const cw = Math.max(2, Math.ceil(rx) * 2);
+  const ch = Math.max(2, Math.ceil(ry) * 2);
+  const el = Math.max(0, edgeLift);
+  const cd = Math.max(0, Math.min(0.99, centerDip));
+  const fb = Math.max(0, Math.min(1, fiber ?? 0));
+  const key = `chisel:${cw}:${ch}:${hardness.toFixed(2)}:${r255}:${g255}:${b255}:${flow.toFixed(3)}:${el.toFixed(2)}:${cd.toFixed(2)}:${fb.toFixed(2)}`;
+
+  if (_stampCache.has(key)) {
+    const stamp = _stampCache.get(key);
+    _stampCache.delete(key);
+    _stampCache.set(key, stamp);
+    return stamp;
+  }
+  if (_stampCache.size >= STAMP_CACHE_MAX) _stampCache.delete(_stampCache.keys().next().value);
+
+  const oc = new OffscreenCanvas(cw, ch);
+  const ctx = oc.getContext("2d");
+  const img = ctx.createImageData(cw, ch);
+  const d = img.data;
+
+  const halfFlat = Math.max(0, rx - ry);  // flat-section half-length
+  const h = Math.max(0, Math.min(1, hardness));
+  // Normalise modulation so the peak (at the shape edge) equals flow.
+  const peakMod = 1 + el;
+
+  for (let py = 0; py < ch; py++) {
+    for (let px = 0; px < cw; px++) {
+      // Offset from canvas centre in actual pixels.
+      const ax = px + 0.5 - rx;
+      const ay = py + 0.5 - ry;
+
+      // Stadium SDF: distance from the nearest point on the centre-axis segment.
+      const bx = Math.max(Math.abs(ax) - halfFlat, 0);
+      const dist = Math.hypot(bx, ay);
+      const sdf = dist / ry;   // 0 = centre segment, 1 = shape boundary
+
+      if (sdf >= 1) continue;  // outside shape
+
+      // Edge-softness mask (hardness controls crispness).
+      const shapeMask = sdf <= h ? 1 : Math.max(0, (1 - sdf) / Math.max(1e-4, 1 - h));
+
+      // Interior modulation: edge lift + centre dip.
+      const innerT = 1 - sdf;  // 1 at centre, 0 at boundary
+      const lift = 1 + el * (1 - innerT) * (1 - innerT);
+      const dip  = 1 - cd * innerT * innerT;
+      const mod  = lift * dip / peakMod;
+
+      // Nib-fiber texture: felt channels running along the nib's long axis (x in stamp space).
+      // Fine y-bands (~1.5px) with slow x-variation (~8px) create elongated streaks.
+      let fiberMod = 1;
+      if (fb > 0) {
+        const fy = Math.floor((ay + ry) / 1.5);
+        const fx = Math.floor((ax + rx) / 8);
+        const fiberNoise = _seededFloat(_stampSeed(fy * 41 + 500, fx * 19 + 300));
+        fiberMod = 1 - fb * 0.42 * fiberNoise;
+      }
+
+      const alpha = Math.round(255 * Math.min(1, flow * shapeMask * mod * fiberMod));
+      if (alpha <= 0) continue;
+
+      const i = (py * cw + px) * 4;
+      d[i]   = r255;
+      d[i + 1] = g255;
+      d[i + 2] = b255;
+      d[i + 3] = alpha;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _stampCache.set(key, oc);
+  return oc;
+}
+
+// ─── Scatter PRNG ─────────────────────────────────────────────────────────────
+
+// Deterministic position hash (FNV-1a inspired) → seed for _seededFloat.
+// Using position × 4-pixel precision so sub-pixel jitter doesn't change scatter.
+function _stampSeed(cx, cy) {
+  const xi = Math.trunc(Math.round(cx * 4));
+  const yi = Math.trunc(Math.round(cy * 4));
+  let h = 2166136261;
+  h = Math.imul(h ^ (xi & 0xFF), 16777619);
+  h = Math.imul(h ^ ((xi >> 8) & 0xFF), 16777619);
+  h = Math.imul(h ^ (yi & 0xFF), 16777619);
+  h = Math.imul(h ^ ((yi >> 8) & 0xFF), 16777619);
+  return h >>> 0;
+}
+
+// Mulberry32 PRNG step — returns a float in [0, 1).
+function _seededFloat(seed) {
+  let s = (seed + 0x6D2B79F5) >>> 0;
+  s = Math.imul(s ^ (s >>> 15), s | 1);
+  s ^= s + Math.imul(s ^ (s >>> 7), s | 61);
+  return ((s ^ (s >>> 14)) >>> 0) / 4294967296;
+}
+
+// ─── Stamp Context Builder ────────────────────────────────────────────────────
+
+// ─── Crayon Stamp Texture ─────────────────────────────────────────────────────
+
+// Returns the alpha (0-255) for a single crayon stamp pixel, or 0 if the pixel is transparent.
+function _crayonPixelAlpha(px, py, rx, ry, h, gr, flow) {
+  const ax       = px + 0.5 - rx;
+  const ay       = py + 0.5 - ry;
+  const halfFlat = Math.max(0, rx - ry);
+  const bx       = Math.max(Math.abs(ax) - halfFlat, 0);
+  const sdf = Math.hypot(bx, ay) / ry;
+  if (sdf >= 1) return 0;
+
+  const jitter     = _seededFloat(_stampSeed(px * 17 + 3, py * 13 + 7));
+  const effSdf     = sdf + gr * 0.22 * (jitter - 0.5);
+  if (effSdf >= 1) return 0;
+
+  const shapeMask  = effSdf <= h ? 1 : Math.max(0, (1 - effSdf) / Math.max(1e-4, 1 - h));
+  const noise      = _crayonPixelNoise(px, py, ax, ay, rx, ry);
+  const threshold  = gr * 0.55;
+  if (noise < threshold) return 0;
+
+  const coverage   = (noise - threshold) / Math.max(1e-4, 1 - threshold);
+  const grainMask  = 0.45 + 0.55 * coverage;
+  return Math.round(255 * Math.min(1, flow * shapeMask * grainMask));
+}
+
+// Multi-scale wax-grain noise at a single pixel position (ax, ay relative to canvas centre).
+// Returns a combined noise value in [0, 1].
+function _crayonPixelNoise(px, py, ax, ay, rx, ry) {
+  const cxC  = Math.floor((ax + rx) / 3);
+  const cyC  = Math.floor((ay + ry) / 2);
+  const nC   = _seededFloat(_stampSeed(cxC * 13 + 700, cyC * 17 + 400));
+  const cxM  = Math.floor((ax + rx) / 1.5);
+  const cyM  = Math.floor((ay + ry) / 1.5);
+  const nM   = _seededFloat(_stampSeed(cxM * 23 + 800, cyM * 29 + 500));
+  const nF   = _seededFloat(_stampSeed(px * 3 + 100, py * 5 + 200));
+  return nC * 0.55 + nM * 0.3 + nF * 0.15;
+}
+
+// Build (or retrieve cached) crayon stamp.
+// Shape: stadium SDF (same as chisel), but alpha is modulated by per-pixel wax grain noise
+// so the interior has a fibrous, uneven texture and the edge is organically irregular.
+// col = { r, g, b, a } — a includes flow.  grain ∈ [0, 1].
+function buildCrayonTexture(rx, ry, hardness, col, grain) {
+  const { r: r255, g: g255, b: b255, a: flow } = col;
+  const cw  = Math.max(2, Math.ceil(rx) * 2);
+  const ch  = Math.max(2, Math.ceil(ry) * 2);
+  const gr  = Math.max(0, Math.min(1, grain));
+  const key = `crayon:${cw}:${ch}:${hardness.toFixed(2)}:${r255}:${g255}:${b255}:${flow.toFixed(3)}:${gr.toFixed(2)}`;
+
+  if (_stampCache.has(key)) {
+    const s = _stampCache.get(key);
+    _stampCache.delete(key);
+    _stampCache.set(key, s);
+    return s;
+  }
+  if (_stampCache.size >= STAMP_CACHE_MAX) _stampCache.delete(_stampCache.keys().next().value);
+
+  const oc  = new OffscreenCanvas(cw, ch);
+  const ctx = oc.getContext("2d");
+  const img = ctx.createImageData(cw, ch);
+  const d   = img.data;
+
+  const h = Math.max(0, Math.min(1, hardness));
+
+  for (let py = 0; py < ch; py++) {
+    for (let px = 0; px < cw; px++) {
+      const alpha = _crayonPixelAlpha(px, py, rx, ry, h, gr, flow);
+      if (alpha <= 0) continue;
+      const i = (py * cw + px) * 4;
+      d[i]     = r255;
+      d[i + 1] = g255;
+      d[i + 2] = b255;
+      d[i + 3] = alpha;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  _stampCache.set(key, oc);
+  return oc;
+}
+
+// ─── Stamp Context Builder ────────────────────────────────────────────────────
+
+// Build the shared stamp context (sc) from a stroke record and descriptor.
+// Centralises texture dispatch (round / chisel / crayon) and scatter params.
+// sc = { ctx, stampTex, radiusPx, spacingPx, desc, aspect, angle, stampKind, scatter }
+function buildStampContext(ctx, stroke, descriptor) {
+  const stampKind = String(stroke?.stampKind || "round");
+  const radiusPx  = getRadiusPx(stroke, descriptor);
+  const hardness  = Math.max(0, Math.min(1, Number(stroke?.hardness ?? 0.9)));
+  const col       = getStampColor(stroke);
+  const aspect    = Math.max(0.1, Number(stroke?.aspect ?? 1));
+  const angle     = Number(stroke?.angle?.value ?? 0);
+  const spacingPx = getSpacingPx(stroke, radiusPx);
+  const rawSc     = stroke?.scatter;
+  const scatter   = rawSc
+    ? { radius: Number(rawSc.radius ?? 1.5), count: Math.max(1, Math.round(rawSc.count ?? 6)) }
+    : null;
+
+  let stampTex;
+  if (stampKind === "chisel") {
+    const rx       = radiusPx * aspect;
+    const ry       = radiusPx;
+    const edgeLift = Math.max(0, Number(stroke?.chiselEdgeLift ?? 0.4));
+    const centDip  = Math.max(0, Number(stroke?.chiselCenterDip ?? 0.3));
+    const fiber    = Math.max(0, Math.min(1, Number(stroke?.chiselFiber ?? 0)));
+    stampTex = buildChiselTexture(rx, ry, hardness, col, edgeLift, centDip, fiber);
+  } else if (stampKind === "crayon") {
+    const rx    = radiusPx * aspect;
+    const ry    = radiusPx;
+    const grain = Math.max(0, Math.min(1, Number(stroke?.crayonGrain ?? 0.65)));
+    stampTex = buildCrayonTexture(rx, ry, hardness, col, grain);
+  } else {
+    stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
+  }
+
+  return { ctx, stampTex, radiusPx, spacingPx, desc: descriptor, aspect, angle, stampKind, scatter };
+}
+
 // ─── Stamp Color ─────────────────────────────────────────────────────────────
 
 // Returns {r, g, b, a} for buildStampTexture.
 // Eraser and mask strokes always use white (composited with destination-out / tint later).
-// Paint strokes use the stroke color * opacity.
+// Paint strokes: alpha = color.a * flow.
+// stroke.opacity is NOT baked here — it is applied at composite time (commitActiveStroke /
+// drawStrokeToSurface), so that "flat" and "accumulate" modes both honour it correctly.
 function getStampColor(stroke) {
   const layerKind = String(stroke?.layerKind || "paint");
   const toolKind = String(stroke?.toolKind || "pen");
@@ -195,8 +426,8 @@ function getStampColor(stroke) {
     return { r: 255, g: 255, b: 255, a: 1 };
   }
   const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
-  const opacity = Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
-  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1))) * opacity;
+  const flow = Math.max(0, Math.min(1, Number(stroke?.flow ?? 1)));
+  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1))) * flow;
   return {
     r: Math.round(Math.max(0, Math.min(1, Number(c.r || 0))) * 255),
     g: Math.round(Math.max(0, Math.min(1, Number(c.g || 0))) * 255),
@@ -206,14 +437,14 @@ function getStampColor(stroke) {
 }
 
 // CSS color string for lasso fill polygon (not stamp-based).
-// Fixes opacity bug: multiplies color.a by stroke.opacity.
+// Uses color.a directly — stroke.opacity is intentionally excluded so the fill
+// matches the user's chosen color exactly regardless of brush preset opacity.
 function strokeStyleForKind(stroke) {
   const layerKind = String(stroke?.layerKind || "paint");
   const toolKind = String(stroke?.toolKind || "pen");
   if (toolKind === "eraser" || layerKind === "mask") return "rgba(255,255,255,1)";
   const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
-  const opacity = Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
-  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1))) * opacity;
+  const alpha = Math.max(0, Math.min(1, Number(c.a ?? 1)));
   return `rgba(${Math.round(Number(c.r || 0) * 255)},${Math.round(Number(c.g || 0) * 255)},${Math.round(Number(c.b || 0) * 255)},${alpha})`;
 }
 
@@ -221,25 +452,65 @@ function strokeStyleForKind(stroke) {
 
 // ─── Stamp Drawing ────────────────────────────────────────────────────────────
 
-// Draw one stamp at (cx, cy) in descriptor pixel space.
-// widthScale scales the stamp radius (for pressure-like variation).
-// descriptorH is used to compute ERP latitude correction: near the poles, the horizontal
-// axis of ERP is compressed relative to the vertical axis, so the stamp is stretched
-// horizontally by 1/cos(lat) to appear as a circle on the sphere.
-// Mirrors at the ERP seam (u=0 / u=1) so strokes wrap correctly.
-// desc = { width, height } — descriptor pixel dimensions.
-// ERP latitude correction: stamps are horizontally stretched by 1/cos(lat) so they
-// appear as circles on the sphere rather than ellipses squished near the poles.
-function _drawSingleStamp(ctx, stampTex, cx, cy, radiusPx, widthScale, desc) {
+// Place one stamp image at (ox, oy) applying latitude correction and angle rotation.
+// For chisel stamps the angle is baked via ctx.rotate so the nib stays oriented.
+// Seam width accounts for the bounding box of the rotated stamp.
+function _placeStamp(sc, ox, oy, rv, rh) {
+  const ang = sc.angle;
+  const W   = sc.desc.width;
+
+  function _draw(x, y) {
+    if (ang === 0) {
+      sc.ctx.drawImage(sc.stampTex, x - rh, y - rv, rh * 2, rv * 2);
+    } else {
+      sc.ctx.save();
+      sc.ctx.translate(x, y);
+      sc.ctx.rotate(ang);
+      sc.ctx.drawImage(sc.stampTex, -rh, -rv, rh * 2, rv * 2);
+      sc.ctx.restore();
+    }
+  }
+
+  _draw(ox, oy);
+  // Seam wrap: use rotated bounding-box half-width so angled stamps near u=0/1 are mirrored.
+  const seamW = ang === 0
+    ? rh
+    : rh * Math.abs(Math.cos(ang)) + rv * Math.abs(Math.sin(ang));
+  if (ox - seamW < 0) _draw(ox + W, oy);
+  if (ox + seamW > W) _draw(ox - W, oy);
+}
+
+// Draw one stamp at (cx, cy) using the shared stamp context sc.
+// sc = { ctx, stampTex, radiusPx, spacingPx, desc, aspect, angle, stampKind, scatter }
+//
+// ERP latitude correction: horizontal radius is stretched by 1/cos(lat).
+// Preset aspect further scales the horizontal radius (e.g. 2.6 for a wide chisel marker).
+// For scatter brushes: each call spawns sc.scatter.count sub-stamps at random positions
+// within sc.scatter.radius × radiusPx, using a deterministic position-seeded PRNG.
+function _drawSingleStamp(sc, cx, cy, widthScale) {
   const ws = Math.max(0.01, Number.isFinite(widthScale) ? widthScale : 1);
-  const rv = Math.max(0.5, radiusPx * ws);
-  const lat = (0.5 - cy / Math.max(1, desc.height)) * Math.PI;
-  const cosLat = Math.max(0.05, Math.cos(lat));
-  const rh = rv / cosLat;
-  const W = desc.width;
-  ctx.drawImage(stampTex, cx - rh, cy - rv, rh * 2, rv * 2);
-  if (cx - rh < 0) ctx.drawImage(stampTex, cx + W - rh, cy - rv, rh * 2, rv * 2);
-  if (cx + rh > W) ctx.drawImage(stampTex, cx - W - rh, cy - rv, rh * 2, rv * 2);
+
+  if (sc.scatter) {
+    const { radius, count } = sc.scatter;
+    const scatterPx = radius * sc.radiusPx * ws;
+    const seed0 = _stampSeed(cx, cy);
+    for (let i = 0; i < count; i++) {
+      const a = _seededFloat(seed0 + i * 2) * Math.PI * 2;
+      const d = Math.sqrt(_seededFloat(seed0 + i * 2 + 1)) * scatterPx;
+      const sx = cx + Math.cos(a) * d;
+      const sy = cy + Math.sin(a) * d;
+      const subRv = Math.max(0.5, sc.radiusPx * ws * 0.48);
+      const lat   = (0.5 - sy / Math.max(1, sc.desc.height)) * Math.PI;
+      const rh    = subRv * sc.aspect / Math.max(0.05, Math.cos(lat));
+      _placeStamp(sc, sx, sy, subRv, rh);
+    }
+    return;
+  }
+
+  const rv = Math.max(0.5, sc.radiusPx * ws);
+  const lat = (0.5 - cy / Math.max(1, sc.desc.height)) * Math.PI;
+  const rh  = rv * sc.aspect / Math.max(0.05, Math.cos(lat));
+  _placeStamp(sc, cx, cy, rv, rh);
 }
 
 // Draw a complete freehand stroke using the stamp engine.
@@ -251,21 +522,25 @@ function drawStampStroke(ctx, stroke, descriptor) {
 
   const W = descriptor.width;
   const H = descriptor.height;
-  const radiusPx = getRadiusPx(stroke, descriptor);
-  const hardness = Math.max(0, Math.min(1, Number(stroke?.hardness ?? 0.9)));
-  const col = getStampColor(stroke);
-  const stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
-  const spacingPx = getSpacingPx(stroke, radiusPx);
-  const sc = { ctx, stampTex, radiusPx, spacingPx, desc: descriptor };
+  const sc = buildStampContext(ctx, stroke, descriptor);
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
 
-  // Convert UV to pixel space
-  const pts = points.map((p) => ({ x: Number(p.u || 0) * W, y: Number(p.v || 0) * H }));
+  // Convert UV to pixel space, unwrapping the seam so consecutive points always
+  // take the short path (|dx| ≤ W/2). Stamps near x<0 or x>W are mirrored by _placeStamp.
+  const pts = [];
+  for (let i = 0; i < points.length; i++) {
+    let px = Number(points[i].u || 0) * W;
+    const py = Number(points[i].v || 0) * H;
+    if (i > 0 && Math.abs(px - pts[i - 1].x) > W * 0.5) {
+      px += px < pts[i - 1].x ? W : -W;
+    }
+    pts.push({ x: px, y: py });
+  }
 
   // First stamp at p0
-  _drawSingleStamp(ctx, stampTex, pts[0].x, pts[0].y, radiusPx, 1, descriptor);
+  _drawSingleStamp(sc, pts[0].x, pts[0].y, 1);
 
   if (pts.length === 1) { ctx.restore(); return; }
 
@@ -306,29 +581,61 @@ function drawLassoFillNative(ctx, stroke, descriptor) {
   const h = descriptor.height;
   const style = strokeStyleForKind(stroke);
 
+  // Convert to pixel space and seam-unwrap so the polygon takes the short path
+  // across any u=0/u=1 crossing (same strategy as drawStampStroke).
+  const px = [];
+  let minX = Infinity;
+  let maxX = -Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const c = getTargetCoord(points[i]);
+    let x = Number(c.x || 0) * w;
+    if (i > 0 && Math.abs(x - px[i - 1].x) > w * 0.5) {
+      x += x < px[i - 1].x ? w : -w;
+    }
+    px.push({ x, y: Number(c.y || 0) * h });
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+  }
+
+  function drawPoly(offsetX) {
+    ctx.beginPath();
+    ctx.moveTo(px[0].x + offsetX, px[0].y);
+    for (let i = 1; i < px.length; i++) ctx.lineTo(px[i].x + offsetX, px[i].y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = style;
-  const first = getTargetCoord(points[0]);
-  ctx.beginPath();
-  ctx.moveTo(first.x * w, first.y * h);
-  for (let i = 1; i < points.length; i += 1) {
-    const p = getTargetCoord(points[i]);
-    ctx.lineTo(p.x * w, p.y * h);
-  }
-  ctx.closePath();
-  ctx.fill();
+  drawPoly(0);
+  if (minX < 0) drawPoly(w);    // polygon crosses seam leftward → mirror to right half
+  if (maxX > w) drawPoly(-w);   // polygon crosses seam rightward → mirror to left half
   ctx.restore();
 }
 
 // Draw a stroke to the given ctx.
 // Eraser strokes are rendered as WHITE marks; caller applies destination-out when compositing.
+// For non-eraser strokes, stroke.opacity is applied when compositing onto ctx.
 function drawStrokeToSurface(ctx, stroke, descriptor) {
   const kind = String(stroke?.geometry?.geometryKind || "");
   if (kind === "lasso_fill") {
     drawLassoFillNative(ctx, stroke, descriptor);
-  } else {
+    return;
+  }
+  const isEraser = String(stroke?.toolKind || "") === "eraser";
+  const opacity = isEraser ? 1 : Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
+  if (opacity >= 0.999) {
     drawStampStroke(ctx, stroke, descriptor);
+  } else {
+    // Two-step composite: draw stamps at full flow into a temp surface,
+    // then composite at stroke opacity. Ensures correct flat/accumulate behaviour on rebuild.
+    const tmp = createCanvasSurface(descriptor.width, descriptor.height);
+    drawStampStroke(tmp.ctx, stroke, descriptor);
+    ctx.save();
+    ctx.globalAlpha = opacity;
+    ctx.drawImage(tmp.canvas, 0, 0);
+    ctx.restore();
   }
 }
 
@@ -358,7 +665,7 @@ function _walkLinearStamps(sc, ax, ay, bx, by, distSinceStamp) {
   let toNext = sc.spacingPx - distSinceStamp;
   while (toNext <= segLen) {
     const t = toNext / segLen;
-    _drawSingleStamp(sc.ctx, sc.stampTex, ax + dx * t, ay + dy * t, sc.radiusPx, 1, sc.desc);
+    _drawSingleStamp(sc, ax + dx * t, ay + dy * t, 1);
     toNext += sc.spacingPx;
   }
   return segLen - toNext + sc.spacingPx;
@@ -435,28 +742,34 @@ function appendStrokePoint(target, x, y, stroke) {
   if (!ctx) return;
 
   const desc = target.descriptor;
-  const px = x * desc.width;
+  const W  = desc.width;
   const py = y * desc.height;
   const as = target.activeStroke;
+  // Seam-unwrap: choose whichever side of the wrap is closer to the previous point
+  // so the stamp walk takes the short path across any seam crossing.
+  let px = x * W;
+  if (as && Math.abs(px - as.prev.x) > W * 0.5) {
+    px += px < as.prev.x ? W : -W;
+  }
 
   if (!as) {
-    // First point: place initial stamp, initialize CR history.
-    const radiusPx = getRadiusPx(stroke, desc);
-    const hardness = Math.max(0, Math.min(1, Number(stroke?.hardness ?? 0.9)));
-    const col = getStampColor(stroke);
-    const stampTex = buildStampTexture(radiusPx, hardness, col.r, col.g, col.b, col.a);
-    const spacingPx = getSpacingPx(stroke, radiusPx);
+    // First point: build stamp context, place initial stamp, initialize CR history.
+    const sc0 = buildStampContext(ctx, stroke, desc);
+    const strokeOpacity = Math.max(0, Math.min(1, Number(stroke?.opacity ?? 1)));
+    const velocityWidthFactor = Math.max(0, Number(stroke?.velocityWidthFactor ?? 0));
     const isEraser = String(stroke?.toolKind || "") === "eraser";
     const layerKind = String(stroke?.layerKind || "paint");
 
     ctx.globalCompositeOperation = "source-over";
-    _drawSingleStamp(ctx, stampTex, px, py, radiusPx, 1, desc);
+    _drawSingleStamp(sc0, px, py, 1);
 
     target.activeStroke = {
       pprev: { x: px, y: py },
       prev:  { x: px, y: py },
       lastMidX: px, lastMidY: py,
-      radiusPx, stampTex, spacingPx,
+      stampTex: sc0.stampTex, radiusPx: sc0.radiusPx, spacingPx: sc0.spacingPx,
+      aspect: sc0.aspect, angle: sc0.angle, stampKind: sc0.stampKind, scatter: sc0.scatter,
+      strokeOpacity, velocityWidthFactor,
       distSinceStamp: 0,
       isEraser, layerKind,
       pointCount: 1,
@@ -469,7 +782,11 @@ function appendStrokePoint(target, x, y, stroke) {
   const midY = (as.prev.y + py) * 0.5;
 
   ctx.globalCompositeOperation = "source-over";
-  const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc };
+  const sc = {
+    ctx,
+    stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx,
+    desc, aspect: as.aspect, angle: as.angle, stampKind: as.stampKind, scatter: as.scatter,
+  };
 
   if (as.pointCount === 1) {
     // Second point: linear from first stamp to first midpoint anchor.
@@ -509,6 +826,9 @@ export function createPaintEngineManager() {
     // displayDirty: composeDisplayPaint is skipped when false.
     // Set to true whenever committed or currentStroke content changes.
     displayDirty: true,
+    // lassoPreviewActive: true while a lasso fill is being drawn (not yet committed).
+    // composeDisplayPaint composites currentStroke at 0.5 opacity for the live preview.
+    lassoPreviewActive: false,
   };
   let activeTargetKey = "";
   let activeLayerKind = "";
@@ -551,7 +871,12 @@ export function createPaintEngineManager() {
     drawMaskTint(dCtx, target.committedMask.canvas);
     if (!isActive) return;
     if (activeLayerKind === "paint") {
+      // Lasso preview: show at 50% so the boundary is clearly visible before confirming.
+      const strokeOpacity = target.lassoPreviewActive ? 0.5 : Math.max(0, Math.min(1, as?.strokeOpacity ?? 1));
+      dCtx.save();
+      dCtx.globalAlpha = strokeOpacity;
       dCtx.drawImage(target.currentStroke.canvas, 0, 0);
+      dCtx.restore();
     } else if (activeLayerKind === "mask") {
       drawMaskTint(dCtx, target.currentStroke.canvas);
     }
@@ -613,7 +938,7 @@ export function createPaintEngineManager() {
     if (as && as.pointCount > 1) {
       const ctx = target.currentStroke.ctx;
       ctx.globalCompositeOperation = "source-over";
-      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc: target.descriptor };
+      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc: target.descriptor, aspect: as.aspect, angle: as.angle };
       if (as.pointCount === 2) {
         // Only one linear segment was drawn; tail is also linear.
         _walkLinearStamps(sc, as.lastMidX, as.lastMidY, as.prev.x, as.prev.y, as.distSinceStamp);
@@ -626,13 +951,23 @@ export function createPaintEngineManager() {
     const layerKind = String(stroke?.layerKind || "paint");
     const surface = layerKind === "mask" ? target.committedMask : target.committedPaint;
 
+    // Lasso preview was drawn at 50%; redraw at full opacity before merging into committed.
+    if (target.lassoPreviewActive) {
+      clearSurface(target.currentStroke);
+      drawLassoFillNative(target.currentStroke.ctx, stroke, target.descriptor);
+      target.lassoPreviewActive = false;
+    }
+
     if (as?.isEraser) {
       // Eraser: apply the white stamp bitmap as destination-out
       applyEraserToSurface(surface.ctx, target.currentStroke.canvas);
     } else {
-      // Merge the live stamp bitmap directly into the committed layer.
-      // rebuildCommitted will use processedPoints for future undo/redo replays.
+      // Merge live stamp bitmap into committed layer, applying stroke-level opacity.
+      const opacity = Math.max(0, Math.min(1, as?.strokeOpacity ?? 1));
+      surface.ctx.save();
+      surface.ctx.globalAlpha = opacity;
       surface.ctx.drawImage(target.currentStroke.canvas, 0, 0);
+      surface.ctx.restore();
     }
 
     clearSurface(target.currentStroke);
@@ -647,6 +982,7 @@ export function createPaintEngineManager() {
     const target = ensureTarget(descriptor);
     clearSurface(target.currentStroke);
     target.activeStroke = null;
+    target.lassoPreviewActive = false;
     activeLayerKind = "";
     target.displayDirty = true;
     composeDisplayPaint(target);
@@ -661,6 +997,7 @@ export function createPaintEngineManager() {
     if (kind === "lasso_fill") {
       clearSurface(target.currentStroke);
       drawLassoFillNative(target.currentStroke.ctx, stroke, target.descriptor);
+      target.lassoPreviewActive = true;
       target.displayDirty = true;
       composeDisplayPaint(target);
     }
