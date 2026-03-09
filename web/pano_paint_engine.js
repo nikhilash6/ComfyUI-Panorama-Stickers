@@ -154,7 +154,7 @@ function getRadiusPx(stroke, descriptor) {
   const radiusValue = Number(stroke?.radiusValue);
   const radiusModel = String(stroke?.radiusModel || "").trim();
   const w = descriptor?.width || 1;
-  if ((radiusModel === "erp_uv_norm" || radiusModel === "frame_local_norm") && radiusValue > 0) {
+  if (radiusModel === "erp_uv_norm" && radiusValue > 0) {
     // radiusValue = radius_px / reference_width (reference = 2048)
     return Math.max(0.5, radiusValue * w);
   }

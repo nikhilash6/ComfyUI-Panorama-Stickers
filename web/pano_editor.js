@@ -3333,26 +3333,6 @@ function showEditor(node, type, options = {}) {
     };
   }
 
-  function projectWorldDirToFrameRectSample(targetShot, rect, centerDir, offsetDir) {
-    if (!targetShot || !rect || !centerDir || !offsetDir) return null;
-    const centerLocal = worldDirToFrameLocalPoint(targetShot, centerDir);
-    const offsetLocal = worldDirToFrameLocalPoint(targetShot, offsetDir);
-    if (!centerLocal || !offsetLocal) return null;
-    const center = {
-      x: Number(rect.x || 0) + (Number(centerLocal.x || 0) * Number(rect.w || 0)),
-      y: Number(rect.y || 0) + (Number(centerLocal.y || 0) * Number(rect.h || 0)),
-    };
-    const offset = {
-      x: Number(rect.x || 0) + (Number(offsetLocal.x || 0) * Number(rect.w || 0)),
-      y: Number(rect.y || 0) + (Number(offsetLocal.y || 0) * Number(rect.h || 0)),
-    };
-    return {
-      x: center.x,
-      y: center.y,
-      radiusPx: Math.max(0.5, Math.hypot(offset.x - center.x, offset.y - center.y)),
-      z: 1,
-    };
-  }
 
   function getNativeRadiusPxForStrokePoint(stroke, point, targetWidth, targetHeight, shot = null) {
     const spec = getStrokeRadiusSpec(stroke);
@@ -3485,24 +3465,6 @@ function showEditor(node, type, options = {}) {
     };
   }
 
-  function projectErpStrokeToFrameRect(stroke, shot, rect) {
-    const geometry = stroke?.geometry;
-    if (!geometry || geometry.geometryKind !== "freehand_open" || !shot || !rect) return [];
-    const points = getStrokePointList(stroke, "points");
-    return points.map((pt, index) => {
-      const dirs = getWorldOffsetDirForStrokePoint(stroke, pt, index, points, null);
-      return projectWorldDirToFrameRectSample(shot, rect, dirs.centerDir, dirs.offsetDir);
-    }).filter(Boolean);
-  }
-
-  function drawProjectedStrokePath(projected, stroke, options = {}) {
-    if (!Array.isArray(projected) || projected.length < 1) return;
-    drawStampedStroke(ctx, projected, stroke, { w: canvas.width, h: canvas.height }, options);
-  }
-
-  function drawProjectedStrokeSegments(segments, stroke, options = {}) {
-    segments.forEach((segment) => drawProjectedStrokePath(segment, stroke, options));
-  }
 
   function projectLassoPointsToCurrentView(points) {
     if (!Array.isArray(points) || points.length < 3) return [];
@@ -3531,14 +3493,6 @@ function showEditor(node, type, options = {}) {
     return true;
   }
 
-  function projectLassoPointsToFrameView(points, shot, rect) {
-    if (!Array.isArray(points) || points.length < 3 || !shot || !rect) return [];
-    const projected = points.map((pt) => ({
-      x: Number(rect.x || 0) + (Number(pt.x || 0) * Number(rect.w || 0)),
-      y: Number(rect.y || 0) + (Number(pt.y || 0) * Number(rect.h || 0)),
-    }));
-    return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
-  }
 
   function projectErpLassoPointsToFrameRect(points, shot, rect) {
     if (!Array.isArray(points) || points.length < 3 || !shot || !rect) return [];
