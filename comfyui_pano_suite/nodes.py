@@ -467,7 +467,7 @@ class PanoramaCutoutNode(io.ComfyNode):
                 oh,
                 erp_width=src.shape[1],
                 erp_height=src.shape[0],
-                painting_raster=state.get("painting_raster"),
+                painting_layer=state.get("painting_layer"),
             )
             out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]

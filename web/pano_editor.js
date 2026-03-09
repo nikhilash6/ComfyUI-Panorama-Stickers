@@ -35,6 +35,10 @@ const PAINT_COLOR_SWATCHES = [
 ];
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
+
+// Global registry: nodeId → Promise for in-flight paint layer uploads.
+// beforeQueuePrompt waits for all pending promises before sending the graph.
+const _paintLayerUploadRegistry = new Map();
 const ICON = {
   // Source: @geist-ui/icons globe.js (v1.0.2)
   globe: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' shape-rendering='geometricPrecision'><circle cx='12' cy='12' r='10'/><path d='M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z'/></svg>",
@@ -374,6 +378,7 @@ function cloneStateForHistorySnapshot(raw) {
   if (!raw || typeof raw !== "object") return raw;
   const next = JSON.parse(JSON.stringify(raw));
   delete next.editor_history;
+  delete next.painting_layer;
   return next;
 }
 
@@ -394,6 +399,7 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
     stickers: [],
     shots: [],
     painting: normalizePaintingState(null),
+    painting_layer: null,
     ui_settings: {
       invert_view_x: !!sharedUi?.invert_view_x,
       invert_view_y: !!sharedUi?.invert_view_y,
@@ -423,6 +429,7 @@ function parseState(text, preset = 2048, bg = "#00ff00") {
       shots: cloneShotList(p.shots),
       // source of truth persists target-local stroke geometry, never view coordinates.
       painting: normalizePaintingState(p.painting),
+      painting_layer: (p.painting_layer && typeof p.painting_layer === "object") ? p.painting_layer : null,
       ui_settings: {
         invert_view_x: !!(p.ui_settings && p.ui_settings.invert_view_x),
         invert_view_y: !!(p.ui_settings && p.ui_settings.invert_view_y),
@@ -1459,7 +1466,6 @@ function showEditor(node, type, options = {}) {
     customPaintColor: { r: 0, g: 1, b: 0, a: 1 },
     customPaintHistory: [],
     customPaintSessionStart: null,
-    paintRasterSnapshotRevision: null,
     pointerPos: { x: 0, y: 0, inside: false },
     interaction: null,
     hqFrames: 0,
@@ -2104,6 +2110,78 @@ function showEditor(node, type, options = {}) {
       storage: String(data?.type || "input"),
       name: String(file?.name || fallbackName),
     };
+  }
+
+  async function uploadCanvasAsPaintLayer(canvas, filename) {
+    const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
+    const body = new FormData();
+    body.append("image", blob, filename);
+    body.append("type", "input");
+    body.append("subfolder", "panorama_stickers");
+    body.append("overwrite", "1");
+    const resp = await api.fetchApi("/upload/image", { method: "POST", body });
+    if (!resp || resp.status !== 200) throw new Error(`upload failed (${resp?.status})`);
+    const data = await resp.json();
+    const fn = String(data?.name || "").trim();
+    if (!fn) throw new Error("upload response missing filename");
+    return {
+      type: "comfy_image",
+      filename: fn,
+      subfolder: String(data?.subfolder || "panorama_stickers"),
+      storage: String(data?.type || "input"),
+    };
+  }
+
+  let _paintLayerSyncRevision = null;
+  let _paintLayerSyncPending = false;
+
+  function syncPaintingLayerAsync() {
+    const nodeId = String(node.id ?? "0");
+    const promise = (async () => {
+      const rev = getPaintingRevisionKey();
+      const counts = paintingStrokeCount(state.painting);
+      if (counts.paintCount <= 0 && counts.maskCount <= 0) {
+        if (state.painting_layer !== null) {
+          state.painting_layer = null;
+          _paintLayerSyncRevision = rev;
+          commitState();
+        }
+        return;
+      }
+      if (_paintLayerSyncRevision === rev) return;
+      if (_paintLayerSyncPending) return;
+      _paintLayerSyncPending = true;
+      try {
+        rebuildPaintEngineIfNeeded();
+        const erpTarget = editor.paintEngine?.getErpTarget?.() || null;
+        const paintCanvas = erpTarget?.committedPaint?.canvas || null;
+        const maskCanvas = erpTarget?.committedMask?.canvas || null;
+        if (!paintCanvas || !maskCanvas) return;
+        let paintRef = null;
+        let maskRef = null;
+        if (counts.paintCount > 0) {
+          paintRef = await uploadCanvasAsPaintLayer(paintCanvas, `pano_paint_${nodeId}.png`);
+        }
+        if (counts.maskCount > 0) {
+          maskRef = await uploadCanvasAsPaintLayer(maskCanvas, `pano_mask_${nodeId}.png`);
+        }
+        if (rev === getPaintingRevisionKey()) {
+          state.painting_layer = { paint: paintRef, mask: maskRef };
+          _paintLayerSyncRevision = rev;
+          commitState();
+        }
+      } catch (e) {
+        console.warn("[pano] paint layer upload failed:", e);
+      } finally {
+        _paintLayerSyncPending = false;
+      }
+    })();
+    _paintLayerUploadRegistry.set(nodeId, promise);
+    promise.finally(() => {
+      if (_paintLayerUploadRegistry.get(nodeId) === promise) {
+        _paintLayerUploadRegistry.delete(nodeId);
+      }
+    });
   }
 
   function getConnectedErpImage() {
@@ -3750,6 +3828,7 @@ function showEditor(node, type, options = {}) {
     updateSidePanel();
     commitState();
     requestDraw();
+    syncPaintingLayerAsync();
   }
 
   function syncPaintUi() {
@@ -4875,45 +4954,11 @@ function showEditor(node, type, options = {}) {
 
   function commitState() {
     if (readOnly) return;
-    syncPaintingRasterSnapshot();
     const text = JSON.stringify(state);
     if (stateWidget) {
       stateWidget.value = text;
       stateWidget.callback?.(text);
     }
-  }
-
-  function syncPaintingRasterSnapshot() {
-    const counts = paintingStrokeCount(state.painting);
-    if (counts.paintCount <= 0 && counts.maskCount <= 0) {
-      state.painting_raster = null;
-      editor.paintRasterSnapshotRevision = null;
-      return;
-    }
-    const rev = getPaintingRevisionKey();
-    if (editor.paintRasterSnapshotRevision === rev && state.painting_raster) return;
-    rebuildPaintEngineIfNeeded();
-    const erpTarget = editor.paintEngine?.getErpTarget?.() || null;
-    const paintCanvas = erpTarget?.committedPaint?.canvas || null;
-    const maskCanvas = erpTarget?.committedMask?.canvas || null;
-    if (!paintCanvas || !maskCanvas) return;
-    let paintAsset = null;
-    let maskAsset = null;
-    try {
-      if (counts.paintCount > 0) paintAsset = { type: "dataurl", value: paintCanvas.toDataURL("image/png") };
-      if (counts.maskCount > 0) maskAsset = { type: "dataurl", value: maskCanvas.toDataURL("image/png") };
-    } catch {
-      return;
-    }
-    state.painting_raster = {
-      version: 1,
-      width: Number(paintCanvas.width || 0),
-      height: Number(paintCanvas.height || 0),
-      revision: rev,
-      paint: paintAsset,
-      mask: maskAsset,
-    };
-    editor.paintRasterSnapshotRevision = rev;
   }
   function persistUiSettings() {
     state.ui_settings = saveSharedUiSettings(state.ui_settings);
@@ -5925,6 +5970,7 @@ function showEditor(node, type, options = {}) {
         commitState();
         node.setDirtyCanvas(true, true);
         requestDraw();
+        syncPaintingLayerAsync();
       } else {
         const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
         if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
@@ -6660,6 +6706,13 @@ function installStandalonePreviewInstance(node) {
 
 app.registerExtension({
   name: "ComfyUI.PanoramaSuite.Editor",
+  async beforeQueuePrompt() {
+    // Wait for all in-flight paint layer uploads before sending the prompt.
+    const pending = [..._paintLayerUploadRegistry.values()];
+    if (pending.length > 0) {
+      await Promise.allSettled(pending);
+    }
+  },
   beforeRegisterNodeDef(nodeType, nodeData) {
     const name = String(nodeData?.name || "");
     if (name === "PanoramaStickers" || name === "Panorama Stickers") {

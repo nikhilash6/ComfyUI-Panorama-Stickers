@@ -1,6 +1,5 @@
-import base64
-import io
 import math
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -15,16 +14,6 @@ def _empty_rgba(width: int, height: int) -> np.ndarray:
 
 def _empty_mask(width: int, height: int) -> np.ndarray:
     return np.zeros((max(1, height), max(1, width)), dtype=np.float32)
-
-
-def _stroke_color_rgba(stroke: dict) -> tuple[int, int, int, int]:
-    color = stroke.get("color") or {}
-    return (
-        int(max(0.0, min(1.0, float(color.get("r", 0.0)))) * 255.0),
-        int(max(0.0, min(1.0, float(color.get("g", 0.0)))) * 255.0),
-        int(max(0.0, min(1.0, float(color.get("b", 0.0)))) * 255.0),
-        int(max(0.0, min(1.0, float(color.get("a", 1.0)))) * max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))) * 255.0),
-    )
 
 
 def _stroke_width_px(stroke: dict, width: int, height: int) -> int:
@@ -42,18 +31,6 @@ def _stroke_width_px(stroke: dict, width: int, height: int) -> int:
     base = max(1.0, float(stroke.get("size", 1.0)))
     scale = max(1.0, min(width, height) / 512.0)
     return max(1, int(round(base * scale)))
-
-
-def _mask_fill_value(stroke: dict) -> int:
-    if str(stroke.get("toolKind") or "") == "eraser":
-        return 0
-    return int(max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))) * 255.0)
-
-
-def _paint_draw_color(stroke: dict):
-    if str(stroke.get("toolKind") or "") == "eraser":
-        return (0, 0, 0, 0)
-    return _stroke_color_rgba(stroke)
 
 
 def _unwrap_erp_points(points: list[dict]) -> list[list[dict]]:
@@ -343,42 +320,6 @@ def _polygon_alpha_mask(segments: list[list[tuple[float, float]]], width: int, h
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
-def _draw_stroke_rgba(draw: ImageDraw.ImageDraw, stroke: dict, segments: list[list[tuple[float, float]]], width: int):
-    kind = str((stroke.get("geometry") or {}).get("geometryKind") or "")
-    fill = _paint_draw_color(stroke)
-    if fill[3] <= 0 and str(stroke.get("toolKind") or "") != "eraser":
-        return
-    brush_width = _stroke_width_px(stroke, width, width)
-    for coords in segments:
-        if not coords:
-            continue
-        if kind in {"rect_fill", "lasso_fill", "freehand_closed"} and len(coords) >= 3:
-            draw.polygon(coords, fill=fill, outline=fill)
-            continue
-        if len(coords) == 1:
-            x, y = coords[0]
-            draw.ellipse((x - brush_width * 0.5, y - brush_width * 0.5, x + brush_width * 0.5, y + brush_width * 0.5), fill=fill)
-            continue
-        draw.line(coords, fill=fill, width=brush_width, joint="curve")
-
-
-def _draw_stroke_mask(draw: ImageDraw.ImageDraw, stroke: dict, segments: list[list[tuple[float, float]]], width: int):
-    kind = str((stroke.get("geometry") or {}).get("geometryKind") or "")
-    fill = _mask_fill_value(stroke)
-    brush_width = _stroke_width_px(stroke, width, width)
-    for coords in segments:
-        if not coords:
-            continue
-        if kind in {"rect_fill", "lasso_fill", "freehand_closed"} and len(coords) >= 3:
-            draw.polygon(coords, fill=fill, outline=fill)
-            continue
-        if len(coords) == 1:
-            x, y = coords[0]
-            draw.ellipse((x - brush_width * 0.5, y - brush_width * 0.5, x + brush_width * 0.5, y + brush_width * 0.5), fill=fill)
-            continue
-        draw.line(coords, fill=fill, width=brush_width, joint="curve")
-
-
 def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tuple[np.ndarray, np.ndarray]:
     normalized = normalize_painting_state(painting_state)
     paint = _empty_rgba(width, height)
@@ -461,38 +402,69 @@ def _warp_erp_layer_to_cutout(erp_layer: np.ndarray, shot: dict, width: int, hei
     return _empty_rgba(width, height) if erp_layer.ndim == 3 else _empty_mask(width, height)
 
 
-def _decode_raster_dataurl(asset: dict | None, *, want_mask: bool = False) -> np.ndarray | None:
-    if not isinstance(asset, dict):
-        return None
-    if str(asset.get("type") or "").strip().lower() != "dataurl":
-        return None
-    value = str(asset.get("value") or "")
-    if not value.startswith("data:image") or "," not in value:
-        return None
+def _resolve_comfy_image_path(asset: dict) -> Path | None:
+    """Resolve a comfy_image asset reference to a filesystem path."""
     try:
-        raw = base64.b64decode(value.split(",", 1)[1])
-        img = Image.open(io.BytesIO(raw))
-        if want_mask:
-            rgba = img.convert("RGBA")
-            arr = np.asarray(rgba, dtype=np.float32) / 255.0
-            alpha = arr[..., 3]
-            rgb = arr[..., :3].max(axis=-1)
-            return np.maximum(alpha, rgb).astype(np.float32)
-        return np.asarray(img.convert("RGBA"), dtype=np.float32) / 255.0
+        import folder_paths
+    except ImportError:
+        return None
+    if not isinstance(asset, dict) or str(asset.get("type") or "").strip().lower() != "comfy_image":
+        return None
+    filename = str(asset.get("filename") or "").strip()
+    if not filename:
+        return None
+    subfolder = str(asset.get("subfolder") or "").strip().strip("/\\")
+    storage = str(asset.get("storage") or "input").strip().lower()
+    if storage == "output":
+        base = Path(folder_paths.get_output_directory())
+    elif storage == "temp":
+        base = Path(folder_paths.get_temp_directory())
+    else:
+        base = Path(folder_paths.get_input_directory())
+    p = (base / subfolder / filename).resolve() if subfolder else (base / filename).resolve()
+    try:
+        p.relative_to(base.resolve())
     except Exception:
         return None
+    return p if p.exists() and p.is_file() else None
 
 
-def _render_snapshot_to_cutout(painting_raster: dict | None, shot: dict, width: int, height: int) -> tuple[np.ndarray, np.ndarray] | None:
-    if not isinstance(painting_raster, dict):
+def _load_painting_layer_erp(painting_layer: dict) -> tuple[np.ndarray, np.ndarray] | None:
+    """Load ERP paint+mask from a painting_layer comfy_image reference pair.
+
+    Returns (paint_rgba, mask_float32) or None if unavailable.
+    paint_rgba: float32 RGBA [0,1], shape (H, W, 4)
+    mask_float32: float32 [0,1], shape (H, W)  — taken from alpha channel of mask canvas
+    """
+    if not isinstance(painting_layer, dict):
         return None
-    paint_src = _decode_raster_dataurl(painting_raster.get("paint"), want_mask=False)
-    mask_src = _decode_raster_dataurl(painting_raster.get("mask"), want_mask=True)
-    if paint_src is None and mask_src is None:
+    paint_asset = painting_layer.get("paint")
+    mask_asset = painting_layer.get("mask")
+
+    paint_erp = None
+    mask_erp = None
+
+    if isinstance(paint_asset, dict):
+        p = _resolve_comfy_image_path(paint_asset)
+        if p is not None:
+            try:
+                paint_erp = np.asarray(Image.open(p).convert("RGBA"), dtype=np.float32) / 255.0
+            except Exception:
+                paint_erp = None
+
+    if isinstance(mask_asset, dict):
+        p = _resolve_comfy_image_path(mask_asset)
+        if p is not None:
+            try:
+                # Mask canvas: white stamps drawn with opacity → alpha channel = mask strength
+                arr = np.asarray(Image.open(p).convert("RGBA"), dtype=np.float32) / 255.0
+                mask_erp = arr[..., 3]
+            except Exception:
+                mask_erp = None
+
+    if paint_erp is None and mask_erp is None:
         return None
-    paint = _warp_erp_layer_to_cutout(paint_src, shot, width, height) if paint_src is not None else _empty_rgba(width, height)
-    mask = _warp_erp_layer_to_cutout(mask_src, shot, width, height) if mask_src is not None else _empty_mask(width, height)
-    return paint, mask
+    return paint_erp, mask_erp
 
 
 def render_painting_to_cutout(
@@ -503,14 +475,23 @@ def render_painting_to_cutout(
     *,
     erp_width: int = 2048,
     erp_height: int = 1024,
-    painting_raster: dict | None = None,
+    painting_layer: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    snapshot = _render_snapshot_to_cutout(painting_raster, shot, width, height)
-    if snapshot is not None:
-        return snapshot
-    erp_width = max(64, int(erp_width))
-    erp_height = max(32, int(erp_height))
-    paint_erp, mask_erp = render_painting_to_erp(painting_state, erp_width, erp_height)
+    # Prefer the uploaded ERP raster (exact WebGL render) when available.
+    layer = _load_painting_layer_erp(painting_layer)
+    if layer is not None:
+        paint_erp, mask_erp = layer
+        if paint_erp is None:
+            paint_erp = _empty_rgba(erp_width, erp_height)
+        if mask_erp is None:
+            mask_erp = _empty_mask(erp_width, erp_height)
+        paint = _warp_erp_layer_to_cutout(paint_erp, shot, width, height)
+        mask = _warp_erp_layer_to_cutout(mask_erp, shot, width, height)
+        return paint, mask
+    # Fallback: render from stroke records with 2× supersampling for antialiasing.
+    ss_w = min(max(64, int(erp_width)) * 2, 8192)
+    ss_h = min(max(32, int(erp_height)) * 2, 4096)
+    paint_erp, mask_erp = render_painting_to_erp(painting_state, ss_w, ss_h)
     paint = _warp_erp_layer_to_cutout(paint_erp, shot, width, height)
     mask = _warp_erp_layer_to_cutout(mask_erp, shot, width, height)
     return paint, mask

@@ -1996,29 +1996,9 @@ function attachLegacyStickersPreview(node) {
   };
 }
 
-function getNodePreviewRasterImage(node, asset, cacheKey) {
-  const value = String(asset?.value || "");
-  if (!value.startsWith("data:image")) return null;
-  let entry = node[cacheKey];
-  if (!entry || entry.src !== value) {
-    const img = new Image();
-    img.decoding = "async";
-    img.onload = () => node.__panoDomPreview?.requestDraw?.();
-    img.src = value;
-    entry = { src: value, img };
-    node[cacheKey] = entry;
-  }
-  return entry.img.complete && (entry.img.naturalWidth || entry.img.width) ? entry.img : null;
-}
-
 // Returns the display paint canvas for a node's paint state, or null if there are no strokes.
-// Prefers the committed raster snapshot written by the editor so the node preview matches modal output.
+// Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
 function getNodePreviewPaintCanvas(node, state) {
-  const rasterPaint = getNodePreviewRasterImage(node, state?.painting_raster?.paint, "__panoPreviewPaintRaster");
-  if (rasterPaint) {
-    node.__panoPreviewPaintRevision = String(state?.painting_raster?.revision || state?.painting_raster?.paint?.value || "");
-    return rasterPaint;
-  }
   const strokes = state?.painting?.paint?.strokes;
   if (!Array.isArray(strokes) || strokes.length === 0) return null;
 
