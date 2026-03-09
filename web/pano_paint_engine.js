@@ -855,164 +855,277 @@ function appendStrokePoint(target, x, y, stroke) {
 }
 
 // ─── Engine Factory ────────────────────────────────────────────────────────────
+//
+// ADR 0009: Display List Unification
+//
+//   Each actionGroup is a first-class display object with its own ERP paint surface.
+//   Mask stays as a single separate surface (never in the display list).
+//   composeAllLayers() blends groups in z-order then overlays the mask tint.
+//
+//   getErpTarget(orderedGroupIds?) returns a view compatible with the old single-target
+//   interface so pano_editor.js callers need minimal changes:
+//     .displayPaint.canvas  — final composited ERP (all groups + mask overlay)
+//     .committedMask.canvas — raw mask ERP (for WebGL setMaskErp)
+//     .descriptor
+
+const ERP_DESC = { kind: "ERP_GLOBAL", width: 2048, height: 1024 };
+const ERP_W = 2048;
+const ERP_H = 1024;
 
 export function createPaintEngineManager() {
-  const erpTarget = {
-    descriptor: { kind: "ERP_GLOBAL", width: 2048, height: 1024 },
-    committedPaint: createCanvasSurface(2048, 1024),
-    committedMask: createCanvasSurface(2048, 1024),
-    currentStroke: createCanvasSurface(2048, 1024),
-    displayPaint: createCanvasSurface(2048, 1024),
-    // Per-target active stroke state for incremental rendering.
-    // Set by beginStroke, updated by appendStrokePoint, cleared by commit/cancel.
+  // Per-actionGroup paint surfaces.  Keyed by String(actionGroupId).
+  const groupTargets = new Map();
+
+  // Single mask surface — not part of the display list.
+  const maskTarget = {
+    descriptor: ERP_DESC,
+    committedMask: createCanvasSurface(ERP_W, ERP_H),
+    currentStroke: createCanvasSurface(ERP_W, ERP_H),
     activeStroke: null,
-    // displayDirty: composeDisplayPaint is skipped when false.
-    // Set to true whenever committed or currentStroke content changes.
     displayDirty: true,
-    // lassoPreviewActive: true while a lasso fill is being drawn (not yet committed).
-    // composeDisplayPaint composites currentStroke at 0.5 opacity for the live preview.
     lassoPreviewActive: false,
   };
-  let activeTargetKey = "";
-  let activeLayerKind = "";
 
-  // ERP_GLOBAL is the only painting target.
-  function ensureTarget(_descriptor) {
-    return erpTarget;
+  // Final composited display (all groups in z-order + mask overlay).
+  const globalDisplay = createCanvasSurface(ERP_W, ERP_H);
+
+  // Active stroke tracking.
+  let activeGroupId = null;   // null when mask is active or idle
+  let activeLayerKind = "";   // "paint" | "mask" | ""
+
+  // ─── Group Target Helpers ──────────────────────────────────────────────────
+
+  function createGroupTarget(actionGroupId) {
+    return {
+      actionGroupId,
+      descriptor: ERP_DESC,
+      committedPaint: createCanvasSurface(ERP_W, ERP_H),
+      currentStroke: createCanvasSurface(ERP_W, ERP_H),
+      displayPaint: createCanvasSurface(ERP_W, ERP_H),
+      activeStroke: null,
+      displayDirty: true,
+      lassoPreviewActive: false,
+    };
   }
 
-  // Compose the displayPaint canvas from committed layers + active stroke.
-  // Skipped when displayDirty is false (nothing changed since last compose).
-  function composeDisplayPaint(target) {
-    if (!target.displayDirty) return;
-    target.displayDirty = false;
-    const dCtx = target.displayPaint.ctx;
-    clearSurface(target.displayPaint);
+  function ensureGroupTarget(actionGroupId) {
+    let group = groupTargets.get(actionGroupId);
+    if (!group) {
+      group = createGroupTarget(actionGroupId);
+      groupTargets.set(actionGroupId, group);
+    }
+    return group;
+  }
 
-    const isActive = activeTargetKey === targetKeyOf(target.descriptor);
-    const as = isActive ? target.activeStroke : null;
+  // Backward-compatible accessor: returns the currently active target (group or mask).
+  // Editor code calls ensureTarget(descriptor) then passes the result to appendStrokePoint.
+  function ensureTarget(_descriptor) {
+    if (activeLayerKind === "mask") return maskTarget;
+    if (activeGroupId) return ensureGroupTarget(activeGroupId);
+    return ensureGroupTarget("__default__");
+  }
+
+  // ─── Composition ────────────────────────────────────────────────────────────
+
+  // Compose one group's displayPaint from committedPaint + optional live stroke.
+  // Skipped when displayDirty is false.
+  function composeGroupLayer(group) {
+    if (!group.displayDirty) return;
+    group.displayDirty = false;
+
+    const dCtx = group.displayPaint.ctx;
+    clearSurface(group.displayPaint);
+
+    const isActive = activeGroupId === group.actionGroupId && activeLayerKind === "paint";
+    const as = isActive ? group.activeStroke : null;
 
     if (as?.isEraser) {
-      // Eraser preview: start from committed, apply currentStroke as destination-out
-      if (as.layerKind === "paint") {
-        dCtx.drawImage(target.committedPaint.canvas, 0, 0);
-        applyEraserToSurface(dCtx, target.currentStroke.canvas);
-        drawMaskTint(dCtx, target.committedMask.canvas);
-      } else {
-        // Mask eraser: show paint + (mask minus eraser) composited into shared temp.
-        dCtx.drawImage(target.committedPaint.canvas, 0, 0);
-        const mw = target.committedMask.canvas.width;
-        const mh = target.committedMask.canvas.height;
-        if (!_eraserTmp || _eraserTmp.canvas.width < mw || _eraserTmp.canvas.height < mh) {
-          _eraserTmp = createCanvasSurface(mw, mh);
-        }
-        clearSurface(_eraserTmp);
-        _eraserTmp.ctx.drawImage(target.committedMask.canvas, 0, 0);
-        applyEraserToSurface(_eraserTmp.ctx, target.currentStroke.canvas);
-        drawMaskTint(dCtx, _eraserTmp.canvas);
-      }
+      // Eraser preview: committed with live eraser applied as destination-out.
+      dCtx.drawImage(group.committedPaint.canvas, 0, 0);
+      applyEraserToSurface(dCtx, group.currentStroke.canvas);
       return;
     }
 
-    // Normal: committedPaint → maskTint → currentStroke overlay
-    dCtx.drawImage(target.committedPaint.canvas, 0, 0);
-    drawMaskTint(dCtx, target.committedMask.canvas);
-    if (!isActive) return;
-    if (activeLayerKind === "paint") {
-      const strokeOpacity = target.lassoPreviewActive ? 0.5 : Math.max(0, Math.min(1, as?.strokeOpacity ?? 1));
-      dCtx.save();
-      dCtx.globalAlpha = strokeOpacity;
-      dCtx.drawImage(target.currentStroke.canvas, 0, 0);
-      dCtx.restore();
-    } else if (activeLayerKind === "mask") {
-      drawMaskTint(dCtx, target.currentStroke.canvas);
+    dCtx.drawImage(group.committedPaint.canvas, 0, 0);
+    if (!as) return;
+
+    const strokeOpacity = group.lassoPreviewActive
+      ? 0.5
+      : Math.max(0, Math.min(1, as.strokeOpacity ?? 1));
+    dCtx.save();
+    dCtx.globalAlpha = strokeOpacity;
+    dCtx.drawImage(group.currentStroke.canvas, 0, 0);
+    dCtx.restore();
+  }
+
+  // Composite all groups in display order, then overlay the mask tint.
+  // orderedGroupIds: bottom → top (matches objects[] z-order).
+  // Groups not in the map are silently skipped.
+  function composeAllLayers(orderedGroupIds) {
+    let anyDirty = maskTarget.displayDirty;
+    for (const gid of orderedGroupIds) {
+      const group = groupTargets.get(gid);
+      if (!group) continue;
+      if (group.displayDirty) anyDirty = true;
+      composeGroupLayer(group);
+    }
+    if (!anyDirty) return;
+    maskTarget.displayDirty = false;
+
+    const gCtx = globalDisplay.ctx;
+    clearSurface(globalDisplay);
+
+    for (const gid of orderedGroupIds) {
+      const group = groupTargets.get(gid);
+      if (group) gCtx.drawImage(group.displayPaint.canvas, 0, 0);
+    }
+
+    // Mask overlay: committed mask tint + optional live stroke tint or eraser preview.
+    const isMaskActive = activeLayerKind === "mask";
+    const maskAs = maskTarget.activeStroke;
+
+    if (isMaskActive && maskAs?.isEraser) {
+      // Mask eraser preview: show committed minus current eraser stroke.
+      const mw = maskTarget.committedMask.canvas.width;
+      const mh = maskTarget.committedMask.canvas.height;
+      if (!_eraserTmp || _eraserTmp.canvas.width < mw || _eraserTmp.canvas.height < mh) {
+        _eraserTmp = createCanvasSurface(mw, mh);
+      }
+      clearSurface(_eraserTmp);
+      _eraserTmp.ctx.drawImage(maskTarget.committedMask.canvas, 0, 0);
+      applyEraserToSurface(_eraserTmp.ctx, maskTarget.currentStroke.canvas);
+      drawMaskTint(gCtx, _eraserTmp.canvas);
+    } else {
+      drawMaskTint(gCtx, maskTarget.committedMask.canvas);
+      if (isMaskActive && maskAs) {
+        // Live mask stroke tint (drawing in progress).
+        drawMaskTint(gCtx, maskTarget.currentStroke.canvas);
+      }
     }
   }
 
+  // ─── Rebuild ────────────────────────────────────────────────────────────────
+
   function rebuildCommitted(state) {
-    // Deduplication is handled by the caller (rebuildPaintEngineIfNeeded in pano_editor.js).
-    clearSurface(erpTarget.committedPaint);
-    clearSurface(erpTarget.committedMask);
-    clearSurface(erpTarget.currentStroke);
-    erpTarget.activeStroke = null;
+    // Clear all existing group surfaces (keep keys to preserve insertion order).
+    for (const group of groupTargets.values()) {
+      clearSurface(group.committedPaint);
+      clearSurface(group.currentStroke);
+      group.activeStroke = null;
+      group.displayDirty = true;
+    }
+    clearSurface(maskTarget.committedMask);
+    clearSurface(maskTarget.currentStroke);
+    maskTarget.activeStroke = null;
+    maskTarget.displayDirty = true;
 
     const allStrokes = [
       ...(Array.isArray(state?.painting?.paint?.strokes) ? state.painting.paint.strokes : []),
       ...(Array.isArray(state?.painting?.mask?.strokes) ? state.painting.mask.strokes : []),
     ];
 
-    allStrokes.forEach((stroke) => {
+    for (const stroke of allStrokes) {
       // Only ERP_GLOBAL strokes are supported. Legacy FRAME_LOCAL strokes are silently ignored.
-      if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") return;
+      if (stroke?.targetSpace?.kind !== "ERP_GLOBAL") continue;
 
-      const descriptor = erpTarget.descriptor;
       const layerKind = String(stroke?.layerKind || "paint");
       const toolKind = String(stroke?.toolKind || "pen");
       const isEraser = toolKind === "eraser";
 
+      if (layerKind === "mask") {
+        const desc = maskTarget.descriptor;
+        if (isEraser) {
+          if (!_eraserTmp || _eraserTmp.canvas.width < desc.width || _eraserTmp.canvas.height < desc.height) {
+            _eraserTmp = createCanvasSurface(desc.width, desc.height);
+          }
+          clearSurface(_eraserTmp);
+          drawStrokeToSurface(_eraserTmp.ctx, stroke, desc);
+          applyEraserToSurface(maskTarget.committedMask.ctx, _eraserTmp.canvas);
+        } else {
+          drawStrokeToSurface(maskTarget.committedMask.ctx, stroke, desc);
+        }
+        continue;
+      }
+
+      // Paint strokes → per-group target, keyed by actionGroupId.
+      const actionGroupId = String(stroke?.actionGroupId || "__default__");
+      const group = ensureGroupTarget(actionGroupId);
+      const desc = group.descriptor;
+
       if (isEraser) {
-        if (!_eraserTmp || _eraserTmp.canvas.width < descriptor.width || _eraserTmp.canvas.height < descriptor.height) {
-          _eraserTmp = createCanvasSurface(descriptor.width, descriptor.height);
+        if (!_eraserTmp || _eraserTmp.canvas.width < desc.width || _eraserTmp.canvas.height < desc.height) {
+          _eraserTmp = createCanvasSurface(desc.width, desc.height);
         }
         clearSurface(_eraserTmp);
-        drawStrokeToSurface(_eraserTmp.ctx, stroke, descriptor);
-        const surface = layerKind === "mask" ? erpTarget.committedMask : erpTarget.committedPaint;
-        applyEraserToSurface(surface.ctx, _eraserTmp.canvas);
-      } else if (layerKind === "mask") {
-        drawStrokeToSurface(erpTarget.committedMask.ctx, stroke, descriptor);
+        drawStrokeToSurface(_eraserTmp.ctx, stroke, desc);
+        applyEraserToSurface(group.committedPaint.ctx, _eraserTmp.canvas);
       } else {
-        drawStrokeToSurface(erpTarget.committedPaint.ctx, stroke, descriptor);
+        drawStrokeToSurface(group.committedPaint.ctx, stroke, desc);
       }
-    });
+      group.displayDirty = true;
+    }
 
-    erpTarget.displayDirty = true;
-    composeDisplayPaint(erpTarget);
+    composeAllLayers([...groupTargets.keys()]);
   }
 
-  // Begin a new stroke: clear currentStroke canvas, reset active stroke state.
+  // ─── Stroke Lifecycle ────────────────────────────────────────────────────────
+
   function beginStroke(stroke, descriptor) {
-    const target = ensureTarget(descriptor);
-    activeTargetKey = targetKeyOf(target.descriptor);
     activeLayerKind = String(stroke?.layerKind || "");
-    clearSurface(target.currentStroke);
-    target.activeStroke = null;
-    target.displayDirty = true;
+
+    if (activeLayerKind === "mask") {
+      activeGroupId = null;
+      clearSurface(maskTarget.currentStroke);
+      maskTarget.activeStroke = null;
+      maskTarget.displayDirty = true;
+    } else {
+      const groupId = String(stroke?.actionGroupId || "__default__");
+      activeGroupId = groupId;
+      const group = ensureGroupTarget(groupId);
+      clearSurface(group.currentStroke);
+      group.activeStroke = null;
+      group.displayDirty = true;
+    }
   }
 
-  // Commit the active stroke: merge currentStroke bitmap into the committed layer.
   function commitActiveStroke(stroke, descriptor) {
-    const target = ensureTarget(descriptor);
-    const as = target.activeStroke;
+    const layerKind = String(stroke?.layerKind || "paint");
+    const isEraser = String(stroke?.toolKind || "") === "eraser";
 
-    // Draw the pending tail: stamps have been placed up to lastMid; draw lastMid → last raw point.
+    const target = layerKind === "mask"
+      ? maskTarget
+      : ensureGroupTarget(String(stroke?.actionGroupId || activeGroupId || "__default__"));
+    const as = target.activeStroke;
+    const targetDesc = target.descriptor;
+
+    // Draw the pending tail: stamps placed up to lastMid; now draw lastMid → last raw point.
     if (as && as.pointCount > 1) {
       const ctx = target.currentStroke.ctx;
       ctx.globalCompositeOperation = "source-over";
-      const sc = { ctx, stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx, desc: target.descriptor, aspect: as.aspect, angle: as.angle };
+      const sc = {
+        ctx,
+        stampTex: as.stampTex, radiusPx: as.radiusPx, spacingPx: as.spacingPx,
+        desc: targetDesc, aspect: as.aspect, angle: as.angle,
+        stampKind: as.stampKind, scatter: as.scatter,
+      };
       if (as.pointCount === 2) {
-        // Only one linear segment was drawn; tail is also linear.
         _walkLinearStamps(sc, as.lastMidX, as.lastMidY, as.prev.x, as.prev.y, as.distSinceStamp);
       } else {
-        // CR tail with ghost end (prev duplicated) to smoothly close the curve.
         _walkCRStamps(sc, as.pprev, { x: as.lastMidX, y: as.lastMidY }, as.prev, as.prev, as.distSinceStamp);
       }
     }
 
-    const layerKind = String(stroke?.layerKind || "paint");
-    const surface = layerKind === "mask" ? target.committedMask : target.committedPaint;
-
-    // Lasso preview was drawn at 50%; redraw at full opacity before merging into committed.
+    // Redraw lasso fill at full opacity before merging (preview was at 50%).
     if (target.lassoPreviewActive) {
       clearSurface(target.currentStroke);
-      drawLassoFillNative(target.currentStroke.ctx, stroke, target.descriptor);
+      drawLassoFillNative(target.currentStroke.ctx, stroke, targetDesc);
       target.lassoPreviewActive = false;
     }
 
-    if (as?.isEraser) {
-      // Eraser: apply the white stamp bitmap as destination-out
+    const surface = layerKind === "mask" ? maskTarget.committedMask : target.committedPaint;
+    if (isEraser) {
       applyEraserToSurface(surface.ctx, target.currentStroke.canvas);
     } else {
-      // Merge live stamp bitmap into committed layer, applying stroke-level opacity.
       const opacity = Math.max(0, Math.min(1, as?.strokeOpacity ?? 1));
       surface.ctx.save();
       surface.ctx.globalAlpha = opacity;
@@ -1022,41 +1135,77 @@ export function createPaintEngineManager() {
 
     clearSurface(target.currentStroke);
     target.activeStroke = null;
-    activeTargetKey = "";
-    activeLayerKind = "";
     target.displayDirty = true;
-    composeDisplayPaint(target);
+    activeGroupId = null;
+    activeLayerKind = "";
+
+    composeAllLayers([...groupTargets.keys()]);
   }
 
   function cancelActiveStroke(descriptor) {
-    const target = ensureTarget(descriptor);
-    clearSurface(target.currentStroke);
-    target.activeStroke = null;
-    target.lassoPreviewActive = false;
+    if (activeLayerKind === "mask") {
+      clearSurface(maskTarget.currentStroke);
+      maskTarget.activeStroke = null;
+      maskTarget.lassoPreviewActive = false;
+      maskTarget.displayDirty = true;
+    } else if (activeGroupId) {
+      const group = groupTargets.get(activeGroupId);
+      if (group) {
+        clearSurface(group.currentStroke);
+        group.activeStroke = null;
+        group.lassoPreviewActive = false;
+        group.displayDirty = true;
+      }
+    }
+    activeGroupId = null;
     activeLayerKind = "";
-    target.displayDirty = true;
-    composeDisplayPaint(target);
+    composeAllLayers([...groupTargets.keys()]);
   }
 
-  // Legacy full-redraw path used for lasso fill preview (polygon is typically short, O(n) is fine).
+  // Full-redraw path for lasso fill preview (polygon is short, O(n) acceptable).
   function updateActiveStroke(stroke, descriptor) {
-    const target = ensureTarget(descriptor);
-    activeTargetKey = targetKeyOf(target.descriptor);
     activeLayerKind = String(stroke?.layerKind || "");
     const kind = String(stroke?.geometry?.geometryKind || "");
-    if (kind === "lasso_fill") {
-      clearSurface(target.currentStroke);
-      drawLassoFillNative(target.currentStroke.ctx, stroke, target.descriptor);
-      target.lassoPreviewActive = true;
-      target.displayDirty = true;
-      composeDisplayPaint(target);
+    if (kind !== "lasso_fill") return;
+
+    if (activeLayerKind === "mask") {
+      clearSurface(maskTarget.currentStroke);
+      drawLassoFillNative(maskTarget.currentStroke.ctx, stroke, maskTarget.descriptor);
+      maskTarget.lassoPreviewActive = true;
+      maskTarget.displayDirty = true;
+    } else {
+      const groupId = String(stroke?.actionGroupId || activeGroupId || "__default__");
+      activeGroupId = groupId;
+      const group = ensureGroupTarget(groupId);
+      clearSurface(group.currentStroke);
+      drawLassoFillNative(group.currentStroke.ctx, stroke, group.descriptor);
+      group.lassoPreviewActive = true;
+      group.displayDirty = true;
     }
-    // For freehand: appendStrokePoint handles it incrementally.
+    composeAllLayers([...groupTargets.keys()]);
   }
 
-  function getErpTarget() {
-    composeDisplayPaint(erpTarget);
-    return erpTarget;
+  // Returns a view compatible with the old single-target interface:
+  //   .displayPaint.canvas  — composited ERP (all groups in z-order + mask overlay)
+  //   .committedMask.canvas — raw mask ERP for WebGL setMaskErp
+  //   .descriptor
+  // orderedGroupIds: optional display-order from editor's objects[] (bottom → top).
+  // Defaults to Map insertion order when not provided.
+  function getErpTarget(orderedGroupIds) {
+    composeAllLayers(orderedGroupIds ?? [...groupTargets.keys()]);
+    return {
+      displayPaint: globalDisplay,
+      committedMask: maskTarget.committedMask,
+      descriptor: ERP_DESC,
+    };
+  }
+
+  function getGroupTarget(actionGroupId) {
+    return groupTargets.get(String(actionGroupId)) ?? null;
+  }
+
+  function getAllGroupIds() {
+    return [...groupTargets.keys()];
   }
 
   return {
@@ -1068,5 +1217,7 @@ export function createPaintEngineManager() {
     cancelActiveStroke,
     getErpTarget,
     ensureTarget,
+    getGroupTarget,
+    getAllGroupIds,
   };
 }
