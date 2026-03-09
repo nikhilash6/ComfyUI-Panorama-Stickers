@@ -1298,6 +1298,7 @@ function showEditor(node, type, options = {}) {
         <div class="pano-paint-footer-group" data-paint-group="mask" hidden>
           <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pencil_tool}</button>
           <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.eraser_tool}</button>
+          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="lasso_fill" aria-label="Mask Lasso" data-tip="Mask lasso">${ICON.lasso_tool}</button>
         </div>
         <div class="pano-paint-size-row" data-paint-size-row hidden>
           <input class="pano-paint-size-slider" data-paint-size-slider type="range" min="1" max="120" step="1" value="10">
@@ -1340,6 +1341,23 @@ function showEditor(node, type, options = {}) {
 
   const canvas = root.querySelector("canvas");
   const stageWrap = root.querySelector(".pano-stage-wrap");
+  const paintCursorEl = document.createElement("div");
+  paintCursorEl.setAttribute("aria-hidden", "true");
+  paintCursorEl.style.position = "absolute";
+  paintCursorEl.style.left = "0";
+  paintCursorEl.style.top = "0";
+  paintCursorEl.style.pointerEvents = "none";
+  paintCursorEl.style.zIndex = "12";
+  paintCursorEl.style.display = "none";
+  paintCursorEl.style.willChange = "transform,width,height,background,border-radius";
+  stageWrap?.appendChild(paintCursorEl);
+  const paintSizePreviewEl = document.createElement("div");
+  paintSizePreviewEl.className = "pano-paint-size-preview";
+  paintSizePreviewEl.setAttribute("aria-hidden", "true");
+  const paintSizePreviewSampleEl = document.createElement("div");
+  paintSizePreviewSampleEl.className = "pano-paint-size-preview-sample";
+  paintSizePreviewEl.appendChild(paintSizePreviewSampleEl);
+  stageWrap?.appendChild(paintSizePreviewEl);
   const ctx = canvas.getContext("2d");
   const side = root.querySelector("[data-side]");
   const viewBtns = root.querySelectorAll("[data-view]");
@@ -1369,6 +1387,7 @@ function showEditor(node, type, options = {}) {
   const paintLayerClearCurrentBtn = root.querySelector("[data-paint-layer-clear-current]");
   const paintSizeSlider = root.querySelector("[data-paint-size-slider]");
   const paintSizeValue = root.querySelector("[data-paint-size-value]");
+  let paintSizePreviewTimer = 0;
   if (type === "cutout") canvas.style.opacity = "0";
   if (hideSidebar) {
     side?.remove();
@@ -1435,6 +1454,7 @@ function showEditor(node, type, options = {}) {
     customPaintColor: { r: 0, g: 1, b: 0, a: 1 },
     customPaintHistory: [],
     customPaintSessionStart: null,
+    pointerPos: { x: 0, y: 0, inside: false },
     interaction: null,
     hqFrames: 0,
     viewInertia: { vx: 0, vy: 0, active: false },
@@ -1940,7 +1960,8 @@ function showEditor(node, type, options = {}) {
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
     if (viewToggle) viewToggle.setAttribute("data-selected", editor.mode);
-    canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+    if (isPaintCursorEnabled()) updateCursor(editor.pointerPos);
+    else canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
   }
 
   function stickerCornerOrderSanity() {
@@ -3533,7 +3554,6 @@ function showEditor(node, type, options = {}) {
         img: erpRaster,
         view: buildCutoutViewParamsFromShot(shot),
         backgroundRevision: getPaintingRevisionKey() + activePoints,
-        backgroundOpacity: 1,
       });
     }
     ctx.restore();
@@ -4989,6 +5009,159 @@ function showEditor(node, type, options = {}) {
     return editor.activeBrushPresetId || DEFAULT_BRUSH_PRESET_ID;
   }
 
+  function isPaintCursorEnabled() {
+    return (editor.primaryTool === "paint" || editor.primaryTool === "mask") && (supportsErpPainting() || supportsFramePainting());
+  }
+
+  function isActivePaintCursorVisible() {
+    return isPaintCursorEnabled() && editor.pointerPos?.inside === true;
+  }
+
+  function setPointerPos(p, inside = true) {
+    const nextX = Number(p?.x || 0);
+    const nextY = Number(p?.y || 0);
+    const nextInside = inside !== false;
+    const prev = editor.pointerPos || { x: 0, y: 0, inside: false };
+    const changed = prev.inside !== nextInside || Math.abs(prev.x - nextX) > 0.01 || Math.abs(prev.y - nextY) > 0.01;
+    editor.pointerPos = { x: nextX, y: nextY, inside: nextInside };
+    return changed;
+  }
+
+  function getActivePaintCursorDescriptor() {
+    if (!isActivePaintCursorVisible()) return null;
+    const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
+    const toolKind = layerKind === "mask" ? editor.maskTool : editor.paintTool;
+    const presetId = getBrushPresetIdForTool(toolKind);
+    const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+    const rawSize = Number(editor.brushSizes[presetId] ?? 10);
+    const size = Math.max(1, rawSize) * Math.max(0.1, Number(preset.sizeScale ?? 1));
+    const radius = Math.max(3, size * 0.5);
+    const baseColor = layerKind === "mask"
+      ? { r: 34 / 255, g: 197 / 255, b: 94 / 255, a: 0.8 }
+      : (toolKind === "eraser" ? { r: 1, g: 1, b: 1, a: 0.2 } : cloneColor(editor.paintColor));
+    const fillAlpha = layerKind === "mask"
+      ? 0.2
+      : (toolKind === "eraser" ? 0.06 : clamp(Math.max(0.16, Number(baseColor.a ?? 1) * 0.3), 0.16, 0.52));
+    const strokeAlpha = layerKind === "mask"
+      ? 0.95
+      : (toolKind === "eraser" ? 0.75 : clamp(Math.max(0.46, Number(baseColor.a ?? 1) * 0.92), 0.46, 1));
+    return {
+      layerKind,
+      toolKind,
+      preset,
+      radius,
+      fillStyle: colorToCss(baseColor, fillAlpha),
+      strokeStyle: colorToCss(baseColor, strokeAlpha),
+      x: Number(editor.pointerPos?.x || 0),
+      y: Number(editor.pointerPos?.y || 0),
+    };
+  }
+
+  function syncPaintCursorElement() {
+    const cursor = getActivePaintCursorDescriptor();
+    if (!paintCursorEl) return;
+    if (!cursor) {
+      paintCursorEl.style.display = "none";
+      return;
+    }
+
+    let width = cursor.radius * 2;
+    let height = cursor.radius * 2;
+    let borderRadius = "999px";
+    let rotateDeg = 0;
+    let background = cursor.fillStyle;
+
+    if (cursor.toolKind === "marker") {
+      const aspect = Math.max(1, Number(cursor.preset?.aspect ?? 1));
+      width = Math.max(10, cursor.radius * 2 * aspect);
+      height = Math.max(6, cursor.radius * 2);
+      borderRadius = `${Math.min(6, height * 0.42)}px`;
+      rotateDeg = Number(cursor.preset?.angle?.value || 0) * RAD2DEG;
+    } else if (cursor.toolKind === "brush") {
+      background = `radial-gradient(circle at 50% 50%, ${cursor.strokeStyle} 0%, ${cursor.fillStyle} 45%, rgba(0,0,0,0) 100%)`;
+    } else if (cursor.toolKind === "lasso_fill") {
+      width = Math.max(12, cursor.radius * 1.5);
+      height = width;
+      background = `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 45%, ${cursor.strokeStyle} 46%, ${cursor.strokeStyle} 60%, rgba(0,0,0,0) 61%)`;
+    } else if (cursor.toolKind === "eraser") {
+      background = "rgba(255,255,255,0.14)";
+    }
+
+    paintCursorEl.style.display = "block";
+    paintCursorEl.style.width = `${Math.round(width)}px`;
+    paintCursorEl.style.height = `${Math.round(height)}px`;
+    paintCursorEl.style.borderRadius = borderRadius;
+    paintCursorEl.style.background = background;
+    paintCursorEl.style.transform = `translate(${Math.round(cursor.x - width * 0.5)}px, ${Math.round(cursor.y - height * 0.5)}px) rotate(${rotateDeg}deg)`;
+  }
+
+  function showPaintSizePreview() {
+    if (!paintSizePreviewEl || !paintSizePreviewSampleEl) return;
+    const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
+    const toolKind = layerKind === "mask" ? editor.maskTool : editor.paintTool;
+    const presetId = getBrushPresetIdForTool(toolKind);
+    const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+    const rawSize = Number(editor.brushSizes[presetId] ?? 10);
+    const size = Math.max(1, rawSize) * Math.max(0.1, Number(preset.sizeScale ?? 1));
+    const radius = Math.max(6, size * 0.5);
+    const isEraser = toolKind === "eraser";
+    const baseColor = layerKind === "mask"
+      ? { r: 34 / 255, g: 197 / 255, b: 94 / 255, a: 0.82 }
+      : (isEraser ? { r: 1, g: 1, b: 1, a: 0.22 } : cloneColor(editor.paintColor));
+    const fill = layerKind === "mask"
+      ? colorToCss(baseColor, 0.22)
+      : (isEraser ? "rgba(255,255,255,0.14)" : colorToCss(baseColor, clamp(Math.max(0.18, Number(baseColor.a ?? 1) * 0.34), 0.18, 0.56)));
+    const stroke = layerKind === "mask"
+      ? colorToCss(baseColor, 0.96)
+      : (isEraser ? "rgba(255,255,255,0.72)" : colorToCss(baseColor, clamp(Math.max(0.56, Number(baseColor.a ?? 1) * 0.96), 0.56, 1)));
+
+    let width = radius * 2;
+    let height = radius * 2;
+    let borderRadius = "999px";
+    let rotateDeg = 0;
+    let background = fill;
+
+    if (toolKind === "marker") {
+      const aspect = Math.max(1, Number(preset?.aspect ?? 1));
+      width = Math.max(16, radius * 2 * aspect);
+      height = Math.max(10, radius * 2);
+      borderRadius = `${Math.min(8, height * 0.42)}px`;
+      rotateDeg = Number(preset?.angle?.value || 0) * RAD2DEG;
+    } else if (toolKind === "brush") {
+      background = `radial-gradient(circle at 50% 50%, ${stroke} 0%, ${fill} 48%, rgba(0,0,0,0) 100%)`;
+    } else if (toolKind === "lasso_fill") {
+      width = Math.max(18, radius * 1.8);
+      height = width;
+      background = `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 42%, ${stroke} 43%, ${stroke} 58%, rgba(0,0,0,0) 59%)`;
+    } else if (isEraser) {
+      background = "rgba(255,255,255,0.12)";
+    }
+
+    paintSizePreviewSampleEl.style.width = `${Math.round(width)}px`;
+    paintSizePreviewSampleEl.style.height = `${Math.round(height)}px`;
+    paintSizePreviewSampleEl.style.borderRadius = borderRadius;
+    paintSizePreviewSampleEl.style.background = background;
+    paintSizePreviewSampleEl.style.border = `2px solid ${stroke}`;
+    paintSizePreviewSampleEl.style.transform = `rotate(${rotateDeg}deg)`;
+
+    if (paintSizePreviewTimer) {
+      clearTimeout(paintSizePreviewTimer);
+      paintSizePreviewTimer = 0;
+    }
+    paintSizePreviewEl.classList.remove("fade-out");
+    paintSizePreviewEl.classList.add("show");
+  }
+
+  function hidePaintSizePreview() {
+    if (!paintSizePreviewEl || !paintSizePreviewEl.classList.contains("show")) return;
+    paintSizePreviewEl.classList.add("fade-out");
+    if (paintSizePreviewTimer) clearTimeout(paintSizePreviewTimer);
+    paintSizePreviewTimer = window.setTimeout(() => {
+      paintSizePreviewEl.classList.remove("show", "fade-out");
+      paintSizePreviewTimer = 0;
+    }, 180);
+  }
+
   function buildFreehandStrokeRecord(layerKind, toolKind, points, targetSpace) {
     const presetId = getBrushPresetIdForTool(toolKind);
     const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
@@ -5169,8 +5342,10 @@ function showEditor(node, type, options = {}) {
   }
 
   function updateCursor(p) {
+    syncPaintCursorElement();
     if (editor.interaction) {
-      if (editor.interaction.kind === "view") canvas.style.cursor = "grabbing";
+      if (editor.interaction.kind === "paint_stroke" || editor.interaction.kind === "paint_lasso_fill") canvas.style.cursor = "none";
+      else if (editor.interaction.kind === "view") canvas.style.cursor = "grabbing";
       else if (editor.interaction.kind === "pan_frame") canvas.style.cursor = "grabbing";
       else if (editor.interaction.kind === "move") canvas.style.cursor = "move";
       else if (editor.interaction.kind === "scale" || editor.interaction.kind === "scale_x" || editor.interaction.kind === "scale_y") canvas.style.cursor = editor.interaction.cursor || "nwse-resize";
@@ -5178,8 +5353,8 @@ function showEditor(node, type, options = {}) {
       else canvas.style.cursor = "default";
       return;
     }
-    if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && (supportsErpPainting() || supportsFramePainting())) {
-      canvas.style.cursor = "crosshair";
+    if (isActivePaintCursorVisible()) {
+      canvas.style.cursor = "none";
       return;
     }
     if (editor.mode === "frame") {
@@ -5380,6 +5555,7 @@ function showEditor(node, type, options = {}) {
 
   canvas.onpointerdown = (e) => {
     const p = screenPos(e);
+    setPointerPos(p, true);
     editor.viewTween = null;
     viewController.state.inertia.active = false;
     viewController.state.inertia.vx = 0;
@@ -5421,7 +5597,6 @@ function showEditor(node, type, options = {}) {
       const startPoint = activeShot
         ? screenPosToFrameAsErpPoint(p, activeShot, performance.now())
         : screenPosToErpPoint(p, performance.now());
-      if (layerKind === "mask" && toolKind === "lasso_fill") return;
       editor.interaction = {
         kind: toolKind === "lasso_fill" ? "paint_lasso_fill" : "paint_stroke",
         layerKind,
@@ -5581,8 +5756,12 @@ function showEditor(node, type, options = {}) {
   };
 
   canvas.onpointermove = (e) => {
-    if (!editor.interaction) return;
     const p = screenPos(e);
+    setPointerPos(p, true);
+    if (!editor.interaction) {
+      updateCursor(p);
+      return;
+    }
     updateCursor(p);
     const it = editor.interaction;
 
@@ -5716,6 +5895,7 @@ function showEditor(node, type, options = {}) {
     }
     syncViewToggleState();
     updateSelectionMenu();
+    updateCursor(editor.pointerPos);
     requestDraw();
   };
 
@@ -5729,6 +5909,8 @@ function showEditor(node, type, options = {}) {
     }
     editor.interaction = null;
     syncViewToggleState();
+    updateCursor(editor.pointerPos);
+    requestDraw({ localOnly: true });
   };
 
   canvas.onauxclick = (e) => {
@@ -5736,9 +5918,15 @@ function showEditor(node, type, options = {}) {
   };
 
   canvas.onmousemove = (e) => {
-    if (editor.interaction) return;
     const p = screenPos(e);
+    setPointerPos(p, true);
+    if (editor.interaction) return;
     updateCursor(p);
+  };
+
+  canvas.onmouseleave = () => {
+    setPointerPos(editor.pointerPos, false);
+    updateCursor(editor.pointerPos);
   };
 
   canvas.onwheel = (e) => {
@@ -5950,7 +6138,12 @@ function showEditor(node, type, options = {}) {
       const pct = ((v - 1) / 119) * 100;
       paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
       if (paintSizeValue) paintSizeValue.textContent = String(v);
+      showPaintSizePreview();
     };
+    paintSizeSlider.onchange = () => hidePaintSizePreview();
+    paintSizeSlider.addEventListener("pointerup", hidePaintSizePreview);
+    paintSizeSlider.addEventListener("pointercancel", hidePaintSizePreview);
+    paintSizeSlider.addEventListener("blur", hidePaintSizePreview);
   }
   if (paintColorRow) {
     paintColorRow.querySelectorAll("[data-paint-color-swatch]").forEach((btn) => {
@@ -6284,7 +6477,7 @@ function showEditor(node, type, options = {}) {
   updateSidePanel();
   syncLookAtFrameButtonState();
   syncCanvasSize();
-  canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
+  updateCursor(editor.pointerPos);
   requestDraw();
   runtime.rafId = requestAnimationFrame(tick);
 }

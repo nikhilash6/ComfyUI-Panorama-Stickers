@@ -871,7 +871,6 @@ export function createPaintEngineManager() {
     drawMaskTint(dCtx, target.committedMask.canvas);
     if (!isActive) return;
     if (activeLayerKind === "paint") {
-      // Lasso preview: show at 50% so the boundary is clearly visible before confirming.
       const strokeOpacity = target.lassoPreviewActive ? 0.5 : Math.max(0, Math.min(1, as?.strokeOpacity ?? 1));
       dCtx.save();
       dCtx.globalAlpha = strokeOpacity;
@@ -880,6 +879,7 @@ export function createPaintEngineManager() {
     } else if (activeLayerKind === "mask") {
       drawMaskTint(dCtx, target.currentStroke.canvas);
     }
+    if (!isActive) return;
   }
 
   function rebuildCommitted(state) {

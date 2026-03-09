@@ -85,6 +85,32 @@
   min-height: 0;
   overflow: hidden;
 }
+.pano-paint-size-preview {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 136px;
+  height: 136px;
+  display: grid;
+  place-items: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 11;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 140ms ease;
+}
+.pano-paint-size-preview.show {
+  opacity: 1;
+  visibility: visible;
+}
+.pano-paint-size-preview.fade-out {
+  opacity: 0;
+}
+.pano-paint-size-preview-sample {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+}
 .pano-stage {
   display: block;
   width: 100%;
