@@ -1518,6 +1518,7 @@ function showEditor(node, type, options = {}) {
     _sortedItemsCache: null,
     _strokeGeomCache: new Map(),
     _strokeRasterBoundsCache: new Map(),
+    marqueeModifier: false,
     panelLastValues: null,
     panelWasEnabled: false,
     viewTween: null,
@@ -3914,22 +3915,19 @@ function showEditor(node, type, options = {}) {
     const img = getConnectedErpImage();
     const previewRect = { x: px, y: py, w: pw, h: ph };
     const erpPreviewRaster = editor.paintEngine?.getErpTarget?.(getOrderedPaintGroupIds())?.displayPaint?.canvas || null;
-
     const renderPreviewPaint = () => {
-      if (erpPreviewRaster) {
-        renderCutoutViewToContext2D({
-          owner: node,
-          cacheKey: "modal_cutout_output_preview_paint",
-          ctx,
-          rect: previewRect,
-          img: erpPreviewRaster,
-          view: cutoutView,
-          backgroundRevision: getPaintingRevisionKey() + getLivePaintRevisionSuffix(),
-          backgroundOpacity: 1,
-        });
-      }
+      if (!erpPreviewRaster) return;
+      renderCutoutViewToContext2D({
+        owner: node,
+        cacheKey: "modal_cutout_output_preview_paint",
+        ctx,
+        rect: previewRect,
+        img: erpPreviewRaster,
+        view: cutoutView,
+        backgroundRevision: getPaintingRevisionKey() + getLivePaintRevisionSuffix(),
+        backgroundOpacity: 1,
+      });
     };
-
     if (!img || !img.complete || !(img.naturalWidth || img.width)) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
       ctx.fillRect(px, py, pw, ph);
@@ -6437,12 +6435,13 @@ function showEditor(node, type, options = {}) {
       return;
     }
     if (editor.mode === "frame") {
-      if (editor.primaryTool === "cursor") {
-        const hit = hitObjectAt(p);
-        canvas.style.cursor = hit ? "default" : "default";
-      } else {
+      if (editor.primaryTool !== "cursor") {
         canvas.style.cursor = "default";
+        return;
       }
+    }
+    if (editor.primaryTool === "cursor" && editor.marqueeModifier) {
+      canvas.style.cursor = "default";
       return;
     }
     const selected = getSelected();
@@ -6783,28 +6782,21 @@ function showEditor(node, type, options = {}) {
     if (selectedItems.length > 1 && selGeom?.visible) {
       const h = handleHit(selGeom, p);
       if (h.kind === "move") {
-        const startUv = editor.mode === "frame"
-          ? (() => {
-            const shot = getActiveCutoutShot();
-            return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
-          })()
-          : screenPosToErpPoint(p, performance.now());
         editor.interaction = {
           kind: "move_multi",
           items: selectedItems.map((item) => item),
           offset: { x: p.x - selGeom.center.x, y: p.y - selGeom.center.y },
           startCenter: { x: selGeom.center.x, y: selGeom.center.y },
-          startAnchorYawPitch: (() => {
-            const dir = screenToWorldDir(selGeom.center.x, selGeom.center.y);
-            return dirToYawPitch(dir);
-          })(),
-          startUv,
           stickerSnapshots: selectedItems
             .filter((item) => isStickerItem(item))
             .map((item) => ({
               id: String(item.id || ""),
               yaw_deg: Number(item.yaw_deg || 0),
               pitch_deg: Number(item.pitch_deg || 0),
+              center: (() => {
+                const geom = objectGeom(item);
+                return geom?.visible ? { x: Number(geom.center?.x || 0), y: Number(geom.center?.y || 0) } : { x: p.x, y: p.y };
+              })(),
             })),
           strokeSnapshots: selectedItems
             .filter((item) => isStrokeGroupItem(item))
@@ -6813,6 +6805,11 @@ function showEditor(node, type, options = {}) {
               layerKind: String(item.layerKind || "paint"),
               snapshot: cloneJson(getStrokeGroupStrokes(item.actionGroupId, item.layerKind)),
               frameSnapshot: cloneJson(ensureGroupFrame(item.actionGroupId, item.layerKind)),
+              center: (() => {
+                const geom = objectGeom(item);
+                return geom?.visible ? { x: Number(geom.center?.x || 0), y: Number(geom.center?.y || 0) } : { x: p.x, y: p.y };
+              })(),
+              centerUv: getStrokeGroupCenterUv(item.actionGroupId, item.layerKind),
             })),
         };
         updateCursor(p);
@@ -7079,27 +7076,57 @@ function showEditor(node, type, options = {}) {
       const tx = p.x - Number(it.offset?.x || 0);
       const ty = p.y - Number(it.offset?.y || 0);
       let changed = false;
-      const currentYawPitch = dirToYawPitch(screenToWorldDir(tx, ty));
-      const startYawPitch = it.startAnchorYawPitch || currentYawPitch;
-      const dyaw = shortestYawDelta(Number(currentYawPitch?.yaw || 0), Number(startYawPitch?.yaw || 0));
-      const dpitch = Number(currentYawPitch?.pitch || 0) - Number(startYawPitch?.pitch || 0);
+      const dx = tx - Number(it.startCenter?.x || tx);
+      const dy = ty - Number(it.startCenter?.y || ty);
       for (const snap of (Array.isArray(it.stickerSnapshots) ? it.stickerSnapshots : [])) {
         const sticker = (type === "cutout" ? getCutoutSelectableItems() : getList()).find((entry) => String(entry?.id || "") === String(snap.id || ""));
         if (!sticker || !isStickerItem(sticker)) continue;
-        sticker.yaw_deg = wrapYaw(Number(snap.yaw_deg || 0) + dyaw);
-        sticker.pitch_deg = clamp(Number(snap.pitch_deg || 0) + dpitch, -90, 90);
+        const targetScreen = {
+          x: Number(snap.center?.x || 0) + dx,
+          y: Number(snap.center?.y || 0) + dy,
+        };
+        if (editor.mode === "frame" && type === "cutout") {
+          const shot = getActiveCutoutShot();
+          const rect = getFrameViewRect(shot);
+          if (!shot || !rect) continue;
+          const framePoint = {
+            x: clamp((targetScreen.x - rect.x) / Math.max(1, rect.w), 0, 1),
+            y: clamp((targetScreen.y - rect.y) / Math.max(1, rect.h), 0, 1),
+          };
+          const dir = frameLocalPointToWorldDir(shot, framePoint);
+          if (!dir) continue;
+          const yp = dirToYawPitch(dir);
+          sticker.yaw_deg = yp.yaw;
+          sticker.pitch_deg = yp.pitch;
+        } else if (editor.mode === "unwrap") {
+          const r = getUnwrapRect();
+          const nx = clamp((targetScreen.x - r.x) / Math.max(r.w, 1), 0, 1);
+          const ny = clamp((targetScreen.y - r.y) / Math.max(r.h, 1), 0, 1);
+          sticker.yaw_deg = wrapYaw(nx * 360 - 180);
+          sticker.pitch_deg = clamp(90 - ny * 180, -90, 90);
+        } else {
+          const dir = screenToWorldDir(targetScreen.x, targetScreen.y);
+          const yp = dirToYawPitch(dir);
+          sticker.yaw_deg = yp.yaw;
+          sticker.pitch_deg = yp.pitch;
+        }
         changed = true;
       }
-      const currentUv = editor.mode === "frame"
-        ? (() => {
-          const shot = getActiveCutoutShot();
-          return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
-        })()
-        : screenPosToErpPoint(p, performance.now());
-      if (currentUv && it.startUv) {
-        const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
-        const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
-        for (const snap of (Array.isArray(it.strokeSnapshots) ? it.strokeSnapshots : [])) {
+      for (const snap of (Array.isArray(it.strokeSnapshots) ? it.strokeSnapshots : [])) {
+        const targetScreen = {
+          x: Number(snap.center?.x || 0) + dx,
+          y: Number(snap.center?.y || 0) + dy,
+        };
+        const currentUv = editor.mode === "frame"
+          ? (() => {
+            const shot = getActiveCutoutShot();
+            return shot ? screenPosToFrameAsErpPoint(targetScreen, shot, performance.now()) : null;
+          })()
+          : screenPosToErpPoint(targetScreen, performance.now());
+        const startUvForGroup = snap.centerUv || null;
+        if (currentUv && startUvForGroup) {
+          const du = Number(currentUv.u || 0) - Number(startUvForGroup.u || 0);
+          const dv = Number(currentUv.v || 0) - Number(startUvForGroup.v || 0);
           if (applyStrokeGroupOffset(snap.id, du, dv, snap.snapshot, snap.layerKind, snap.frameSnapshot)) {
             changed = true;
           }
@@ -7753,6 +7780,8 @@ function showEditor(node, type, options = {}) {
     setDropCue(false);
     window.removeEventListener("keydown", onEscClose, true);
     window.removeEventListener("keydown", onDeleteKey, true);
+    window.removeEventListener("keydown", onModifierKeyChange, true);
+    window.removeEventListener("keyup", onModifierKeyChange, true);
     window.removeEventListener("keydown", onUndoRedoKey, true);
     window.removeEventListener("dragenter", onWindowDragEnter, true);
     window.removeEventListener("dragover", onWindowDragOver, true);
@@ -7793,6 +7822,12 @@ function showEditor(node, type, options = {}) {
     ev.preventDefault();
     ev.stopPropagation();
   };
+  const onModifierKeyChange = (ev) => {
+    const next = !!(ev.ctrlKey || ev.metaKey);
+    if (editor.marqueeModifier === next) return;
+    editor.marqueeModifier = next;
+    updateCursor(editor.pointerPos);
+  };
   const onUndoRedoKey = (ev) => {
     if (readOnly) return;
     if (!ev.ctrlKey && !ev.metaKey) return;
@@ -7808,6 +7843,8 @@ function showEditor(node, type, options = {}) {
   };
   window.addEventListener("keydown", onEscClose, true);
   window.addEventListener("keydown", onDeleteKey, true);
+  window.addEventListener("keydown", onModifierKeyChange, true);
+  window.addEventListener("keyup", onModifierKeyChange, true);
   window.addEventListener("keydown", onUndoRedoKey, true);
   overlay.addEventListener("pointerdown", (ev) => {
     if (ev.target === overlay) closeEditor();
