@@ -51,6 +51,10 @@
   --pano-accent-dimmed: color-mix(in srgb, var(--pano-accent) 34%, transparent);
   --pano-accent-dark: var(--pano-theme-accent-dark, #0366d6);
   --pano-accent-extra-dark: var(--pano-theme-accent-extra-dark, #0059bc);
+  --pano-emphasis-bg: #185fb8;
+  --pano-emphasis-bg-hover: #2672d2;
+  --pano-emphasis-bg-active: #114f9d;
+  --pano-emphasis-text: #ffffff;
   --pano-float-pad: var(--pano-space-xs);
   --pano-float-gap: var(--pano-space-sm);
   --pano-float-radius: 10px;
@@ -303,6 +307,15 @@
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   z-index: 3;
 }
+.pano-floating-left .pano-btn.pano-btn-icon.pano-btn-icon-accent {
+  color: var(--pano-emphasis-text);
+  background: var(--pano-emphasis-bg);
+}
+.pano-floating-left .pano-btn.pano-btn-icon.pano-btn-icon-accent:hover,
+.pano-floating-left .pano-btn.pano-btn-icon.pano-btn-icon-accent.active {
+  color: var(--pano-emphasis-text);
+  background: var(--pano-emphasis-bg-hover);
+}
 .pano-output-preview-toggle {
   position: absolute;
   z-index: 3;
@@ -501,15 +514,15 @@
   box-shadow: none;
 }
 .pano-btn-primary {
-  background: var(--pano-accent);
-  color: var(--pano-text-reversed);
+  background: var(--pano-emphasis-bg);
+  color: var(--pano-emphasis-text);
 }
 .pano-btn-primary:hover,
 .pano-btn-primary:focus-visible {
-  background: var(--pano-accent-dark);
+  background: var(--pano-emphasis-bg-hover);
 }
 .pano-btn-primary:active {
-  background: var(--pano-accent-extra-dark);
+  background: var(--pano-emphasis-bg-active);
 }
 .pano-btn-primary:disabled {
   opacity: 0.5;
@@ -937,6 +950,65 @@
 .pano-params.disabled {
   opacity: 0.42;
   filter: saturate(0.7);
+}
+.pano-visibility-section {
+  padding: 0 0 var(--pano-space-md);
+}
+.pano-visibility-stack {
+  display: flex;
+  flex-direction: column;
+}
+.pano-visibility-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  padding: 0;
+}
+.pano-visibility-row.is-hidden .pano-visibility-name {
+  color: var(--pano-muted);
+  opacity: 0.72;
+}
+.pano-visibility-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--pano-muted);
+}
+.pano-visibility-name-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: inherit;
+}
+.pano-visibility-name-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.pano-visibility-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--pano-muted);
+  cursor: pointer;
+}
+.pano-visibility-toggle:hover,
+.pano-visibility-toggle.active {
+  color: var(--pano-muted-strong);
+}
+.pano-visibility-toggle svg {
+  width: 14px;
+  height: 14px;
 }
 .pano-field {
   display: grid;

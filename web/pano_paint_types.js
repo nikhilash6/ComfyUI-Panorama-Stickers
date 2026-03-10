@@ -27,6 +27,7 @@ function normalizeGroups(raw) {
       type: "strokeGroup",
       actionGroupId,
       z_index: Math.max(0, Math.round(z ?? out.length)),
+      locked: item.locked === true,
     });
   }
   return out;

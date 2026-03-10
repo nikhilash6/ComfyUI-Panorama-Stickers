@@ -81,6 +81,8 @@ const ICON = {
   spray_can_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M10 6h6'/><path d='M12 3h2a2 2 0 0 1 2 2v1'/><path d='M9 8h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z'/><path d='M5 10h.01'/><path d='M3 14h.01'/><path d='M5 18h.01'/></svg>",
   eraser_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='m7 13.5 6.8-6.8a2.2 2.2 0 0 1 3.1 0l2.4 2.4a2.2 2.2 0 0 1 0 3.1l-6.8 6.8a2.2 2.2 0 0 1-1.5.6H7.8a2.2 2.2 0 0 1-1.6-.6l-1.5-1.5a2.2 2.2 0 0 1 0-3.1L7 13.5Z'/><path d='M13.5 19.5H21'/></svg>",
   lasso_tool: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75'><path d='M7.2 18.8C4.6 18 3 16.2 3 14c0-3.9 4-7 9-7s9 3.1 9 7-4 7-9 7c-1.1 0-2.2-.1-3.1-.4'/><path d='M7 17c1 0 1.8.8 1.8 1.8S8 20.6 7 20.6s-1.8-.8-1.8-1.8S6 17 7 17Z'/></svg>",
+  lock_closed: "<svg data-testid='geist-icon' height='16' stroke-linejoin='round' viewBox='0 0 16 16' width='16' style='color: currentcolor;' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M10 4.5V6H6V4.5C6 3.39543 6.89543 2.5 8 2.5C9.10457 2.5 10 3.39543 10 4.5ZM4.5 6V4.5C4.5 2.567 6.067 1 8 1C9.933 1 11.5 2.567 11.5 4.5V6H12.5H14V7.5V12.5C14 13.8807 12.8807 15 11.5 15H4.5C3.11929 15 2 13.8807 2 12.5V7.5V6H3.5H4.5ZM11.5 7.5H10H6H4.5H3.5V12.5C3.5 13.0523 3.94772 13.5 4.5 13.5H11.5C12.0523 13.5 12.5 13.0523 12.5 12.5V7.5H11.5Z' fill='currentColor'></path></svg>",
+  lock_open: "<svg data-testid='geist-icon' height='16' stroke-linejoin='round' viewBox='0 0 16 16' width='16' style='color: currentcolor;' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14 6V4.5C14 3.39543 13.1046 2.5 12 2.5C10.8954 2.5 10 3.39543 10 4.5V6H10.5H12V7.5V12.5C12 13.8807 10.8807 15 9.5 15H2.5C1.11929 15 0 13.8807 0 12.5V7.5V6H1.5H8.5V4.5C8.5 2.567 10.067 1 12 1C13.933 1 15.5 2.567 15.5 4.5V6H14ZM10.5 7.5H10H8.5H1.5V12.5C1.5 13.0523 1.94772 13.5 2.5 13.5H9.5C10.0523 13.5 10.5 13.0523 10.5 12.5V7.5Z' fill='currentColor'></path></svg>",
 };
 
 function easeInOutCubic(t) {
@@ -372,6 +374,7 @@ function cloneStickerList(raw) {
     if (next.crop && typeof next.crop === "object") next.crop = { ...next.crop };
     if (next.initial_pose && typeof next.initial_pose === "object") next.initial_pose = { ...next.initial_pose };
     next.visible = next.visible !== false;
+    next.locked = next.locked === true;
     return next;
   });
 }
@@ -409,7 +412,10 @@ function cloneStateForHistorySnapshot(raw) {
 
 function cloneShotList(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw.map((item) => ((item && typeof item === "object") ? { ...item } : item));
+  return raw.map((item) => {
+    if (!item || typeof item !== "object") return item;
+    return { ...item, locked: item.locked === true };
+  });
 }
 
 function parseState(text, preset = 2048, bg = "#00ff00") {
@@ -1289,8 +1295,8 @@ function showEditor(node, type, options = {}) {
         <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false" data-tip="Mask">${ICON.circle_dashed_tool}</button>
         ${type === "cutout"
           ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-image" aria-label="Add Image" data-tip="Add image">${ICON.image}</button>
-             <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-or-look" aria-label="Add Frame" data-tip="Add frame">${ICON.plus_circle}</button>`
-          : `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="Add Image" data-tip="Add image">${ICON.image}</button>`
+             <button class="pano-btn pano-btn-icon pano-btn-icon-accent" type="button" data-tool-ui-action="add-or-look" aria-label="Add Frame" data-tip="Add frame">${ICON.plus_circle}</button>`
+          : `<button class="pano-btn pano-btn-icon pano-btn-icon-accent" type="button" data-tool-ui-action="add" aria-label="Add Image" data-tip="Add image">${ICON.image}</button>`
         }
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
@@ -1503,6 +1509,9 @@ function showEditor(node, type, options = {}) {
     menuMode: "",
     cutoutAspectOpen: false,
     showGrid: getNodeGridVisibility(node?.id, true),
+    showPanorama: true,
+    showObjects: true,
+    showMask: true,
     outputPreviewExpanded: false,
     outputPreviewAnim: 0,
     outputPreviewAnimFrom: 0,
@@ -1653,6 +1662,7 @@ function showEditor(node, type, options = {}) {
         type: "strokeGroup",
         actionGroupId: gid,
         z_index: zIndex == null ? getNextDisplayZIndex() : Math.max(0, Number(zIndex || 0)),
+        locked: false,
         frame: null,
       };
       groups.push(entry);
@@ -1672,6 +1682,7 @@ function showEditor(node, type, options = {}) {
           type: "strokeGroup",
           actionGroupId: gid,
           z_index: getNextDisplayZIndex(),
+          locked: false,
           frame: null,
         });
       }
@@ -2116,6 +2127,48 @@ function showEditor(node, type, options = {}) {
     if (!selected) return null;
     if (isStrokeGroupItem(selected)) return "stroke";
     return isShotItem(selected) ? "frame" : "image";
+  }
+  function isItemLocked(item) {
+    if (!item || typeof item !== "object") return false;
+    if (isStrokeGroupItem(item)) {
+      const gid = String(item.actionGroupId || item.id || "").trim();
+      const group = getPaintingGroupList().find((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
+      return group?.locked === true;
+    }
+    return item.locked === true;
+  }
+  function areAllSelectedItemsLocked(items = null) {
+    const selectedItems = Array.isArray(items) ? items : getSelectedItems();
+    return selectedItems.length > 0 && selectedItems.every((item) => isItemLocked(item));
+  }
+  function setItemLocked(item, locked) {
+    const next = locked === true;
+    if (!item || typeof item !== "object") return false;
+    if (isStrokeGroupItem(item)) {
+      const gid = String(item.actionGroupId || item.id || "").trim();
+      const group = getPaintingGroupList().find((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
+      if (!group || group.locked === next) return false;
+      group.locked = next;
+      return true;
+    }
+    if (item.locked === next) return false;
+    item.locked = next;
+    return true;
+  }
+  function toggleSelectedLock() {
+    if (readOnly) return;
+    const selectedItems = getSelectedItems();
+    if (!selectedItems.length) return;
+    const nextLocked = !areAllSelectedItemsLocked(selectedItems);
+    let changed = false;
+    selectedItems.forEach((item) => {
+      if (setItemLocked(item, nextLocked)) changed = true;
+    });
+    if (!changed) return;
+    pushHistory();
+    commitAndRefreshNode();
+    updateSelectionMenu();
+    requestDraw();
   }
   function setSelectedItem(item) {
     editor.selectedId = item?.id || null;
@@ -2733,7 +2786,7 @@ function showEditor(node, type, options = {}) {
   function drawOrderedDisplayListInView(ctx, rect, view, bgImg, cachePrefix = "modal_object_view") {
     if (!ctx || !rect || !view) return false;
     let drewAnything = false;
-    if (bgImg) {
+    if (bgImg && editor.showPanorama) {
       const bgDrawn = renderCutoutViewToContext2D({
         owner: node,
         cacheKey: `${cachePrefix}_bg_only`,
@@ -2744,40 +2797,42 @@ function showEditor(node, type, options = {}) {
       });
       drewAnything = drewAnything || !!bgDrawn;
     }
-    for (const entry of getOrderedDisplayListObjects(true)) {
-      if (entry.type === "sticker" && entry.item) {
-        const scene = buildSingleStickerScene(entry.item);
-        const textures = buildSingleStickerTextures(entry.item, scene);
-        const stickerDrawn = renderSceneToContext2D({
-          owner: node,
-          cacheKey: `${cachePrefix}_sticker_${String(entry.id || entry.item.id || "")}`,
-          ctx,
-          rect,
-          backgroundSource: null,
-          textures,
-          scene,
-          view,
-        });
-        drewAnything = drewAnything || !!stickerDrawn;
-        continue;
-      }
-      if (entry.type === "strokeGroup") {
-        const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
-        if (!groupCanvas) continue;
-        renderCutoutViewToContext2D({
-          owner: node,
-          cacheKey: `${cachePrefix}_group_${String(entry.actionGroupId || "")}`,
-          ctx,
-          rect,
-          img: groupCanvas,
-          view,
-          backgroundRevision: `${getPaintingRevisionKey()}_${String(entry.actionGroupId || "")}${getLivePaintRevisionSuffix()}`,
-          backgroundOpacity: 1,
-        });
-        drewAnything = true;
+    if (editor.showObjects) {
+      for (const entry of getOrderedDisplayListObjects(true)) {
+        if (entry.type === "sticker" && entry.item) {
+          const scene = buildSingleStickerScene(entry.item);
+          const textures = buildSingleStickerTextures(entry.item, scene);
+          const stickerDrawn = renderSceneToContext2D({
+            owner: node,
+            cacheKey: `${cachePrefix}_sticker_${String(entry.id || entry.item.id || "")}`,
+            ctx,
+            rect,
+            backgroundSource: null,
+            textures,
+            scene,
+            view,
+          });
+          drewAnything = drewAnything || !!stickerDrawn;
+          continue;
+        }
+        if (entry.type === "strokeGroup") {
+          const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
+          if (!groupCanvas) continue;
+          renderCutoutViewToContext2D({
+            owner: node,
+            cacheKey: `${cachePrefix}_group_${String(entry.actionGroupId || "")}`,
+            ctx,
+            rect,
+            img: groupCanvas,
+            view,
+            backgroundRevision: `${getPaintingRevisionKey()}_${String(entry.actionGroupId || "")}${getLivePaintRevisionSuffix()}`,
+            backgroundOpacity: 1,
+          });
+          drewAnything = true;
+        }
       }
     }
-    const maskCanvas = editor.paintEngine?.getMaskDisplayCanvas?.() || null;
+    const maskCanvas = editor.showMask ? (editor.paintEngine?.getMaskDisplayCanvas?.() || null) : null;
     if (maskCanvas) {
       renderCutoutViewToContext2D({
         owner: node,
@@ -3714,6 +3769,7 @@ function showEditor(node, type, options = {}) {
     for (const item of items) {
       const selected = !multiSelected && isItemSelected(item);
       if (editor.mode === "frame" && !selected) continue;
+      if (!editor.showObjects && !isShotItem(item)) continue;
       const g = objectGeom(item);
       if (type !== "stickers" && !g.visible) {
         continue;
@@ -3721,11 +3777,14 @@ function showEditor(node, type, options = {}) {
 
       const itemIsSticker = isStickerItem(item);
       const itemIsFrame = isShotItem(item);
+      const itemLocked = isItemLocked(item);
       if (itemIsSticker) {
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = getStickerDisplayAlpha(item);
         if (editor.mode === "frame") {
-          ctx.strokeStyle = selected ? "rgba(250, 250, 250, 0.9)" : "#71717a";
+          ctx.strokeStyle = selected
+            ? "rgba(250, 250, 250, 0.9)"
+            : (itemLocked ? "rgba(255, 89, 89, 0.72)" : "#71717a");
           ctx.lineWidth = selected ? 2 : 1;
           ctx.beginPath();
           ctx.moveTo(g.corners[0].x, g.corners[0].y);
@@ -3737,13 +3796,17 @@ function showEditor(node, type, options = {}) {
         }
         ctx.globalAlpha = prevAlpha;
       } else {
-        ctx.fillStyle = selected ? "rgba(0, 112, 243, 0.24)" : "rgba(255, 255, 255, 0.12)";
+        ctx.fillStyle = selected
+          ? "rgba(0, 112, 243, 0.24)"
+          : (itemLocked ? "rgba(255, 89, 89, 0.12)" : "rgba(255, 255, 255, 0.12)");
         ctx.beginPath();
         ctx.moveTo(g.corners[0].x, g.corners[0].y);
         for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
         ctx.closePath();
         ctx.fill();
-        ctx.strokeStyle = selected ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.82)";
+        ctx.strokeStyle = selected
+          ? "rgba(255, 255, 255, 1)"
+          : (itemLocked ? "rgba(255, 116, 116, 0.88)" : "rgba(255, 255, 255, 0.82)");
         ctx.lineWidth = selected ? 2.8 : 1.9;
         ctx.beginPath();
         ctx.moveTo(g.corners[0].x, g.corners[0].y);
@@ -3753,7 +3816,7 @@ function showEditor(node, type, options = {}) {
       }
 
       if (selected && g.visible) {
-        const accent = (itemIsSticker && isExternalSticker(item)) ? "#f59e0b" : "#0070f3";
+        const accent = itemLocked ? "#ff4d4f" : ((itemIsSticker && isExternalSticker(item)) ? "#f59e0b" : "#0070f3");
         ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
         if (itemIsFrame) {
@@ -3790,6 +3853,7 @@ function showEditor(node, type, options = {}) {
     if (multiSelected) {
       const g = getMultiSelectionGeom(selectedItems);
       if (g?.visible) {
+        const accent = areAllSelectedItemsLocked(selectedItems) ? "#ff4d4f" : "#0070f3";
         ctx.save();
         ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
         ctx.lineWidth = 2;
@@ -3800,7 +3864,7 @@ function showEditor(node, type, options = {}) {
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = "#0070f3";
+        ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
         ctx.restore();
       }
@@ -3809,6 +3873,7 @@ function showEditor(node, type, options = {}) {
         if (!isStrokeGroupItem(selected)) return;
         const g = objectGeom(selected);
         if (!g?.visible) return;
+        const accent = isItemLocked(selected) ? "#ff4d4f" : "#0070f3";
         ctx.save();
         ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
         ctx.lineWidth = 2;
@@ -3819,7 +3884,7 @@ function showEditor(node, type, options = {}) {
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = "#0070f3";
+        ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
         ctx.restore();
       });
@@ -5172,7 +5237,7 @@ function showEditor(node, type, options = {}) {
         addParamRow(paramsWrap, effective, "roll_deg", "Roll", -180, 180, 0.1, enabled && !readOnly);
       }
 
-      if (enabled !== editor.panelWasEnabled) {
+    if (enabled !== editor.panelWasEnabled) {
         requestAnimationFrame(() => {
           paramsWrap.classList.toggle("disabled", !enabled);
         });
@@ -5182,6 +5247,53 @@ function showEditor(node, type, options = {}) {
       editor.panelWasEnabled = enabled;
       syncLookAtFrameButtonState();
     }
+
+    const visibilitySection = document.createElement("div");
+    visibilitySection.className = "pano-visibility-section";
+    visibilitySection.innerHTML = `
+      <div class="pano-section-title">
+        <span>Layers</span>
+      </div>
+      <div class="pano-visibility-stack">
+        <div class="pano-visibility-row" data-visibility-row="mask">
+          <span class="pano-visibility-name"><span class="pano-visibility-name-icon" aria-hidden="true">${ICON.circle_dashed_tool}</span><span>Mask</span></span>
+          <button class="pano-visibility-toggle" type="button" data-visibility="mask" aria-label="Toggle mask"></button>
+        </div>
+        <div class="pano-visibility-row" data-visibility-row="objects">
+          <span class="pano-visibility-name"><span class="pano-visibility-name-icon" aria-hidden="true">${ICON.image}</span><span>Paint / Images</span></span>
+          <button class="pano-visibility-toggle" type="button" data-visibility="objects" aria-label="Toggle paint and images"></button>
+        </div>
+        <div class="pano-visibility-row" data-visibility-row="panorama">
+          <span class="pano-visibility-name"><span class="pano-visibility-name-icon" aria-hidden="true">${ICON.globe}</span><span>Panorama</span></span>
+          <button class="pano-visibility-toggle" type="button" data-visibility="panorama" aria-label="Toggle panorama"></button>
+        </div>
+      </div>
+    `;
+    const syncVisibilityButton = (btn, visible) => {
+      const row = btn.closest("[data-visibility-row]");
+      btn.innerHTML = visible ? ICON.eye : ICON.eye_dashed;
+      btn.setAttribute("aria-pressed", visible ? "true" : "false");
+      btn.setAttribute("data-tip", visible ? "Hide" : "Show");
+      btn.classList.toggle("active", !!visible);
+      row?.classList.toggle("is-hidden", !visible);
+    };
+    visibilitySection.querySelectorAll("[data-visibility]").forEach((btn) => {
+      const key = String(btn.getAttribute("data-visibility") || "");
+      const readValue = () => {
+        if (key === "panorama") return !!editor.showPanorama;
+        if (key === "objects") return !!editor.showObjects;
+        return !!editor.showMask;
+      };
+      syncVisibilityButton(btn, readValue());
+      btn.onclick = () => {
+        if (key === "panorama") editor.showPanorama = !editor.showPanorama;
+        else if (key === "objects") editor.showObjects = !editor.showObjects;
+        else editor.showMask = !editor.showMask;
+        syncVisibilityButton(btn, readValue());
+        requestDraw();
+      };
+    });
+    inspector.appendChild(visibilitySection);
 
     if (!readOnly) {
       const uiDetails = document.createElement("details");
@@ -6018,7 +6130,9 @@ function showEditor(node, type, options = {}) {
     let rotateDeg = 0;
     let background = cursor.fillStyle;
 
-    if (cursor.toolKind === "marker") {
+    if (cursor.layerKind === "mask") {
+      background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.72) 0px, rgba(18,18,18,0.72) 4px, rgba(18,18,18,0.16) 4px, rgba(18,18,18,0.16) 8px)`;
+    } else if (cursor.toolKind === "marker") {
       const aspect = Math.max(1, Number(cursor.preset?.aspect ?? 1));
       width = Math.max(10, cursor.radius * 2 * aspect);
       height = Math.max(6, cursor.radius * 2);
@@ -6068,7 +6182,9 @@ function showEditor(node, type, options = {}) {
     let rotateDeg = 0;
     let background = fill;
 
-    if (toolKind === "marker") {
+    if (layerKind === "mask") {
+      background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.78) 0px, rgba(18,18,18,0.78) 4px, rgba(18,18,18,0.18) 4px, rgba(18,18,18,0.18) 8px)`;
+    } else if (toolKind === "marker") {
       const aspect = Math.max(1, Number(preset?.aspect ?? 1));
       width = Math.max(16, radius * 2 * aspect);
       height = Math.max(10, radius * 2);
@@ -6446,8 +6562,9 @@ function showEditor(node, type, options = {}) {
     }
     const selected = getSelected();
     const geom = selected ? objectGeom(selected) : null;
-    const h = handleHit(geom, p);
-    if (h.kind !== "none") {
+    const selectedLocked = selected ? isItemLocked(selected) : false;
+    const h = selectedLocked ? { kind: "none", cursor: "default" } : handleHit(geom, p);
+    if (!selectedLocked && h.kind !== "none") {
       canvas.style.cursor = h.cursor;
       return;
     }
@@ -6471,15 +6588,24 @@ function showEditor(node, type, options = {}) {
     }
     if (selectedItems.length > 1) {
       const menuMode = "multi";
+      const allLocked = areAllSelectedItemsLocked(selectedItems);
       if (editor.menuMode !== menuMode) {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
+          <button class="pano-btn pano-btn-icon" data-action="toggle-lock" aria-label="${allLocked ? "Unlock" : "Lock"}" data-tip="${allLocked ? "Unlock" : "Lock"}">${allLocked ? ICON.lock_open : ICON.lock_closed}</button>
           <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
         `;
         editor.menuMode = menuMode;
         editor.menuSize.measured = false;
         installTooltipHandlers(selectionMenu);
+      } else {
+        const lockBtn = selectionMenu.querySelector("[data-action='toggle-lock']");
+        if (lockBtn) {
+          lockBtn.innerHTML = allLocked ? ICON.lock_open : ICON.lock_closed;
+          lockBtn.setAttribute("aria-label", allLocked ? "Unlock" : "Lock");
+          lockBtn.setAttribute("data-tip", allLocked ? "Unlock" : "Lock");
+        }
       }
       const multiGeom = getMultiSelectionGeom(selectedItems);
       if (!multiGeom?.visible) {
@@ -6519,6 +6645,7 @@ function showEditor(node, type, options = {}) {
       return;
     }
     const selectedKind = getSelectedKind();
+    const selectedLocked = isItemLocked(selected);
     const menuMode = selectedKind === "stroke"
       ? "stroke:paint"
       : (type === "stickers" || selectedKind === "image")
@@ -6529,6 +6656,7 @@ function showEditor(node, type, options = {}) {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
+          <button class="pano-btn pano-btn-icon" data-action="toggle-lock" aria-label="${selectedLocked ? "Unlock" : "Lock"}" data-tip="${selectedLocked ? "Unlock" : "Lock"}">${selectedLocked ? ICON.lock_open : ICON.lock_closed}</button>
           <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
         `;
       } else if (type === "stickers" || selectedKind === "image") {
@@ -6537,6 +6665,7 @@ function showEditor(node, type, options = {}) {
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
           ${isExternalSticker(selected) ? "" : `<button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>`}
           ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
+          <button class="pano-btn pano-btn-icon" data-action="toggle-lock" aria-label="${selectedLocked ? "Unlock" : "Lock"}" data-tip="${selectedLocked ? "Unlock" : "Lock"}">${selectedLocked ? ICON.lock_open : ICON.lock_closed}</button>
           ${isExternalSticker(selected)
             ? `<button class="pano-btn pano-btn-icon" data-action="toggle-visible" aria-label="Hide" data-tip="Hide input image">${ICON.eye_dashed}</button>`
             : `<button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>`}
@@ -6554,6 +6683,7 @@ function showEditor(node, type, options = {}) {
             </div>
           </div>
           <button class="pano-btn pano-btn-icon" data-action="rotate-90" aria-label="Rotate 90°" data-tip="Rotate 90°">${ICON.rotate_90}</button>
+          <button class="pano-btn pano-btn-icon" data-action="toggle-lock" aria-label="${selectedLocked ? "Unlock" : "Lock"}" data-tip="${selectedLocked ? "Unlock" : "Lock"}">${selectedLocked ? ICON.lock_open : ICON.lock_closed}</button>
           <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
         `;
       }
@@ -6576,6 +6706,12 @@ function showEditor(node, type, options = {}) {
         toggleBtn.setAttribute("aria-label", hidden ? "Show" : "Hide");
         toggleBtn.setAttribute("data-tip", hidden ? "Show input image" : "Hide input image");
       }
+    }
+    const lockBtn = selectionMenu.querySelector("[data-action='toggle-lock']");
+    if (lockBtn) {
+      lockBtn.innerHTML = selectedLocked ? ICON.lock_open : ICON.lock_closed;
+      lockBtn.setAttribute("aria-label", selectedLocked ? "Unlock" : "Lock");
+      lockBtn.setAttribute("data-tip", selectedLocked ? "Unlock" : "Lock");
     }
     const geom = objectGeom(selected);
     if (!geom?.visible) {
@@ -6780,7 +6916,7 @@ function showEditor(node, type, options = {}) {
     }
 
     if (selectedItems.length > 1 && selGeom?.visible) {
-      const h = handleHit(selGeom, p);
+      const h = selectedItems.some((item) => isItemLocked(item)) ? { kind: "none" } : handleHit(selGeom, p);
       if (h.kind === "move") {
         editor.interaction = {
           kind: "move_multi",
@@ -6817,7 +6953,7 @@ function showEditor(node, type, options = {}) {
         return;
       }
     } else if (selected && selGeom?.visible) {
-      const h = handleHit(selGeom, p);
+      const h = isItemLocked(selected) ? { kind: "none" } : handleHit(selGeom, p);
       if (h.kind === "scale") {
         editor.interaction = isStrokeGroupItem(selected)
           ? {
@@ -6921,6 +7057,10 @@ function showEditor(node, type, options = {}) {
       updateSelectionMenu();
       requestDraw();
       if (isNewSelection) {
+        updateCursor(p);
+        return;
+      }
+      if (isItemLocked(hit.item)) {
         updateCursor(p);
         return;
       }
@@ -7236,7 +7376,9 @@ function showEditor(node, type, options = {}) {
     } else if (editor.interaction?.kind === "marquee_select") {
       const rect = rectFromPoints(editor.interaction.start, editor.interaction.current);
       const pool = [
-        ...(type === "cutout" ? getCutoutSelectableItemsForHit() : [...getList()]),
+        ...(type === "cutout"
+          ? getCutoutSelectableItemsForHit().filter((item) => !isShotItem(item))
+          : [...getList()]),
         ...getSelectableStrokeGroupItems(),
       ];
       const hits = pool.filter((item) => rectIntersectsGeom(rect, objectGeom(item)));
@@ -7723,6 +7865,10 @@ function showEditor(node, type, options = {}) {
     }
     if (action === "duplicate") {
       duplicateSelected();
+      return;
+    }
+    if (action === "toggle-lock") {
+      toggleSelectedLock();
       return;
     }
     if (action === "back-initial") {
