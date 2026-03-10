@@ -59,9 +59,10 @@ const ICON = {
   eye: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M4.02168 4.76932C6.11619 2.33698 9.88374 2.33698 11.9783 4.76932L14.7602 7.99999L11.9783 11.2307C9.88374 13.663 6.1162 13.663 4.02168 11.2307L1.23971 7.99999L4.02168 4.76932ZM13.1149 3.79054C10.422 0.663244 5.57797 0.663247 2.88503 3.79054L-0.318359 7.5106V8.48938L2.88503 12.2094C5.57797 15.3367 10.422 15.3367 13.1149 12.2094L16.3183 8.48938V7.5106L13.1149 3.79054ZM6.49997 7.99999C6.49997 7.17157 7.17154 6.49999 7.99997 6.49999C8.82839 6.49999 9.49997 7.17157 9.49997 7.99999C9.49997 8.82842 8.82839 9.49999 7.99997 9.49999C7.17154 9.49999 6.49997 8.82842 6.49997 7.99999ZM7.99997 4.99999C6.34311 4.99999 4.99997 6.34314 4.99997 7.99999C4.99997 9.65685 6.34311 11 7.99997 11C9.65682 11 11 9.65685 11 7.99999C11 6.34314 9.65682 4.99999 7.99997 4.99999Z' fill='currentColor'/></svg>",
   eye_dashed: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6.51404 3.15793C7.48217 2.87411 8.51776 2.87411 9.48589 3.15793L9.90787 1.71851C8.66422 1.35392 7.33571 1.35392 6.09206 1.71851L6.51404 3.15793ZM10.848 3.78166C11.2578 4.04682 11.6393 4.37568 11.9783 4.76932L13.046 6.00934L14.1827 5.03056L13.1149 3.79054C12.6818 3.28761 12.1918 2.86449 11.6628 2.52224L10.848 3.78166ZM4.02168 4.76932C4.36065 4.37568 4.74209 4.04682 5.15195 3.78166L4.33717 2.52225C3.80815 2.86449 3.3181 3.28761 2.88503 3.79054L1.81723 5.03056L2.95389 6.00934L4.02168 4.76932ZM14.1138 7.24936L14.7602 7.99999L14.1138 8.75062L15.2505 9.72941L16.3183 8.48938V7.5106L15.2505 6.27058L14.1138 7.24936ZM1.88609 7.24936L1.23971 7.99999L1.88609 8.75062L0.749437 9.72941L-0.318359 8.48938V7.5106L0.749436 6.27058L1.88609 7.24936ZM13.0461 9.99064L11.9783 11.2307C11.6393 11.6243 11.2578 11.9532 10.848 12.2183L11.6628 13.4777C12.1918 13.1355 12.6818 12.7124 13.1149 12.2094L14.1827 10.9694L13.0461 9.99064ZM4.02168 11.2307L2.95389 9.99064L1.81723 10.9694L2.88503 12.2094C3.3181 12.7124 3.80815 13.1355 4.33717 13.4777L5.15195 12.2183C4.7421 11.9532 4.36065 11.6243 4.02168 11.2307ZM9.90787 14.2815L9.48589 12.8421C8.51776 13.1259 7.48217 13.1259 6.51405 12.8421L6.09206 14.2815C7.33572 14.6461 8.66422 14.6461 9.90787 14.2815ZM6.49997 7.99999C6.49997 7.17157 7.17154 6.49999 7.99997 6.49999C8.82839 6.49999 9.49997 7.17157 9.49997 7.99999C9.49997 8.82842 8.82839 9.49999 7.99997 9.49999C7.17154 9.49999 6.49997 8.82842 6.49997 7.99999ZM7.99997 4.99999C6.34311 4.99999 4.99997 6.34314 4.99997 7.99999C4.99997 9.65685 6.34311 11 7.99997 11C9.65682 11 11 9.65685 11 7.99999C11 6.34314 9.65682 4.99999 7.99997 4.99999Z' fill='currentColor'/></svg>",
   fullscreen: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M1 5.25V6H2.5V5.25V2.5H5.25H6V1H5.25H2C1.44772 1 1 1.44772 1 2V5.25ZM5.25 14.9994H6V13.4994H5.25H2.5V10.7494V9.99939H1V10.7494V13.9994C1 14.5517 1.44772 14.9994 2 14.9994H5.25ZM15 10V10.75V14C15 14.5523 14.5523 15 14 15H10.75H10V13.5H10.75H13.5V10.75V10H15ZM10.75 1H10V2.5H10.75H13.5V5.25V6H15V5.25V2C15 1.44772 14.5523 1 14 1H10.75Z' fill='currentColor'/></svg>",
-  camera: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M1.5 3.5H3.5L5 1H11L12.5 3.5H14.5H16V5V12.5C16 13.8807 14.8807 15 13.5 15H2.5C1.11929 15 0 13.8807 0 12.5V5V3.5H1.5ZM4.78624 4.27174L5.84929 2.5H10.1507L11.2138 4.27174L11.6507 5H12.5H14.5V12.5C14.5 13.0523 14.0523 13.5 13.5 13.5H2.5C1.94772 13.5 1.5 13.0523 1.5 12.5V5H3.5H4.34929L4.78624 4.27174ZM9.75 8.5C9.75 9.4665 8.9665 10.25 8 10.25C7.0335 10.25 6.25 9.4665 6.25 8.5C6.25 7.5335 7.0335 6.75 8 6.75C8.9665 6.75 9.75 7.5335 9.75 8.5ZM11.25 8.5C11.25 10.2949 9.79493 11.75 8 11.75C6.20507 11.75 4.75 10.2949 4.75 8.5C4.75 6.70507 6.20507 5.25 8 5.25C9.79493 5.25 11.25 6.70507 11.25 8.5Z' fill='currentColor'/></svg>",
+  camera: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.75 5.25H4.79C5.23 5.25 5.63 4.98 5.79 4.57L6.02 3.98C6.18 3.57 6.58 3.3 7.02 3.3H8.98C9.42 3.3 9.82 3.57 9.98 3.98L10.21 4.57C10.37 4.98 10.77 5.25 11.21 5.25H13.25C13.8 5.25 14.25 5.7 14.25 6.25V11.25C14.25 11.8 13.8 12.25 13.25 12.25H2.75C2.2 12.25 1.75 11.8 1.75 11.25V6.25C1.75 5.7 2.2 5.25 2.75 5.25Z'/><circle cx='8' cy='8.75' r='2.25'/></svg>",
   // Source: vercel.com/geist/icons
   plus_circle: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.5 8C14.5 11.5899 11.5899 14.5 8 14.5C4.41015 14.5 1.5 11.5899 1.5 8C1.5 4.41015 4.41015 1.5 8 1.5C11.5899 1.5 14.5 4.41015 14.5 8ZM16 8C16 12.4183 12.4183 16 8 16C3.58172 16 0 12.4183 0 8C0 3.58172 3.58172 0 8 0C12.4183 0 16 3.58172 16 8ZM8.75 4.25V5V7.25H11H11.75V8.75H11H8.75V11V11.75L7.25 11.75V11V8.75H5H4.25V7.25H5H7.25V5V4.25H8.75Z' fill='currentColor'/></svg>",
+  image: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M2.5 2h11A1.5 1.5 0 0 1 15 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9A1.5 1.5 0 0 1 2.5 2ZM2 9.56l2.77-2.77a1 1 0 0 1 1.41 0l1.32 1.32 2.82-2.82a1 1 0 0 1 1.42 0L14 7.55V3.5a.5.5 0 0 0-.5-.5h-11a.5.5 0 0 0-.5.5v6.06Zm0 1.41V12.5a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5V8.97L10.8 5.76 7.85 8.7a.75.75 0 0 1-1.06 0L5.47 7.38 2 10.97ZM5.5 4.75a1.25 1.25 0 1 1 0 2.5a1.25 1.25 0 0 1 0-2.5Z' fill='currentColor'/></svg>",
   crosshair: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M7.25 11.75L7.25 14.4572C4.2595 14.1136 1.88638 11.7405 1.5428 8.75H4.25H5V7.25H4.25H1.5428C1.88638 4.2595 4.2595 1.88638 7.25 1.5428V4.25V5H8.75V4.25V1.5428C11.7405 1.88638 14.1136 4.2595 14.4572 7.25L11.75 7.25H11V8.75L11.75 8.75H14.4572C14.1136 11.7405 11.7405 14.1136 8.75 14.4572V11.75L8.75 11H7.25V11.75ZM15.9653 8.75C15.6102 12.5697 12.5697 15.6102 8.75 15.9653V16H8H7.25V15.9653C3.43032 15.6102 0.389836 12.5697 0.0346937 8.75H0V8V7.25H0.0346937C0.389836 3.43032 3.43032 0.389836 7.25 0.0346937V0H8H8.75V0.0346937C12.5697 0.389836 15.6102 3.43032 15.9653 7.25H16V8V8.75H15.9653Z' fill='currentColor'/></svg>",
   fullscreen_close: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M6 1V1.75V5C6 5.55229 5.55228 6 5 6H1.75H1V4.5H1.75H4.5V1.75V1H6ZM14.25 6H15V4.5H14.25H11.5V1.75V1H10V1.75V5C10 5.55228 10.4477 6 11 6H14.25ZM10 14.25V15H11.5V14.25V11.5H14.29H15.04V10H14.29H11C10.4477 10 10 10.4477 10 11V14.25ZM1.75 10H1V11.5H1.75H4.5V14.25V15H6V14.25V11C6 10.4477 5.55229 10 5 10H1.75Z' fill='currentColor'/></svg>",
   close: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M3.7 3.7 12.3 12.3M12.3 3.7 3.7 12.3'/></svg>",
@@ -134,6 +135,27 @@ function dist2(a, b) {
   const dy = a.y - b.y;
   return dx * dx + dy * dy;
 }
+function distToSegment2(p, a, b) {
+  const abx = Number(b.x || 0) - Number(a.x || 0);
+  const aby = Number(b.y || 0) - Number(a.y || 0);
+  const apx = Number(p.x || 0) - Number(a.x || 0);
+  const apy = Number(p.y || 0) - Number(a.y || 0);
+  const denom = abx * abx + aby * aby;
+  if (denom <= 1e-6) return dist2(p, a);
+  const t = clamp((apx * abx + apy * aby) / denom, 0, 1);
+  const qx = Number(a.x || 0) + abx * t;
+  const qy = Number(a.y || 0) + aby * t;
+  const dx = Number(p.x || 0) - qx;
+  const dy = Number(p.y || 0) - qy;
+  return dx * dx + dy * dy;
+}
+function normalize2(v) {
+  const x = Number(v?.x || 0);
+  const y = Number(v?.y || 0);
+  const len = Math.hypot(x, y);
+  if (len <= 1e-6) return { x: 1, y: 0 };
+  return { x: x / len, y: y / len };
+}
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
@@ -155,6 +177,9 @@ function cloneColor(color) {
     b: clamp(Number(color?.b ?? 0), 0, 1),
     a: clamp(Number(color?.a ?? 1), 0, 1),
   };
+}
+function cloneJson(value) {
+  return value == null ? value : JSON.parse(JSON.stringify(value));
 }
 function isPresetPaintColor(color) {
   return PAINT_COLOR_SWATCHES.some((swatch) => colorsApproximatelyEqual(color, swatch.color));
@@ -1263,8 +1288,9 @@ function showEditor(node, type, options = {}) {
         <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="paint" aria-label="Paint" aria-pressed="false" data-tip="Paint">${ICON.palette_tool}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-mode="mask" aria-label="Mask" aria-pressed="false" data-tip="Mask">${ICON.circle_dashed_tool}</button>
         ${type === "cutout"
-          ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-or-look" aria-label="Add Frame" data-tip="Add frame">${ICON.plus_circle}</button>`
-          : `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="Add Image" data-tip="Add image">${ICON.add}</button>`
+          ? `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-image" aria-label="Add Image" data-tip="Add image">${ICON.image}</button>
+             <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add-or-look" aria-label="Add Frame" data-tip="Add frame">${ICON.plus_circle}</button>`
+          : `<button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="add" aria-label="Add Image" data-tip="Add image">${ICON.image}</button>`
         }
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="clear" aria-label="Clear All" data-tip="Clear all">${ICON.clear}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
@@ -1324,7 +1350,7 @@ function showEditor(node, type, options = {}) {
         <div class="pano-view-toggle" data-selected="pano" data-view-count="${type === "cutout" ? "3" : "2"}">
           <button class="pano-view-btn" data-view="pano" aria-pressed="true" aria-label="Panorama">${ICON.pano}<span class="label">Panorama</span></button>
           <button class="pano-view-btn" data-view="unwrap" aria-pressed="false" aria-label="Unwrap">${ICON.unwrap}<span class="label">Unwrap</span></button>
-          ${type === "cutout" ? `<button class="pano-view-btn" data-view="frame" aria-pressed="false" aria-label="Frame">Frame</button>` : ""}
+          ${type === "cutout" ? `<button class="pano-view-btn pano-view-btn-icon" data-view="frame" aria-pressed="false" aria-label="Frame">${ICON.camera}<span>Frame</span></button>` : ""}
         </div>
       </div>
       <div class="pano-floating-right">
@@ -1450,9 +1476,12 @@ function showEditor(node, type, options = {}) {
     }
   });
 
+  const initialSelectedId = type === "stickers"
+    ? state.active.selected_sticker_id
+    : (type === "cutout" ? state.active.selected_sticker_id : state.active.selected_shot_id);
   const editor = {
     mode: "pano",
-    selectedId: type === "stickers" ? state.active.selected_sticker_id : state.active.selected_shot_id,
+    selectedId: initialSelectedId,
     viewYaw: 0,
     viewPitch: 0,
     viewFov: 100,
@@ -1485,7 +1514,10 @@ function showEditor(node, type, options = {}) {
     paintEngine: createPaintEngineManager(),
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
+    selectedIds: [],
     _sortedItemsCache: null,
+    _strokeGeomCache: new Map(),
+    _strokeRasterBoundsCache: new Map(),
     panelLastValues: null,
     panelWasEnabled: false,
     viewTween: null,
@@ -1496,6 +1528,7 @@ function showEditor(node, type, options = {}) {
     editor.selectedId = null;
     state.active.selected_sticker_id = null;
   }
+  editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
   const imageCache = new Map();
   const runtime = {
     dirty: true,
@@ -1567,13 +1600,581 @@ function showEditor(node, type, options = {}) {
   void __sanity;
 
   function getList() { return type === "stickers" ? state.stickers : state.shots; }
-  function getSelected() { return getList().find((s) => s.id === editor.selectedId) || null; }
+  function getPaintingGroupList() {
+    const painting = state.painting || (state.painting = normalizePaintingState(null));
+    if (!Array.isArray(painting.groups)) painting.groups = [];
+    return painting.groups;
+  }
+  function getStrokeActionGroupIds(layerKind = "paint") {
+    const strokes = Array.isArray(state.painting?.[layerKind]?.strokes) ? state.painting[layerKind].strokes : [];
+    const ids = [];
+    const seen = new Set();
+    for (const stroke of strokes) {
+      const gid = String(stroke?.actionGroupId || "").trim();
+      if (!gid || seen.has(gid)) continue;
+      seen.add(gid);
+      ids.push(gid);
+    }
+    return ids;
+  }
+  function getPaintStrokeActionGroupIds() {
+    return getStrokeActionGroupIds("paint");
+  }
+  function makeStrokeGroupSelectionId(layerKind, actionGroupId) {
+    const gid = String(actionGroupId || "").trim();
+    return gid ? `${layerKind === "mask" ? "mask" : "paint"}:${gid}` : "";
+  }
+  function parseStrokeGroupSelectionId(idOrActionGroupId, layerKind = null) {
+    const raw = String(idOrActionGroupId || "").trim();
+    if (!raw) return { layerKind: "paint", actionGroupId: "" };
+    const m = raw.match(/^(paint|mask):(.*)$/);
+    if (m) return { layerKind: m[1] === "mask" ? "mask" : "paint", actionGroupId: String(m[2] || "").trim() };
+    return { layerKind: layerKind === "mask" ? "mask" : "paint", actionGroupId: raw };
+  }
+  function getNextDisplayZIndex() {
+    let maxZ = -1;
+    for (const item of (Array.isArray(state.stickers) ? state.stickers : [])) {
+      maxZ = Math.max(maxZ, Number(item?.z_index || 0));
+    }
+    for (const group of getPaintingGroupList()) {
+      maxZ = Math.max(maxZ, Number(group?.z_index || 0));
+    }
+    return maxZ + 1;
+  }
+  function ensurePaintingGroupEntry(actionGroupId, zIndex = null) {
+    const gid = String(actionGroupId || "").trim();
+    if (!gid) return null;
+    const groups = getPaintingGroupList();
+    let entry = groups.find((group) => String(group?.actionGroupId || "") === gid);
+    if (!entry) {
+      entry = {
+        id: gid,
+        type: "strokeGroup",
+        actionGroupId: gid,
+        z_index: zIndex == null ? getNextDisplayZIndex() : Math.max(0, Number(zIndex || 0)),
+        frame: null,
+      };
+      groups.push(entry);
+    } else if (zIndex != null) {
+      entry.z_index = Math.max(0, Number(zIndex || 0));
+    }
+    return entry;
+  }
+  function syncPaintingGroupEntries() {
+    const ids = new Set(getPaintStrokeActionGroupIds());
+    const groups = getPaintingGroupList();
+    const next = groups.filter((group) => ids.has(String(group?.actionGroupId || "")));
+    ids.forEach((gid) => {
+      if (!next.some((group) => String(group?.actionGroupId || "") === gid)) {
+        next.push({
+          id: gid,
+          type: "strokeGroup",
+          actionGroupId: gid,
+          z_index: getNextDisplayZIndex(),
+          frame: null,
+        });
+      }
+    });
+    next.sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    state.painting.groups = next;
+    return next;
+  }
+  // Compute an axis-aligned bounding box for a stroke group (rot_deg = 0).
+  // Returns { centerUv, rot_deg, halfW, halfH, uvPad } or null when no points.
+  // Rotation is stored separately and accumulated via transforms — no PCA.
+  function computeGroupFrame(actionGroupId, layerKind, strokes) {
+    const sourcePoints = [];
+    for (const stroke of strokes) {
+      const geometry = stroke?.geometry;
+      const pts = geometry?.geometryKind === "lasso_fill"
+        ? geometry?.points
+        : (geometry?.processedPoints || geometry?.rawPoints || geometry?.points || []);
+      if (Array.isArray(pts)) sourcePoints.push(...pts);
+    }
+    if (!sourcePoints.length) return null;
+    let sumU = 0, sumV = 0;
+    sourcePoints.forEach((pt) => { sumU += Number(pt?.u || 0); sumV += Number(pt?.v || 0); });
+    const centU = sumU / sourcePoints.length;
+    const centV = sumV / sourcePoints.length;
+    let minDU = Infinity, maxDU = -Infinity, minV = Infinity, maxV = -Infinity;
+    sourcePoints.forEach((pt) => {
+      const du = shortestWrappedDelta(Number(pt?.u || 0), centU);
+      minDU = Math.min(minDU, du); maxDU = Math.max(maxDU, du);
+      const v = Number(pt?.v || 0);
+      minV = Math.min(minV, v); maxV = Math.max(maxV, v);
+    });
+    const maxStrokeWidth = strokes.reduce((max, stroke) => {
+      const presetId = getBrushPresetIdForTool(String(stroke?.toolKind || "pen"));
+      const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+      const size = Math.max(1, Number(stroke?.size || 10)) * Math.max(0.1, Number(preset?.sizeScale ?? 1));
+      return Math.max(max, size);
+    }, 0);
+    const uvPad = Math.max(0.0035, maxStrokeWidth / 2048);
+    return {
+      centerUv: { u: ((centU + (minDU + maxDU) * 0.5) % 1 + 1) % 1, v: clamp((minV + maxV) * 0.5, 0, 1) },
+      rot_deg: 0,
+      halfW: (maxDU - minDU) * 0.5 + uvPad,
+      halfH: (maxV - minV) * 0.5 + uvPad,
+      uvPad,
+    };
+  }
+
+  // Return the persistent frame for a group, initializing via PCA if frame is null.
+  // Pass strokes to avoid a second lookup when objectGeom() already has them.
+  function ensureGroupFrame(actionGroupId, layerKind, strokes) {
+    const gid = String(actionGroupId || "").trim();
+    if (!gid) return null;
+    const entry = getPaintingGroupList().find((g) => String(g?.actionGroupId || "") === gid);
+    if (!entry) return null;
+    if (!entry.frame) {
+      const s = strokes || getStrokeGroupStrokes(gid, layerKind);
+      entry.frame = computeGroupFrame(gid, layerKind, s);
+    }
+    return entry.frame;
+  }
+
+  function getDisplayListObjects() {
+    const stickers = (Array.isArray(state.stickers) ? state.stickers : []).map((item) => ({
+      type: "sticker",
+      id: String(item?.id || ""),
+      z_index: Number(item?.z_index || 0),
+      item,
+    }));
+    const groups = syncPaintingGroupEntries().map((group) => ({
+      type: "strokeGroup",
+      id: String(group?.id || group?.actionGroupId || ""),
+      actionGroupId: String(group?.actionGroupId || ""),
+      z_index: Number(group?.z_index || 0),
+      item: group,
+    }));
+    return [...stickers, ...groups].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+  }
+  function getOrderedPaintGroupIds(includeActive = true) {
+    const ordered = getDisplayListObjects()
+      .filter((entry) => entry.type === "strokeGroup")
+      .map((entry) => String(entry.actionGroupId || ""))
+      .filter((gid) => !!gid);
+    if (includeActive) {
+      const activeGid = String(editor.interaction?.stroke?.actionGroupId || "").trim();
+      const activeLayerKind = String(editor.interaction?.stroke?.layerKind || "").trim();
+      if (activeGid && activeLayerKind === "paint" && !ordered.includes(activeGid)) {
+        ordered.push(activeGid);
+      }
+    }
+    return ordered;
+  }
+
+  function getOrderedDisplayListObjects(includeActivePaint = true) {
+    const ordered = getDisplayListObjects();
+    if (!includeActivePaint) return ordered;
+    const activeGid = String(editor.interaction?.stroke?.actionGroupId || "").trim();
+    const activeLayerKind = String(editor.interaction?.stroke?.layerKind || "").trim();
+    if (!activeGid || activeLayerKind !== "paint") return ordered;
+    if (ordered.some((entry) => entry.type === "strokeGroup" && String(entry.actionGroupId || "") === activeGid)) {
+      return ordered;
+    }
+    const selected = getSelected();
+    let insertZ = ordered.reduce((max, entry) => Math.max(max, Number(entry?.z_index || 0)), -1) + 1;
+    if (selected && isStrokeGroupItem(selected) && String(selected.actionGroupId || "") === activeGid) {
+      insertZ = Number(selected.z_index || 0);
+    }
+    return [
+      ...ordered,
+      {
+        type: "strokeGroup",
+        id: activeGid,
+        actionGroupId: activeGid,
+        z_index: insertZ,
+        item: null,
+      },
+    ].sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+  }
+  function getSelectableStrokeGroupItems() {
+    return getPaintingGroupList()
+      .slice()
+      .sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0))
+      .map((item) => getStrokeGroupItem(makeStrokeGroupSelectionId("paint", item?.actionGroupId || item?.id || "")))
+      .filter(Boolean);
+  }
+
+  function getLivePaintRevisionSuffix() {
+    const interactionKind = String(editor.interaction?.kind || "");
+    const geometry = editor.interaction?.stroke?.geometry || null;
+    if (interactionKind !== "paint_stroke" && interactionKind !== "paint_lasso_fill") return "";
+    const layerKind = String(editor.interaction?.stroke?.layerKind || "");
+    const pointCount = geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0;
+    return `_${layerKind || "paint"}_live${pointCount}`;
+  }
+  function getCutoutSelectableItems() {
+    return [
+      ...(Array.isArray(state.stickers) ? state.stickers : []),
+      ...(Array.isArray(state.shots) ? state.shots : []),
+    ];
+  }
+  function isShotItem(item) {
+    return !!item && Array.isArray(state.shots) && state.shots.includes(item);
+  }
+  function isStickerItem(item) {
+    return !!item && Array.isArray(state.stickers) && state.stickers.includes(item);
+  }
+  function getStrokeGroupItem(idOrActionGroupId) {
+    const resolved = parseStrokeGroupSelectionId(idOrActionGroupId);
+    const gid = String(resolved.actionGroupId || "").trim();
+    if (!gid) return null;
+    const group = getPaintingGroupList().find((entry) => String(entry?.id || entry?.actionGroupId || "") === gid
+      || String(entry?.actionGroupId || "") === gid);
+    if (!group) return null;
+    return {
+      ...group,
+      id: makeStrokeGroupSelectionId("paint", gid),
+      type: "strokeGroup",
+      layerKind: "paint",
+      actionGroupId: gid,
+    };
+  }
+  function isStrokeGroupItem(item) {
+    if (!item || typeof item !== "object") return false;
+    if (String(item.type || "") !== "strokeGroup") return false;
+    const actionGroupId = String(item.actionGroupId || "").trim();
+    const layerKind = String(item.layerKind || "paint").trim() || "paint";
+    return !!actionGroupId && !!getStrokeGroupItem(makeStrokeGroupSelectionId(layerKind, actionGroupId));
+  }
+  function getStrokeGroupStrokes(idOrActionGroupId, layerKind = null) {
+    const resolved = parseStrokeGroupSelectionId(idOrActionGroupId, layerKind);
+    const gid = String(resolved.actionGroupId || "").trim();
+    if (!gid) return [];
+    return getPaintingLayerList(resolved.layerKind)
+      .filter((stroke) => String(stroke?.actionGroupId || "").trim() === gid);
+  }
+  function getStrokeGroupDisplayName(item) {
+    const gid = String(item?.actionGroupId || item?.id || "").trim();
+    const groups = getPaintingGroupList().slice().sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    const idx = groups.findIndex((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
+    return idx >= 0 ? `Stroke ${idx + 1}` : "Stroke";
+  }
+  function getStrokeGeomCacheKey(actionGroupId, layerKind = "paint") {
+    const gid = String(actionGroupId || "").trim();
+    const kind = String(layerKind || "paint").trim() || "paint";
+    const base = `${kind}:${gid}:${editor.mode}:${getPaintingRevisionKey()}`;
+    if (editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      const shotId = String(shot?.id || "");
+      const rect = shot ? getFrameViewRect(shot) : null;
+      return `${base}:frame:${shotId}:${Math.round(Number(rect?.x || 0))}:${Math.round(Number(rect?.y || 0))}:${Math.round(Number(rect?.w || 0))}:${Math.round(Number(rect?.h || 0))}:${Math.round(Number(editor.frameView?.zoom || 1) * 1000)}:${Math.round(Number(editor.frameView?.panX || 0))}:${Math.round(Number(editor.frameView?.panY || 0))}`;
+    }
+    return `${base}:view:${Math.round(Number(editor.viewYaw || 0) * 100)}:${Math.round(Number(editor.viewPitch || 0) * 100)}:${Math.round(Number(editor.viewFov || 0) * 100)}:${Math.round(Number(canvas?.width || 0))}:${Math.round(Number(canvas?.height || 0))}`;
+  }
+  function getStrokeRasterBounds(actionGroupId) {
+    const gid = String(actionGroupId || "").trim();
+    if (!gid) return null;
+    const key = `${gid}:${getPaintingRevisionKey()}`;
+    const cached = editor._strokeRasterBoundsCache.get(key);
+    if (cached) return cached;
+    if (editor._strokeRasterBoundsCache.size > 128) editor._strokeRasterBoundsCache.clear();
+    const raster = editor.paintEngine?.getGroupDisplayCanvas?.(gid);
+    const ctx2d = raster?.getContext?.("2d");
+    if (!raster || !ctx2d) return null;
+    const w = Number(raster.width || 0);
+    const h = Number(raster.height || 0);
+    if (w < 1 || h < 1) return null;
+    const data = ctx2d.getImageData(0, 0, w, h).data;
+    let minX = w;
+    let minY = h;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < h; y += 1) {
+      const row = y * w * 4;
+      for (let x = 0; x < w; x += 1) {
+        if (data[row + x * 4 + 3] <= 8) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    const bounds = { minX, minY, maxX, maxY, width: w, height: h };
+    editor._strokeRasterBoundsCache.set(key, bounds);
+    return bounds;
+  }
+  function translateErpPoint(point, du, dv) {
+    if (!point || typeof point !== "object") return point;
+    return {
+      ...point,
+      u: ((Number(point.u || 0) + Number(du || 0)) % 1 + 1) % 1,
+      v: clamp(Number(point.v || 0) + Number(dv || 0), 0, 1),
+    };
+  }
+  function shortestWrappedDelta(a, b) {
+    let d = Number(a || 0) - Number(b || 0);
+    while (d > 0.5) d -= 1;
+    while (d < -0.5) d += 1;
+    return d;
+  }
+  function getStrokeGroupCenterUv(idOrActionGroupId, layerKind = null, strokesOverride = null) {
+    const resolved = parseStrokeGroupSelectionId(idOrActionGroupId, layerKind);
+    const strokes = Array.isArray(strokesOverride) ? strokesOverride : getStrokeGroupStrokes(resolved.actionGroupId, resolved.layerKind);
+    const pts = [];
+    strokes.forEach((stroke) => {
+      const geometry = stroke?.geometry || null;
+      const src = geometry?.geometryKind === "lasso_fill"
+        ? geometry?.points
+        : (geometry?.processedPoints || geometry?.rawPoints || geometry?.points || []);
+      if (Array.isArray(src)) pts.push(...src);
+    });
+    if (!pts.length) return { u: 0.5, v: 0.5 };
+    const anchorU = Number(pts[0]?.u || 0);
+    let sumU = 0;
+    let sumV = 0;
+    pts.forEach((pt) => {
+      sumU += anchorU + shortestWrappedDelta(Number(pt?.u || 0), anchorU);
+      sumV += Number(pt?.v || 0);
+    });
+    return {
+      u: ((sumU / pts.length) % 1 + 1) % 1,
+      v: clamp(sumV / pts.length, 0, 1),
+    };
+  }
+  function transformErpPointAround(point, center, scale = 1, rotationDeg = 0) {
+    if (!point || typeof point !== "object") return point;
+    const cu = Number(center?.u || 0);
+    const cv = Number(center?.v || 0);
+    const dx = shortestWrappedDelta(Number(point.u || 0), cu);
+    const dy = Number(point.v || 0) - cv;
+    const rad = Number(rotationDeg || 0) * DEG2RAD;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const s = Math.max(0.02, Number(scale || 1));
+    const rx = (dx * cos - dy * sin) * s;
+    const ry = (dx * sin + dy * cos) * s;
+    return {
+      ...point,
+      u: ((cu + rx) % 1 + 1) % 1,
+      v: clamp(cv + ry, 0, 1),
+    };
+  }
+  function applyStrokeGroupOffset(idOrActionGroupId, du, dv, snapshots = null, layerKind = null, frameSnapshot = null) {
+    const resolved = parseStrokeGroupSelectionId(idOrActionGroupId, layerKind);
+    const gid = String(resolved.actionGroupId || "").trim();
+    if (!gid) return false;
+    const strokes = getPaintingLayerList(resolved.layerKind);
+    const snapshotMap = Array.isArray(snapshots)
+      ? new Map(snapshots.map((stroke) => [String(stroke?.id || ""), stroke]))
+      : null;
+    let changed = false;
+    strokes.forEach((stroke) => {
+      if (String(stroke?.actionGroupId || "").trim() !== gid) return;
+      const source = snapshotMap?.get(String(stroke?.id || "")) || stroke;
+      const geometry = stroke?.geometry;
+      const sourceGeometry = source?.geometry;
+      if (!geometry || !sourceGeometry) return;
+      if (Array.isArray(sourceGeometry.points)) {
+        geometry.points = sourceGeometry.points.map((pt) => translateErpPoint(pt, du, dv));
+        changed = true;
+      }
+      if (Array.isArray(sourceGeometry.rawPoints)) {
+        geometry.rawPoints = sourceGeometry.rawPoints.map((pt) => translateErpPoint(pt, du, dv));
+        changed = true;
+      }
+      if (Array.isArray(sourceGeometry.processedPoints)) {
+        geometry.processedPoints = sourceGeometry.processedPoints.map((pt) => translateErpPoint(pt, du, dv));
+        changed = true;
+      }
+    });
+    // Keep the persistent frame in sync so objectGeom() remains stable.
+    if (changed && frameSnapshot) {
+      const entry = getPaintingGroupList().find((g) => String(g?.actionGroupId || "") === gid);
+      if (entry) {
+        entry.frame = {
+          ...frameSnapshot,
+          centerUv: {
+            u: ((frameSnapshot.centerUv.u + du) % 1 + 1) % 1,
+            v: clamp(frameSnapshot.centerUv.v + dv, 0, 1),
+          },
+        };
+      }
+    }
+    return changed;
+  }
+  function applyStrokeGroupTransform(idOrActionGroupId, scale = 1, rotationDeg = 0, snapshots = null, layerKind = null, frameSnapshot = null) {
+    const resolved = parseStrokeGroupSelectionId(idOrActionGroupId, layerKind);
+    const gid = String(resolved.actionGroupId || "").trim();
+    if (!gid) return false;
+    const strokes = getPaintingLayerList(resolved.layerKind);
+    const sourceStrokes = Array.isArray(snapshots) ? snapshots : getStrokeGroupStrokes(gid, resolved.layerKind);
+    const snapshotMap = Array.isArray(sourceStrokes)
+      ? new Map(sourceStrokes.map((stroke) => [String(stroke?.id || ""), stroke]))
+      : null;
+    // Use the frame's bbox center as pivot when available — it matches what objectGeom() draws.
+    const centerUv = frameSnapshot?.centerUv ?? getStrokeGroupCenterUv(gid, resolved.layerKind, sourceStrokes);
+    let changed = false;
+    strokes.forEach((stroke) => {
+      if (String(stroke?.actionGroupId || "").trim() !== gid) return;
+      const source = snapshotMap?.get(String(stroke?.id || "")) || stroke;
+      const geometry = stroke?.geometry;
+      const sourceGeometry = source?.geometry;
+      if (!geometry || !sourceGeometry) return;
+      if (Array.isArray(sourceGeometry.points)) {
+        geometry.points = sourceGeometry.points.map((pt) => transformErpPointAround(pt, centerUv, scale, rotationDeg));
+        changed = true;
+      }
+      if (Array.isArray(sourceGeometry.rawPoints)) {
+        geometry.rawPoints = sourceGeometry.rawPoints.map((pt) => transformErpPointAround(pt, centerUv, scale, rotationDeg));
+        changed = true;
+      }
+      if (Array.isArray(sourceGeometry.processedPoints)) {
+        geometry.processedPoints = sourceGeometry.processedPoints.map((pt) => transformErpPointAround(pt, centerUv, scale, rotationDeg));
+        changed = true;
+      }
+    });
+    // Update the persistent frame so objectGeom() reflects the new orientation/scale.
+    if (changed && frameSnapshot) {
+      const s = Number(scale || 1);
+      const entry = getPaintingGroupList().find((g) => String(g?.actionGroupId || "") === gid);
+      if (entry) {
+        entry.frame = {
+          centerUv: frameSnapshot.centerUv,
+          rot_deg: Number(frameSnapshot.rot_deg || 0) + Number(rotationDeg || 0),
+          halfW: frameSnapshot.halfW * s,
+          halfH: frameSnapshot.halfH * s,
+          uvPad: frameSnapshot.uvPad,
+        };
+      }
+    }
+    return changed;
+  }
+  function getSelected() {
+    const id = String(editor.selectedId || "");
+    if (!id) return null;
+    const groupItem = getStrokeGroupItem(id);
+    if (groupItem) return groupItem;
+    if (type === "cutout") {
+      return getCutoutSelectableItems().find((item) => String(item?.id || "") === id) || null;
+    }
+    return getList().find((s) => String(s?.id || "") === id) || null;
+  }
+  function getSelectedItems() {
+    const ids = Array.isArray(editor.selectedIds) && editor.selectedIds.length
+      ? editor.selectedIds
+      : (editor.selectedId ? [editor.selectedId] : []);
+    const out = [];
+    const seen = new Set();
+    ids.forEach((id) => {
+      const key = String(id || "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      const item = key === String(editor.selectedId || "") ? getSelected() : (
+        getStrokeGroupItem(key)
+        || (type === "cutout"
+          ? getCutoutSelectableItems().find((entry) => String(entry?.id || "") === key)
+          : getList().find((entry) => String(entry?.id || "") === key))
+      );
+      if (item) out.push(item);
+    });
+    return out;
+  }
+  function getMultiSelectionGeom(items = null) {
+    const selectedItems = Array.isArray(items) ? items : getSelectedItems();
+    if (!selectedItems || selectedItems.length < 2) return null;
+    const geoms = selectedItems
+      .map((item) => objectGeom(item))
+      .filter((geom) => geom?.visible && Array.isArray(geom.corners) && geom.corners.length);
+    if (!geoms.length) return null;
+    const xs = geoms.flatMap((geom) => geom.corners.map((p) => Number(p?.x || 0)));
+    const ys = geoms.flatMap((geom) => geom.corners.map((p) => Number(p?.y || 0)));
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    return {
+      kind: "multiSelection",
+      visible: true,
+      center: { x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5 },
+      corners: [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY },
+      ],
+      edgeMidpoints: [
+        { edge: "top", x: (minX + maxX) * 0.5, y: minY, a: { x: minX, y: minY }, b: { x: maxX, y: minY } },
+        { edge: "right", x: maxX, y: (minY + maxY) * 0.5, a: { x: maxX, y: minY }, b: { x: maxX, y: maxY } },
+        { edge: "bottom", x: (minX + maxX) * 0.5, y: maxY, a: { x: maxX, y: maxY }, b: { x: minX, y: maxY } },
+        { edge: "left", x: minX, y: (minY + maxY) * 0.5, a: { x: minX, y: maxY }, b: { x: minX, y: minY } },
+      ],
+      rotateStemBase: { x: (minX + maxX) * 0.5, y: minY },
+      rotateHandle: { x: (minX + maxX) * 0.5, y: minY - 30 },
+    };
+  }
+  function isItemSelected(item) {
+    const id = String(item?.id || "").trim();
+    return !!id && Array.isArray(editor.selectedIds) && editor.selectedIds.includes(id);
+  }
+  function getSelectedKind() {
+    const selected = getSelected();
+    if (!selected) return null;
+    if (isStrokeGroupItem(selected)) return "stroke";
+    return isShotItem(selected) ? "frame" : "image";
+  }
+  function setSelectedItem(item) {
+    editor.selectedId = item?.id || null;
+    editor.selectedIds = item?.id ? [item.id] : [];
+    if (item && isStickerItem(item)) state.active.selected_sticker_id = item.id || null;
+    else state.active.selected_sticker_id = null;
+    if (item && isShotItem(item)) state.active.selected_shot_id = item.id || null;
+    else if (!item) state.active.selected_shot_id = null;
+    else if (!isShotItem(item)) state.active.selected_shot_id = state.active.selected_shot_id;
+  }
+  function setSelectedItems(items, primaryId = null) {
+    const nextIds = [];
+    const seen = new Set();
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const id = String(item?.id || "").trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      nextIds.push(id);
+    });
+    editor.selectedIds = nextIds;
+    const preferred = String(primaryId || "").trim();
+    editor.selectedId = preferred && nextIds.includes(preferred)
+      ? preferred
+      : (nextIds[nextIds.length - 1] || null);
+    const primary = getSelected();
+    state.active.selected_sticker_id = primary && isStickerItem(primary) ? primary.id || null : null;
+    if (primary && isShotItem(primary)) state.active.selected_shot_id = primary.id || null;
+    else if (!nextIds.length) state.active.selected_shot_id = null;
+  }
+  function getCutoutInspectorItems() {
+    const frames = (Array.isArray(state.shots) ? state.shots : []).map((item, index) => ({
+      kind: "frame",
+      item,
+      label: "Frame",
+    }));
+    const images = (Array.isArray(state.stickers) ? state.stickers : []).map((item, index) => {
+      const baseLabel = isExternalSticker(item)
+        ? String(item.id || EXTERNAL_STICKER_ID)
+        : String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id || `Image ${index + 1}`);
+      return {
+        kind: "image",
+        item,
+        label: baseLabel,
+      };
+    });
+    return [...frames, ...images];
+  }
+
+  function getSelectionItemIcon(kind) {
+    if (kind === "frame") return ICON.camera;
+    if (kind === "stroke") return ICON.paintbrush_vertical_tool;
+    return ICON.image;
+  }
+
+  function getSelectionItemLabelHtml(entry) {
+    if (!entry || !entry.item) return escapeHtml(String(entry?.label || ""));
+    return `<span class="pano-picker-item-icon" aria-hidden="true">${getSelectionItemIcon(entry.kind)}</span><span>${escapeHtml(String(entry.label || ""))}</span>`;
+  }
   function getNextStickerZIndex() {
-    const stickers = Array.isArray(state.stickers) ? state.stickers : [];
-    return stickers.reduce((acc, item) => {
-      const next = Number(item?.z_index);
-      return Math.max(acc, Number.isFinite(next) ? next : 0);
-    }, -1) + 1;
+    return getNextDisplayZIndex();
   }
   function isExternalSticker(item) {
     if (!item || typeof item !== "object") return false;
@@ -1887,6 +2488,7 @@ function showEditor(node, type, options = {}) {
         stickers.splice(existingIndex, 1);
         if (editor.selectedId === EXTERNAL_STICKER_ID) {
           editor.selectedId = null;
+          editor.selectedIds = [];
           state.active.selected_sticker_id = null;
         }
         commitAndRefreshNode();
@@ -1941,21 +2543,42 @@ function showEditor(node, type, options = {}) {
     requestDraw();
     void reason;
   }
+  function clearSelection(options = {}) {
+    const preservePanelValues = options.preservePanelValues !== false;
+    const selectedBeforeClear = preservePanelValues ? getSelected() : null;
+    if (selectedBeforeClear) {
+      editor.panelLastValues = {
+        yaw_deg: Number(selectedBeforeClear.yaw_deg || 0),
+        pitch_deg: Number(selectedBeforeClear.pitch_deg || 0),
+        hFOV_deg: Number(selectedBeforeClear.hFOV_deg || (type === "stickers" ? 30 : 90)),
+        vFOV_deg: Number(selectedBeforeClear.vFOV_deg || (type === "stickers" ? 30 : 60)),
+        rot_deg: Number(selectedBeforeClear.rot_deg || 0),
+        roll_deg: Number(selectedBeforeClear.roll_deg || 0),
+        out_w: Number(selectedBeforeClear.out_w || 1024),
+        out_h: Number(selectedBeforeClear.out_h || 1024),
+        aspect_id: getCutoutAspectLabel(selectedBeforeClear),
+      };
+    }
+    editor.selectedId = null;
+    editor.selectedIds = [];
+    editor.cutoutAspectOpen = false;
+    state.active.selected_sticker_id = null;
+    state.active.selected_shot_id = null;
+  }
   function applyInitialCutoutFocus() {
     if (type !== "cutout") return;
-    const shots = getList();
+    const shots = Array.isArray(state.shots) ? state.shots : [];
     if (!Array.isArray(shots) || shots.length === 0) return;
-    const preferredId = String(state.active?.selected_shot_id || editor.selectedId || "");
+    const preferredId = String(state.active?.selected_shot_id || "");
     const target = shots.find((s) => String(s?.id || "") === preferredId) || shots[0];
     if (!target) return;
-    editor.selectedId = target.id || null;
-    state.active.selected_shot_id = editor.selectedId;
+    state.active.selected_shot_id = target.id || null;
     editor.viewYaw = wrapYaw(Number(target.yaw_deg || 0));
     editor.viewPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
   }
   function syncLookAtFrameButtonState() {
     if (!addOrLookBtn) return;
-    const hasFrames = type === "cutout" && getList().length > 0;
+    const hasFrames = type === "cutout" && Array.isArray(state.shots) && state.shots.length > 0;
     if (hasFrames) {
       addOrLookBtn.innerHTML = ICON.crosshair;
       addOrLookBtn.setAttribute("aria-label", "Look at frame");
@@ -1968,7 +2591,7 @@ function showEditor(node, type, options = {}) {
   }
 
   function syncViewToggleState() {
-    const frameEnabled = type === "cutout" && getList().length > 0;
+    const frameEnabled = type === "cutout" && Array.isArray(state.shots) && state.shots.length > 0;
     if (editor.mode === "frame" && !frameEnabled) editor.mode = "pano";
     if (frameViewBtn) {
       frameViewBtn.disabled = !frameEnabled;
@@ -2089,6 +2712,87 @@ function showEditor(node, type, options = {}) {
     );
   }
 
+  function buildSingleStickerScene(item) {
+    return buildStickerSceneFromState(state, {
+      stickers: item ? [item] : [],
+      selectedId: editor.selectedId || null,
+      hoveredId: null,
+      includeHidden: true,
+    });
+  }
+
+  function buildSingleStickerTextures(item, scene) {
+    return buildStickerTexturesFromState(
+      state,
+      (assetId, asset, sticker) => getStickerImage(sticker || assetId),
+      { scene, stickers: item ? [item] : [] },
+    );
+  }
+
+  function drawOrderedDisplayListInView(ctx, rect, view, bgImg, cachePrefix = "modal_object_view") {
+    if (!ctx || !rect || !view) return false;
+    let drewAnything = false;
+    if (bgImg) {
+      const bgDrawn = renderCutoutViewToContext2D({
+        owner: node,
+        cacheKey: `${cachePrefix}_bg_only`,
+        ctx,
+        rect,
+        img: bgImg,
+        view,
+      });
+      drewAnything = drewAnything || !!bgDrawn;
+    }
+    for (const entry of getOrderedDisplayListObjects(true)) {
+      if (entry.type === "sticker" && entry.item) {
+        const scene = buildSingleStickerScene(entry.item);
+        const textures = buildSingleStickerTextures(entry.item, scene);
+        const stickerDrawn = renderSceneToContext2D({
+          owner: node,
+          cacheKey: `${cachePrefix}_sticker_${String(entry.id || entry.item.id || "")}`,
+          ctx,
+          rect,
+          backgroundSource: null,
+          textures,
+          scene,
+          view,
+        });
+        drewAnything = drewAnything || !!stickerDrawn;
+        continue;
+      }
+      if (entry.type === "strokeGroup") {
+        const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
+        if (!groupCanvas) continue;
+        renderCutoutViewToContext2D({
+          owner: node,
+          cacheKey: `${cachePrefix}_group_${String(entry.actionGroupId || "")}`,
+          ctx,
+          rect,
+          img: groupCanvas,
+          view,
+          backgroundRevision: `${getPaintingRevisionKey()}_${String(entry.actionGroupId || "")}${getLivePaintRevisionSuffix()}`,
+          backgroundOpacity: 1,
+        });
+        drewAnything = true;
+      }
+    }
+    const maskCanvas = editor.paintEngine?.getMaskDisplayCanvas?.() || null;
+    if (maskCanvas) {
+      renderCutoutViewToContext2D({
+        owner: node,
+        cacheKey: `${cachePrefix}_mask`,
+        ctx,
+        rect,
+        img: maskCanvas,
+        view,
+        backgroundRevision: `${getPaintingRevisionKey()}${getLivePaintRevisionSuffix()}_mask`,
+        backgroundOpacity: 1,
+      });
+      drewAnything = true;
+    }
+    return drewAnything;
+  }
+
   async function uploadStickerAssetFile(file, fallbackName = "sticker.png") {
     const body = new FormData();
     body.append("image", file);
@@ -2153,20 +2857,39 @@ function showEditor(node, type, options = {}) {
       _paintLayerSyncPending = true;
       try {
         rebuildPaintEngineIfNeeded();
-        const erpTarget = editor.paintEngine?.getErpTarget?.() || null;
-        const paintCanvas = erpTarget?.committedPaint?.canvas || null;
+        const orderedGroupIds = getOrderedPaintGroupIds(false);
+        const erpTarget = editor.paintEngine?.getErpTarget?.(orderedGroupIds) || null;
+        const paintCanvas = erpTarget?.displayPaint?.canvas || null;
         const maskCanvas = erpTarget?.committedMask?.canvas || null;
         if (!paintCanvas || !maskCanvas) return;
         let paintRef = null;
         let maskRef = null;
+        const groupRefs = [];
         if (counts.paintCount > 0) {
           paintRef = await uploadCanvasAsPaintLayer(paintCanvas, `pano_paint_${nodeId}.png`);
+          for (const actionGroupId of orderedGroupIds) {
+            const groupTarget = editor.paintEngine?.getGroupTarget?.(actionGroupId) || null;
+            const groupCanvas = groupTarget?.committedPaint?.canvas || null;
+            if (!groupCanvas) continue;
+            const safeGroupId = String(actionGroupId || "").replace(/[^a-zA-Z0-9_-]/g, "_");
+            const ref = await uploadCanvasAsPaintLayer(groupCanvas, `pano_paint_${nodeId}_${safeGroupId}.png`);
+            if (!ref) continue;
+            groupRefs.push({
+              id: String(actionGroupId || ""),
+              actionGroupId: String(actionGroupId || ""),
+              image: ref,
+            });
+          }
         }
         if (counts.maskCount > 0) {
           maskRef = await uploadCanvasAsPaintLayer(maskCanvas, `pano_mask_${nodeId}.png`);
         }
         if (rev === getPaintingRevisionKey()) {
-          state.painting_layer = { paint: paintRef, mask: maskRef };
+          state.painting_layer = {
+            paint: paintRef,
+            mask: maskRef,
+            groups: groupRefs,
+          };
           _paintLayerSyncRevision = rev;
           commitState();
         }
@@ -2333,7 +3056,6 @@ function showEditor(node, type, options = {}) {
   }
 
   function pruneUnusedAssets() {
-    if (type !== "stickers") return;
     const used = new Set(
       (state.stickers || [])
         .map((s) => String(s?.asset_id || ""))
@@ -2476,15 +3198,14 @@ function showEditor(node, type, options = {}) {
       ctx.fillStyle = "#070707";
       ctx.fillRect(r.x, r.y, r.w, r.h);
     }
-    if (!skipBackground) drawErpBackgroundUnwrap(r);
     rebuildPaintEngineIfNeeded();
-    const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
-    if (erpRaster) {
-      ctx.save();
-      ctx.globalAlpha = 1;
-      ctx.drawImage(erpRaster, r.x, r.y, r.w, r.h);
-      ctx.restore();
-    }
+    drawOrderedDisplayListInView(
+      ctx,
+      { x: r.x, y: r.y, w: r.w, h: r.h },
+      { mode: "unwrap" },
+      getConnectedErpImage(),
+      "modal_unwrap",
+    );
 
     if (editor.showGrid && !editor.fullscreen) {
       ctx.strokeStyle = "#3f3f46";
@@ -2534,31 +3255,19 @@ function showEditor(node, type, options = {}) {
       ctx.fillStyle = "#070707";
       ctx.fillRect(0, 0, w, h);
     }
-    if (!skipBackground) drawErpBackgroundPano();
     rebuildPaintEngineIfNeeded();
-    const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
-    if (erpRaster) {
-      // During active paint stroke or lasso fill, append point count to backgroundRevision so
-      // WebGL re-uploads displayPaint every frame (live preview). Otherwise use the committed
-      // revision key so texture upload is skipped when nothing changed.
-      const _iKind = editor.interaction?.kind;
-      const _iGeo = editor.interaction?.stroke?.geometry;
-      const activePoints = (_iKind === "paint_stroke" || _iKind === "paint_lasso_fill")
-        ? `_live${_iGeo?.rawPoints?.length ?? _iGeo?.points?.length ?? 0}`
-        : "";
-      renderErpViewToContext2D({
-        owner: node,
-        cacheKey: "modal_pano_paint_raster",
-        ctx,
-        rect: { x: 0, y: 0, w, h },
-        backgroundSource: erpRaster,
-        backgroundRevision: getPaintingRevisionKey() + activePoints,
+    drawOrderedDisplayListInView(
+      ctx,
+      { x: 0, y: 0, w, h },
+      {
         mode: "panorama",
         yawDeg: editor.viewYaw,
         pitchDeg: editor.viewPitch,
         fovDeg: editor.viewFov,
-      });
-    }
+      },
+      getConnectedErpImage(),
+      "modal_pano",
+    );
 
     if (editor.showGrid && !editor.fullscreen) {
       for (let lon = -180; lon <= 180; lon += 15) {
@@ -2590,7 +3299,7 @@ function showEditor(node, type, options = {}) {
 
   function renderModalStickerScene() {
     try {
-      if (type !== "stickers") return false;
+      if (!Array.isArray(state.stickers) || state.stickers.length === 0) return false;
       if (editor.mode !== "pano" && editor.mode !== "unwrap") return false;
       const scene = buildEditorStickerScene();
       const textures = buildEditorStickerTextures(scene);
@@ -2616,10 +3325,128 @@ function showEditor(node, type, options = {}) {
   }
 
   function objectGeom(item) {
+    if (isStrokeGroupItem(item)) {
+      const actionGroupId = String(item.actionGroupId || item.id || "").trim();
+      const cacheKey = getStrokeGeomCacheKey(actionGroupId, item.layerKind);
+      const cached = editor._strokeGeomCache.get(cacheKey);
+      if (cached) return cached;
+      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
+      const strokes = getStrokeGroupStrokes(actionGroupId, item.layerKind);
+      const strokePaths = [];
+      const projected = [];
+      const sourcePoints = [];
+      const projectPoints = (points) => {
+        if (editor.mode === "frame") {
+          const shot = getActiveCutoutShot();
+          if (!shot) return [];
+          const rect = getFrameViewRect(shot);
+          return projectErpPointsToFrameRect(points, shot, rect);
+        }
+        return projectErpPointsToCurrentView(points);
+      };
+      for (const stroke of strokes) {
+        const geometry = stroke?.geometry || null;
+        const srcPoints = geometry?.geometryKind === "lasso_fill"
+          ? geometry?.points
+          : (geometry?.processedPoints || geometry?.rawPoints || geometry?.points || []);
+        if (Array.isArray(srcPoints)) sourcePoints.push(...srcPoints);
+        const pts = projectPoints(srcPoints).filter((pt) => Number.isFinite(pt?.x) && Number.isFinite(pt?.y));
+        if (!pts.length) continue;
+        projected.push(...pts);
+        const presetId = getBrushPresetIdForTool(String(stroke?.toolKind || "pen"));
+        const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+        const width = Math.max(10, Number(stroke?.size || 10) * Math.max(0.1, Number(preset?.sizeScale ?? 1)) + 10);
+        strokePaths.push({
+          points: pts,
+          closed: String(geometry?.geometryKind || "") === "lasso_fill",
+          lineWidth: width,
+          layerKind: String(stroke?.layerKind || item.layerKind || "paint"),
+        });
+      }
+      const finite = projected.filter((pt) => Number.isFinite(pt?.x) && Number.isFinite(pt?.y));
+      if (!finite.length) {
+        const hidden = { visible: false, kind: "strokeGroup" };
+        editor._strokeGeomCache.set(cacheKey, hidden);
+        return hidden;
+      }
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const path of strokePaths) {
+        const pad = 2;
+        for (const pt of (Array.isArray(path?.points) ? path.points : [])) {
+          const x = Number(pt?.x || 0);
+          const y = Number(pt?.y || 0);
+          minX = Math.min(minX, x - pad);
+          minY = Math.min(minY, y - pad);
+          maxX = Math.max(maxX, x + pad);
+          maxY = Math.max(maxY, y + pad);
+        }
+      }
+      if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+        const hidden = { visible: false, kind: "strokeGroup" };
+        editor._strokeGeomCache.set(cacheKey, hidden);
+        return hidden;
+      }
+      const corners = [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY },
+      ];
+      const center = { x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5 };
+      const topMid = { x: center.x, y: minY };
+      const rightMid = { x: maxX, y: center.y };
+      const bottomMid = { x: center.x, y: maxY };
+      const leftMid = { x: minX, y: center.y };
+      const geom = {
+        kind: "strokeGroup",
+        center,
+        corners,
+        edgeMidpoints: [
+          { edge: "top",    x: topMid.x,    y: topMid.y,    a: corners[0], b: corners[1] },
+          { edge: "right",  x: rightMid.x,  y: rightMid.y,  a: corners[1], b: corners[2] },
+          { edge: "bottom", x: bottomMid.x, y: bottomMid.y, a: corners[2], b: corners[3] },
+          { edge: "left",   x: leftMid.x,   y: leftMid.y,   a: corners[3], b: corners[0] },
+        ],
+        rotateStemBase: topMid,
+        rotateHandle: {
+          x: topMid.x,
+          y: topMid.y - 30,
+        },
+        strokePaths,
+        visible: true,
+      };
+      editor._strokeGeomCache.set(cacheKey, geom);
+      return geom;
+    }
     const centerDir = yawPitchToDir(Number(item.yaw_deg || 0), Number(item.pitch_deg || 0));
-    const center = editor.mode === "unwrap" ? projectDirUnwrap(centerDir) : projectDir(centerDir);
+    const center = (() => {
+      if (editor.mode === "frame") {
+        const shot = getActiveCutoutShot();
+        const rect = getFrameViewRect(shot);
+        const local = shot ? worldDirToFrameLocalPoint(shot, centerDir) : null;
+        return local ? {
+          x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+          y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+          z: 1,
+        } : null;
+      }
+      return editor.mode === "unwrap" ? projectDirUnwrap(centerDir) : projectDir(centerDir);
+    })();
     if (!center) return { visible: false };
     const projectDirForShape = (d, refX = null) => {
+      if (editor.mode === "frame") {
+        const shot = getActiveCutoutShot();
+        const rect = getFrameViewRect(shot);
+        const local = shot ? worldDirToFrameLocalPoint(shot, d) : null;
+        return local ? {
+          x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+          y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+          z: 1,
+        } : null;
+      }
       if (editor.mode === "unwrap") return projectDirUnwrap(d, refX);
       const { right, up, fwd } = cameraBasis();
       const cx = dot(d, right);
@@ -2823,9 +3650,10 @@ function showEditor(node, type, options = {}) {
   }
 
   function renderModalStickerBodyFallback() {
-    if (type !== "stickers") return false;
+    if (editor.mode !== "pano" && editor.mode !== "unwrap") return false;
+    if (!Array.isArray(state.stickers) || state.stickers.length === 0) return false;
     let anyDrawn = false;
-    const items = [...getList()].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    const items = [...state.stickers].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
     for (const item of items) {
       if (item?.visible === false) continue;
       const g = objectGeom(item);
@@ -2852,29 +3680,60 @@ function showEditor(node, type, options = {}) {
     return anyDrawn;
   }
 
+  function getCutoutSelectableItemsForDisplay() {
+    const stickers = [...(Array.isArray(state.stickers) ? state.stickers : [])]
+      .sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    if (editor.mode === "frame") return stickers;
+    const shots = Array.isArray(state.shots) ? state.shots : [];
+    return [...stickers, ...shots];
+  }
+
+  function getCutoutSelectableItemsForHit() {
+    const stickers = [...(Array.isArray(state.stickers) ? state.stickers : [])]
+      .sort((a, b) => Number(b.z_index || 0) - Number(a.z_index || 0));
+    if (editor.mode === "frame") return stickers;
+    const shots = Array.isArray(state.shots) ? state.shots : [];
+    return [...stickers, ...shots];
+  }
+
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
-    const rawList = getList();
-    const orderKey = rawList.map((item) => `${String(item?.id || "")}:${Number(item?.z_index || 0)}`).join("|");
+    const selectedItems = getSelectedItems();
+    const multiSelected = selectedItems.length > 1;
+    const rawList = type === "cutout" ? getCutoutSelectableItemsForDisplay() : getList();
+    const orderKey = rawList.map((item) => `${String(item?.id || "")}:${isShotItem(item) ? "frame" : Number(item?.z_index || 0)}`).join("|");
     if (!editor._sortedItemsCache || editor._sortedItemsCache.src !== rawList || editor._sortedItemsCache.orderKey !== orderKey) {
       editor._sortedItemsCache = {
         src: rawList,
         orderKey,
-        sorted: [...rawList].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0)),
+        sorted: [...rawList],
       };
     }
     const items = editor._sortedItemsCache.sorted;
     for (const item of items) {
-      const selected = item.id === editor.selectedId;
+      const selected = !multiSelected && isItemSelected(item);
+      if (editor.mode === "frame" && !selected) continue;
       const g = objectGeom(item);
       if (type !== "stickers" && !g.visible) {
         continue;
       }
 
-      if (type === "stickers") {
+      const itemIsSticker = isStickerItem(item);
+      const itemIsFrame = isShotItem(item);
+      if (itemIsSticker) {
         const prevAlpha = ctx.globalAlpha;
         ctx.globalAlpha = getStickerDisplayAlpha(item);
-        drawStickerBoundary(item, selected);
+        if (editor.mode === "frame") {
+          ctx.strokeStyle = selected ? "rgba(250, 250, 250, 0.9)" : "#71717a";
+          ctx.lineWidth = selected ? 2 : 1;
+          ctx.beginPath();
+          ctx.moveTo(g.corners[0].x, g.corners[0].y);
+          for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
+          ctx.closePath();
+          ctx.stroke();
+        } else {
+          drawStickerBoundary(item, selected);
+        }
         ctx.globalAlpha = prevAlpha;
       } else {
         ctx.fillStyle = selected ? "rgba(0, 112, 243, 0.24)" : "rgba(255, 255, 255, 0.12)";
@@ -2893,10 +3752,10 @@ function showEditor(node, type, options = {}) {
       }
 
       if (selected && g.visible) {
-        const accent = (type === "stickers" && isExternalSticker(item)) ? "#f59e0b" : "#0070f3";
+        const accent = (itemIsSticker && isExternalSticker(item)) ? "#f59e0b" : "#0070f3";
         ctx.fillStyle = accent;
         g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
-        if (type === "cutout") {
+        if (itemIsFrame) {
           ctx.strokeStyle = accent;
           ctx.lineCap = "round";
           ctx.lineWidth = 4;
@@ -2914,15 +3773,69 @@ function showEditor(node, type, options = {}) {
           });
           ctx.lineCap = "butt";
         }
-        ctx.strokeStyle = "rgba(250, 250, 250, 0.9)";
-        ctx.lineWidth = 1.8;
-        ctx.beginPath();
-        ctx.moveTo(g.rotateStemBase.x, g.rotateStemBase.y);
-        ctx.lineTo(g.rotateHandle.x, g.rotateHandle.y);
-        ctx.stroke();
-        ctx.fillStyle = accent;
-        ctx.beginPath(); ctx.arc(g.rotateHandle.x, g.rotateHandle.y, 10, 0, Math.PI * 2); ctx.fill();
+        if (!isStrokeGroupItem(item)) {
+          ctx.strokeStyle = "rgba(250, 250, 250, 0.9)";
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(g.rotateStemBase.x, g.rotateStemBase.y);
+          ctx.lineTo(g.rotateHandle.x, g.rotateHandle.y);
+          ctx.stroke();
+          ctx.fillStyle = accent;
+          ctx.beginPath(); ctx.arc(g.rotateHandle.x, g.rotateHandle.y, 10, 0, Math.PI * 2); ctx.fill();
+        }
       }
+    }
+
+    if (multiSelected) {
+      const g = getMultiSelectionGeom(selectedItems);
+      if (g?.visible) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(g.corners[0].x, g.corners[0].y);
+        for (let i = 1; i < g.corners.length; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#0070f3";
+        g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
+        ctx.restore();
+      }
+    } else {
+      selectedItems.forEach((selected) => {
+        if (!isStrokeGroupItem(selected)) return;
+        const g = objectGeom(selected);
+        if (!g?.visible) return;
+        ctx.save();
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.95)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 4]);
+        ctx.beginPath();
+        ctx.moveTo(g.corners[0].x, g.corners[0].y);
+        for (let i = 1; i < g.corners.length; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#0070f3";
+        g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
+        ctx.restore();
+      });
+    }
+
+    if (editor.interaction?.kind === "marquee_select") {
+      const rect = rectFromPoints(editor.interaction.start, editor.interaction.current);
+      ctx.save();
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+      ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 4]);
+      ctx.beginPath();
+      ctx.rect(rect.x0, rect.y0, rect.x1 - rect.x0, rect.y1 - rect.y0);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
 
     if (editor.hqFrames && usedNu >= 40 && usedNv >= 30) {
@@ -2933,7 +3846,7 @@ function showEditor(node, type, options = {}) {
 
   function drawCutoutOutputPreview() {
     if (type !== "cutout") return;
-    const shot = getSelected() || state.shots?.[0];
+    const shot = getActiveCutoutShot();
     if (!shot) {
       editor.outputPreviewRect = null;
       if (outputPreviewToggleBtn) outputPreviewToggleBtn.style.display = "none";
@@ -3000,13 +3913,7 @@ function showEditor(node, type, options = {}) {
 
     const img = getConnectedErpImage();
     const previewRect = { x: px, y: py, w: pw, h: ph };
-    const erpPreviewRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
-    const getLivePaintRevisionSuffix = () => {
-      const interactionKind = String(editor.interaction?.kind || "");
-      const geometry = editor.interaction?.stroke?.geometry || null;
-      if (interactionKind !== "paint_stroke" && interactionKind !== "paint_lasso_fill") return "";
-      return `_live${geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0}`;
-    };
+    const erpPreviewRaster = editor.paintEngine?.getErpTarget?.(getOrderedPaintGroupIds())?.displayPaint?.canvas || null;
 
     const renderPreviewPaint = () => {
       if (erpPreviewRaster) {
@@ -3047,14 +3954,7 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
-    const glDrawn = renderCutoutViewToContext2D({
-      owner: node,
-      cacheKey: "modal_cutout_output_preview",
-      ctx,
-      rect: previewRect,
-      img,
-      view: cutoutView,
-    });
+    const glDrawn = drawOrderedDisplayListInView(ctx, previewRect, cutoutView, img, "modal_cutout_output_preview");
     const fallbackDrawn = !glDrawn && drawCutoutProjectionPreview(
       ctx,
       node,
@@ -3481,6 +4381,21 @@ function showEditor(node, type, options = {}) {
       : [];
   }
 
+  function projectErpPointsToCurrentView(points) {
+    if (!Array.isArray(points) || points.length < 1) return [];
+    if (editor.mode === "unwrap") {
+      const r = getUnwrapRect();
+      return points.map((pt) => ({
+        x: r.x + (Number(pt.u || 0) * r.w),
+        y: r.y + (Number(pt.v || 0) * r.h),
+      }));
+    }
+    const projected = points.map((pt) => projectDir(erpPointToWorldDir(pt))).filter(Boolean);
+    return projected.every((pt) => Number(pt.z || 0) > 0)
+      ? projected.map((pt) => ({ x: Number(pt.x || 0), y: Number(pt.y || 0) }))
+      : [];
+  }
+
   function isProjectedPolygonContinuous(projected, maxJump = 160) {
     if (!Array.isArray(projected) || projected.length < 3) return false;
     for (let i = 0; i < projected.length; i += 1) {
@@ -3507,6 +4422,21 @@ function showEditor(node, type, options = {}) {
       });
     }
     return isProjectedPolygonContinuous(projected, Math.max(80, Math.max(rect.w, rect.h) * 0.75)) ? projected : [];
+  }
+
+  function projectErpPointsToFrameRect(points, shot, rect) {
+    if (!Array.isArray(points) || points.length < 1 || !shot || !rect) return [];
+    const projected = [];
+    for (const pt of points) {
+      const dir = erpPointToWorldDir(pt);
+      const local = worldDirToFrameLocalPoint(shot, dir);
+      if (!local) continue;
+      projected.push({
+        x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+        y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+      });
+    }
+    return projected;
   }
 
   function drawLassoPreviewPolygon(projected, stroke, options = {}) {
@@ -3558,14 +4488,7 @@ function showEditor(node, type, options = {}) {
     ctx.clip();
     if (img && (img.complete || img.naturalWidth || img.width) && Number(img.naturalWidth || img.width || 0) > 1 && Number(img.naturalHeight || img.height || 0) > 1) {
       const view = buildCutoutViewParamsFromShot(shot);
-      const glDrawn = renderCutoutViewToContext2D({
-        owner: node,
-        cacheKey: `modal_frame_bg_${String(shot.id || "")}`,
-        ctx,
-        rect,
-        img,
-        view,
-      });
+      const glDrawn = drawOrderedDisplayListInView(ctx, rect, view, img, `modal_frame_${String(shot.id || "")}`);
       if (!glDrawn) {
         drawCutoutProjectionPreview(
           ctx,
@@ -3579,27 +4502,6 @@ function showEditor(node, type, options = {}) {
     } else {
       ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
       ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
-    }
-    rebuildPaintEngineIfNeeded();
-    // Project ERP paint into the frame rect so strokes are world-fixed.
-    // Frame paint is now stored in ERP_GLOBAL space; the cutout projection shows
-    // the correct slice of the panorama paint for the current frame orientation.
-    const erpRaster = editor.paintEngine?.getErpTarget?.()?.displayPaint?.canvas || null;
-    if (erpRaster) {
-      const _iKind = editor.interaction?.kind;
-      const _iGeo = editor.interaction?.stroke?.geometry;
-      const activePoints = (_iKind === "paint_stroke" || _iKind === "paint_lasso_fill")
-        ? `_live${_iGeo?.rawPoints?.length ?? _iGeo?.points?.length ?? 0}`
-        : "";
-      renderCutoutViewToContext2D({
-        owner: node,
-        cacheKey: `modal_frame_paint_${String(shot.id || "")}`,
-        ctx,
-        rect,
-        img: erpRaster,
-        view: buildCutoutViewParamsFromShot(shot),
-        backgroundRevision: getPaintingRevisionKey() + activePoints,
-      });
     }
     ctx.restore();
     ctx.save();
@@ -3649,11 +4551,7 @@ function showEditor(node, type, options = {}) {
     if (editor.mode === "frame") drawFrameViewBackground();
     else if (editor.mode === "unwrap") drawGridUnwrap(false);
     else drawGridPano(false);
-    const stickerSceneDrawn = renderModalStickerScene();
-    if (type === "stickers" && !stickerSceneDrawn) {
-      renderModalStickerBodyFallback();
-    }
-    if (editor.mode !== "frame") drawObjects();
+    drawObjects();
     if (editor.mode !== "frame") drawCutoutOutputPreview();
     drawLassoOutlineOverlay();
     if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
@@ -3776,7 +4674,10 @@ function showEditor(node, type, options = {}) {
     const parsed = JSON.parse(snapshot);
     Object.keys(state).forEach((k) => delete state[k]);
     Object.assign(state, parsed);
-    editor.selectedId = type === "stickers" ? state.active.selected_sticker_id : state.active.selected_shot_id;
+    editor.selectedId = type === "stickers"
+      ? state.active.selected_sticker_id
+      : (type === "cutout" ? state.active.selected_sticker_id : state.active.selected_shot_id);
+    editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
     editor.paintStrokeRevision += 1;
     syncPaintUi();
     updateSidePanel();
@@ -4121,38 +5022,38 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
-    const list = getList();
     const selected = getSelected();
-    if (selected) {
-      editor.panelLastValues = {
-        yaw_deg: Number(selected.yaw_deg || 0),
-        pitch_deg: Number(selected.pitch_deg || 0),
-        hFOV_deg: Number(selected.hFOV_deg || (type === "stickers" ? 30 : 90)),
-        vFOV_deg: Number(selected.vFOV_deg || (type === "stickers" ? 30 : 60)),
-        rot_deg: Number(selected.rot_deg || 0),
-        roll_deg: Number(selected.roll_deg || 0),
-        out_w: Number(selected.out_w || 1024),
-        out_h: Number(selected.out_h || 1024),
-        aspect_id: getCutoutAspectLabel(selected),
-      };
+    const selectedItems = getSelectedItems();
+    const selectedKind = getSelectedKind();
+    if (selectedItems.length > 1) {
+      editor.panelLastValues = editor.panelLastValues || { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 30, vFOV_deg: 30, rot_deg: 0 };
     }
-    const fallback = editor.panelLastValues || (type === "stickers"
+    if (selected) {
+      if (selectedKind !== "stroke") {
+        editor.panelLastValues = {
+          yaw_deg: Number(selected.yaw_deg || 0),
+          pitch_deg: Number(selected.pitch_deg || 0),
+          hFOV_deg: Number(selected.hFOV_deg || (selectedKind === "image" ? 30 : 90)),
+          vFOV_deg: Number(selected.vFOV_deg || (selectedKind === "image" ? 30 : 60)),
+          rot_deg: Number(selected.rot_deg || 0),
+          roll_deg: Number(selected.roll_deg || 0),
+          out_w: Number(selected.out_w || 1024),
+          out_h: Number(selected.out_h || 1024),
+          aspect_id: getCutoutAspectLabel(selected),
+        };
+      }
+    }
+    const fallback = editor.panelLastValues || ((type === "stickers" || selectedKind === "image")
       ? { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 30, vFOV_deg: 30, rot_deg: 0 }
       : { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 90, vFOV_deg: 60, roll_deg: 0, out_w: 1024, out_h: 1024, aspect_id: "1:1" });
-    const effective = selected || fallback;
-    const enabled = !!selected;
+    const inspectorSelected = selectedKind === "stroke" ? null : selected;
+    const effective = inspectorSelected || fallback;
+    const enabled = !!inspectorSelected;
 
     const inspector = document.createElement("div");
     inspector.className = "pano-inspector";
-    const counts = paintingStrokeCount(state.painting);
     const summary = document.createElement("div");
     summary.innerHTML = `
-      <div class="pano-section-title">
-        <span>Paint Rebuild</span>
-        <span class="meta">${editor.primaryTool === "cursor" ? "Cursor" : (editor.primaryTool === "paint" ? `Paint · ${editor.paintTool}` : `Mask · ${editor.maskTool}`)}</span>
-      </div>
-      <div class="pano-param-note">All strokes use ERP_GLOBAL (normalized u,v).</div>
-      <div class="pano-param-note">Durable strokes: paint ${counts.paintCount} / mask ${counts.maskCount}</div>
       <div class="pano-section-title">
         <span>Transform</span>
       </div>
@@ -4160,11 +5061,12 @@ function showEditor(node, type, options = {}) {
     while (summary.firstChild) inspector.appendChild(summary.firstChild);
     side.appendChild(inspector);
 
-    if (type === "stickers") {
+    if (type === "stickers" || type === "cutout") {
       const targetRow = document.createElement("div");
       targetRow.className = "pano-field-wide pano-target-row";
+      const rowLabel = type === "stickers" ? "Selection" : "Selection";
       targetRow.innerHTML = `
-        <label>Image</label>
+        <label>${rowLabel}</label>
         <div class="pano-picker">
           <button class="pano-picker-trigger" type="button">
             <span class="pano-picker-label"></span>
@@ -4176,29 +5078,34 @@ function showEditor(node, type, options = {}) {
       const trigger = targetRow.querySelector(".pano-picker-trigger");
       const labelEl = targetRow.querySelector(".pano-picker-label");
       const pop = targetRow.querySelector(".pano-picker-pop");
-      const items = [{ id: "", label: "No image" }];
-      list.forEach((item, i) => {
-        const baseLabel = isExternalSticker(item)
-          ? String(item.id || EXTERNAL_STICKER_ID)
-          : String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id);
-        const label = `${i + 1}. ${baseLabel}${isExternalSticker(item) && isStickerHidden(item) ? " (hidden)" : ""}`;
-        items.push({ id: item.id, label });
-      });
-      const currentId = selected?.id || "";
-      const currentLabel = (items.find((it) => it.id === currentId) || items[0]).label;
-      labelEl.textContent = currentLabel;
+      const items = [{ id: "", label: type === "stickers" ? "No image" : "Nothing selected", item: null }];
+      if (type === "stickers") {
+        getList().forEach((item, i) => {
+          const baseLabel = isExternalSticker(item)
+            ? String(item.id || EXTERNAL_STICKER_ID)
+            : String(state.assets?.[item.asset_id]?.name || item.asset_id || item.id);
+          const label = `${i + 1}. ${baseLabel}${isExternalSticker(item) && isStickerHidden(item) ? " (hidden)" : ""}`;
+          items.push({ id: item.id, label, item, kind: "image" });
+        });
+      } else {
+        getCutoutInspectorItems().forEach((entry) => {
+          items.push({ id: entry.item.id, label: entry.label, item: entry.item, kind: entry.kind });
+        });
+      }
+      const currentId = inspectorSelected?.id || "";
+      const currentItem = items.find((it) => it.id === currentId) || items[0];
+      labelEl.innerHTML = currentItem.item ? getSelectionItemLabelHtml(currentItem) : escapeHtml(String(currentItem.label || ""));
       pop.innerHTML = "";
       items.forEach((it) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = `pano-picker-item${it.id === currentId ? " active" : ""}`;
-        btn.textContent = it.label;
+        btn.innerHTML = it.item ? getSelectionItemLabelHtml(it) : escapeHtml(String(it.label || ""));
         btn.onclick = () => {
           pop.hidden = true;
-          editor.selectedId = it.id || null;
-          state.active.selected_sticker_id = editor.selectedId;
-          const selectedNow = getSelected();
-          if (selectedNow) {
+          setSelectedItem(it.item || null);
+          const selectedNow = it.item || null;
+          if (selectedNow && !isStrokeGroupItem(selectedNow)) {
             const targetYaw = wrapYaw(Number(selectedNow.yaw_deg || 0));
             const targetPitch = clamp(Number(selectedNow.pitch_deg || 0), -89.9, 89.9);
             startViewTween(targetYaw, targetPitch, editor.viewFov);
@@ -4209,7 +5116,7 @@ function showEditor(node, type, options = {}) {
         };
         pop.appendChild(btn);
       });
-      trigger.disabled = list.length === 0;
+      trigger.disabled = items.length <= 1;
       trigger.onclick = (ev) => {
         ev.stopPropagation();
         if (trigger.disabled) return;
@@ -4222,10 +5129,10 @@ function showEditor(node, type, options = {}) {
     toolsRow.className = "pano-state-actions";
     toolsRow.innerHTML = `<button class="pano-btn subtle pano-btn-tight pano-btn-copy" data-action="copy-state-inline">${ICON.copy}<span>Copy State</span></button>`;
     const copyInline = toolsRow.querySelector("[data-action='copy-state-inline']");
-    copyInline.disabled = !enabled;
+    copyInline.disabled = !enabled || selectedKind === "stroke" || selectedItems.length > 1;
     copyInline.onclick = async () => {
-      if (!enabled) return;
-      const text = JSON.stringify(type === "cutout"
+      if (!enabled || selectedKind === "stroke" || selectedItems.length > 1) return;
+      const text = JSON.stringify(type === "cutout" && selectedKind !== "image"
         ? buildCanonicalCutoutStickerState(effective)
         : buildCanonicalSelectedStickerState(selected));
       try {
@@ -4247,116 +5154,36 @@ function showEditor(node, type, options = {}) {
     paramsWrap.className = `pano-params${editor.panelWasEnabled ? "" : " disabled"}`;
     inspector.appendChild(paramsWrap);
 
-    if (type === "cutout") {
-      const aspectRow = document.createElement("div");
-      aspectRow.className = "pano-field-wide pano-aspect-row";
-      const aspectLabel = getCutoutAspectLabel(effective);
-      aspectRow.innerHTML = `
-        <label>Aspect</label>
-        <div class="pano-cutout-aspect-inline">
-          <div class="pano-picker pano-cutout-aspect-picker">
-            <button class="pano-picker-trigger pano-cutout-aspect-trigger" type="button" ${enabled ? "" : "disabled"}>
-              <span class="pano-cutout-aspect-label">${ICON.aspect}<span>${aspectLabel}</span></span>
-              <span class="pano-picker-caret">▾</span>
-            </button>
-            <div class="pano-picker-pop pano-cutout-aspect-pop" hidden>
-              <div class="pano-cutout-aspect-presets">
-                <button class="pano-picker-item" type="button" data-aspect="1:1">1:1</button>
-                <button class="pano-picker-item" type="button" data-aspect="4:3">4:3</button>
-                <button class="pano-picker-item" type="button" data-aspect="3:2">3:2</button>
-                <button class="pano-picker-item" type="button" data-aspect="16:9">16:9</button>
-              </div>
-              <div class="pano-cutout-aspect-custom">
-                <input type="number" min="1" step="1" value="1" data-role="custom-w" aria-label="Aspect width">
-                <span>:</span>
-                <input type="number" min="1" step="1" value="1" data-role="custom-h" aria-label="Aspect height">
-                <button class="pano-btn" type="button" data-action="aspect-custom-apply">Set</button>
-              </div>
-            </div>
-          </div>
-          <button class="pano-btn pano-btn-icon pano-cutout-aspect-rotate" type="button" data-action="rotate-90-side" aria-label="Rotate 90°" ${enabled ? "" : "disabled"}>${ICON.rotate_90}</button>
-        </div>
+    if (selectedItems.length > 1) {
+      paramsWrap.innerHTML = `
+        <div class="pano-param-note">Selected objects: ${selectedItems.length}</div>
+        <div class="pano-param-note">Multi-selection supports z-order and delete.</div>
       `;
-      const trigger = aspectRow.querySelector(".pano-picker-trigger");
-      const pop = aspectRow.querySelector(".pano-cutout-aspect-pop");
-      const labelSpan = aspectRow.querySelector(".pano-cutout-aspect-label span");
-      const cw = aspectRow.querySelector("[data-role='custom-w']");
-      const ch = aspectRow.querySelector("[data-role='custom-h']");
-      const applyCustomBtn = aspectRow.querySelector("[data-action='aspect-custom-apply']");
-      const rotateBtn = aspectRow.querySelector("[data-action='rotate-90-side']");
-      const refreshAspectUi = () => {
-        const now = getSelected();
-        const text = getCutoutAspectLabel(now || effective);
-        if (labelSpan) labelSpan.textContent = text;
-        const presets = pop.querySelectorAll("[data-aspect]");
-        presets.forEach((btn) => {
-          btn.classList.toggle("active", String(btn.getAttribute("data-aspect")) === text);
-        });
-      };
-      if (enabled) {
-        trigger.onclick = (ev) => {
-          ev.stopPropagation();
-          pop.hidden = !pop.hidden;
-        };
-        pop.querySelectorAll("[data-aspect]").forEach((btn) => {
-          btn.onclick = () => {
-            const now = getSelected();
-            if (!now) return;
-            applyCutoutAspect(now, String(btn.getAttribute("data-aspect") || "1:1"));
-            pop.hidden = true;
-            refreshAspectUi();
-            syncSidePanelControls();
-            pushHistory();
-            commitAndRefreshNode();
-            requestDraw();
-          };
-        });
-        applyCustomBtn.onclick = () => {
-          const now = getSelected();
-          if (!now) return;
-          const ok = applyCutoutAspectCustom(now, Number(cw.value), Number(ch.value));
-          if (!ok) return;
-          pop.hidden = true;
-          refreshAspectUi();
-          syncSidePanelControls();
-          pushHistory();
-          commitAndRefreshNode();
-          requestDraw();
-        };
-        rotateBtn.onclick = () => {
-          const now = getSelected();
-          if (!now) return;
-          rotateCutoutAspect90(now);
-          refreshAspectUi();
-          syncSidePanelControls();
-          pushHistory();
-          commitAndRefreshNode();
-          requestDraw();
-        };
-      }
-      refreshAspectUi();
-      paramsWrap.appendChild(aspectRow);
-    }
-
-    addParamRow(paramsWrap, effective, "yaw_deg", "Yaw", -180, 180, 0.1, enabled && !readOnly);
-    addParamRow(paramsWrap, effective, "pitch_deg", "Pitch", -90, 90, 0.1, enabled && !readOnly);
-    addParamRow(paramsWrap, effective, "hFOV_deg", "H FOV", 1, 179, 0.1, enabled && !readOnly);
-    addParamRow(paramsWrap, effective, "vFOV_deg", "V FOV", 1, 179, 0.1, enabled && !readOnly);
-    if (type === "stickers") {
-      addParamRow(paramsWrap, effective, "rot_deg", "Rotation", -180, 180, 0.1, enabled && !readOnly);
-    } else {
-      addParamRow(paramsWrap, effective, "roll_deg", "Roll", -180, 180, 0.1, enabled && !readOnly);
-    }
-
-    if (enabled !== editor.panelWasEnabled) {
-      requestAnimationFrame(() => {
-        paramsWrap.classList.toggle("disabled", !enabled);
-      });
-    } else {
       paramsWrap.classList.toggle("disabled", !enabled);
+      editor.panelWasEnabled = enabled;
+      syncLookAtFrameButtonState();
+    } else {
+
+      addParamRow(paramsWrap, effective, "yaw_deg", "Yaw", -180, 180, 0.1, enabled && !readOnly);
+      addParamRow(paramsWrap, effective, "pitch_deg", "Pitch", -90, 90, 0.1, enabled && !readOnly);
+      addParamRow(paramsWrap, effective, "hFOV_deg", "H FOV", 1, 179, 0.1, enabled && !readOnly);
+      addParamRow(paramsWrap, effective, "vFOV_deg", "V FOV", 1, 179, 0.1, enabled && !readOnly);
+      if (type === "stickers" || selectedKind === "image") {
+        addParamRow(paramsWrap, effective, "rot_deg", "Rotation", -180, 180, 0.1, enabled && !readOnly);
+      } else {
+        addParamRow(paramsWrap, effective, "roll_deg", "Roll", -180, 180, 0.1, enabled && !readOnly);
+      }
+
+      if (enabled !== editor.panelWasEnabled) {
+        requestAnimationFrame(() => {
+          paramsWrap.classList.toggle("disabled", !enabled);
+        });
+      } else {
+        paramsWrap.classList.toggle("disabled", !enabled);
+      }
+      editor.panelWasEnabled = enabled;
+      syncLookAtFrameButtonState();
     }
-    editor.panelWasEnabled = enabled;
-    syncLookAtFrameButtonState();
 
     if (!readOnly) {
       const uiDetails = document.createElement("details");
@@ -4515,7 +5342,7 @@ function showEditor(node, type, options = {}) {
 
   async function addImageStickerFromFile(file) {
     if (readOnly) return;
-    if (type !== "stickers") return;
+    if (type !== "stickers" && type !== "cutout") return;
     if (!isImageFile(file)) return;
     const aid = uid("asset");
     const tempUrl = URL.createObjectURL(file);
@@ -4529,7 +5356,6 @@ function showEditor(node, type, options = {}) {
       imageCache.set(aid, img);
       const uploaded = await uploadStickerAssetFile(file, String(file.name || aid));
       state.assets[aid] = uploaded;
-      const ar = (img.naturalHeight || img.height || 1) / (img.naturalWidth || img.width || 1);
       const id = uid("st");
       state.stickers.push({
         id,
@@ -4537,12 +5363,11 @@ function showEditor(node, type, options = {}) {
         yaw_deg: editor.viewYaw,
         pitch_deg: editor.viewPitch,
         hFOV_deg: 30,
-        vFOV_deg: clamp(30 * ar, 1, 179),
+        vFOV_deg: computeStickerVFov(30, Number(img.naturalWidth || img.width || 1), Number(img.naturalHeight || img.height || 1)),
         rot_deg: 0,
         z_index: getNextStickerZIndex(),
       });
-      editor.selectedId = id;
-      state.active.selected_sticker_id = id;
+      setSelectedItem(state.stickers[state.stickers.length - 1]);
       pushHistory();
       commitAndRefreshNode();
       updateSidePanel();
@@ -4558,6 +5383,7 @@ function showEditor(node, type, options = {}) {
 
   function addImageSticker() {
     if (readOnly) return;
+    if (type !== "stickers" && type !== "cutout") return;
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
@@ -4619,9 +5445,8 @@ function showEditor(node, type, options = {}) {
       out_h: 1024,
       aspect_id: "1:1",
     }];
-    editor.selectedId = state.shots[0].id;
+    setSelectedItem(state.shots[0]);
     editor.cutoutAspectOpen = false;
-    state.active.selected_shot_id = editor.selectedId;
     pushHistory();
     commitAndRefreshNode();
     updateSidePanel();
@@ -4633,6 +5458,7 @@ function showEditor(node, type, options = {}) {
     if (type !== "cutout") return;
     state.shots = [];
     editor.selectedId = null;
+    editor.selectedIds = [];
     if (editor.mode === "frame") editor.mode = "pano";
     editor.cutoutAspectOpen = false;
     state.active.selected_shot_id = null;
@@ -4678,7 +5504,7 @@ function showEditor(node, type, options = {}) {
       "Clear All Paint Data",
       type === "stickers"
         ? "This will remove all paint, mask, and sticker images in the current node."
-        : "This will remove all paint, mask, and cutout frames in the current node.",
+        : "This will remove all paint, mask, cutout frames, and images in the current node.",
       "Clear All",
     );
     if (!ok) return;
@@ -4688,14 +5514,20 @@ function showEditor(node, type, options = {}) {
       state.stickers = [];
       state.assets = {};
       editor.selectedId = null;
+      editor.selectedIds = [];
       state.active.selected_sticker_id = null;
       pruneUnusedAssets();
     } else {
+      state.stickers = [];
+      state.assets = {};
       state.shots = [];
       editor.selectedId = null;
+      editor.selectedIds = [];
+      state.active.selected_sticker_id = null;
       state.active.selected_shot_id = null;
       if (editor.mode === "frame") editor.mode = "pano";
       editor.cutoutAspectOpen = false;
+      pruneUnusedAssets();
     }
     pushHistory();
     commitAndRefreshNode();
@@ -4722,6 +5554,9 @@ function showEditor(node, type, options = {}) {
       editor.interaction = null;
     }
     strokes.length = 0;
+    if (kind === "paint") {
+      getPaintingGroupList().length = 0;
+    }
     editor.paintStrokeRevision += 1;
     pushHistory();
     commitAndRefreshNode();
@@ -4733,32 +5568,70 @@ function showEditor(node, type, options = {}) {
 
   function duplicateSelected() {
     if (readOnly) return;
-    if (type !== "stickers") return;
     const selected = getSelected();
     if (!selected) return;
-    if (isExternalSticker(selected)) return;
+    if (!isStickerItem(selected) || isExternalSticker(selected)) return;
     const copy = JSON.parse(JSON.stringify(selected));
-    copy.id = uid(type === "stickers" ? "st" : "sh");
+    copy.id = uid("st");
     copy.yaw_deg = wrapYaw((copy.yaw_deg || 0) + 8);
-    if (type === "stickers") {
-      copy.z_index = getNextStickerZIndex();
-      state.stickers.push(copy);
-      state.active.selected_sticker_id = copy.id;
-    } else {
-      state.shots = [copy];
-      state.active.selected_shot_id = copy.id;
-    }
+    copy.z_index = getNextStickerZIndex();
+    state.stickers.push(copy);
+    state.active.selected_sticker_id = copy.id;
     editor.selectedId = copy.id;
+    editor.selectedIds = [copy.id];
     pushHistory();
+    commitAndRefreshNode();
+    updateSelectionMenu();
     updateSidePanel();
     requestDraw();
   }
 
   function deleteSelected() {
     if (readOnly) return;
+    const selectedItems = getSelectedItems();
     const selected = getSelected();
-    if (!selected) return;
-    if (type === "stickers") {
+    if (!selected && selectedItems.length === 0) return;
+    if (selectedItems.length > 1) {
+      const paintStrokeIds = new Set(selectedItems
+        .filter((item) => isStrokeGroupItem(item))
+        .map((item) => String(item.actionGroupId || item.id || "")));
+      const stickerIds = new Set(selectedItems.filter(isStickerItem).map((item) => String(item.id || "")));
+      if (paintStrokeIds.size > 0) {
+        state.painting.paint.strokes = (Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : [])
+          .filter((stroke) => !paintStrokeIds.has(String(stroke?.actionGroupId || "")));
+        state.painting.groups = getPaintingGroupList()
+          .filter((group) => !paintStrokeIds.has(String(group?.actionGroupId || group?.id || "")));
+      }
+      if (stickerIds.size > 0) {
+        state.stickers = (Array.isArray(state.stickers) ? state.stickers : [])
+          .filter((item) => !stickerIds.has(String(item?.id || "")));
+        pruneUnusedAssets();
+      }
+      editor.selectedId = null;
+      editor.selectedIds = [];
+      pushHistory();
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+      return;
+    }
+    if (isStrokeGroupItem(selected)) {
+      const gid = String(selected.actionGroupId || selected.id || "").trim();
+      state.painting.paint.strokes = (Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : [])
+        .filter((stroke) => String(stroke?.actionGroupId || "").trim() !== gid);
+      state.painting.groups = getPaintingGroupList()
+        .filter((group) => String(group?.actionGroupId || group?.id || "").trim() !== gid);
+      editor.selectedId = null;
+      editor.selectedIds = [];
+      pushHistory();
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+      return;
+    }
+    if (type === "stickers" || isStickerItem(selected)) {
       if (isExternalSticker(selected)) {
         selected.visible = isStickerHidden(selected);
         pushHistory();
@@ -4770,11 +5643,13 @@ function showEditor(node, type, options = {}) {
       }
       state.stickers = state.stickers.filter((s) => s.id !== selected.id);
       pruneUnusedAssets();
-      editor.selectedId = state.stickers[0]?.id || null;
-      state.active.selected_sticker_id = editor.selectedId;
+      editor.selectedId = type === "cutout" ? (state.active.selected_shot_id || state.stickers[0]?.id || null) : (state.stickers[0]?.id || null);
+      editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
+      state.active.selected_sticker_id = state.stickers[0]?.id || null;
       pushHistory();
       commitAndRefreshNode();
       updateSidePanel();
+      updateSelectionMenu();
       requestDraw();
       return;
     }
@@ -4854,44 +5729,70 @@ function showEditor(node, type, options = {}) {
     selected.vFOV_deg = hf;
   }
 
-  function normalizeStickerZIndices() {
-    state.stickers
-      .sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0))
-      .forEach((st, i) => { st.z_index = i; });
+  function normalizeDisplayZIndices() {
+    const ordered = getDisplayListObjects();
+    ordered.forEach((entry, index) => {
+      if (entry.type === "sticker" && entry.item) entry.item.z_index = index;
+      if (entry.type === "strokeGroup" && entry.item) entry.item.z_index = index;
+    });
   }
 
   function bringSelectedToFront() {
     if (readOnly) return;
-    if (type !== "stickers") return;
+    const selectedItems = getSelectedItems();
     const selected = getSelected();
-    if (!selected) return;
-    normalizeStickerZIndices();
-    const sorted = [...state.stickers].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
-    const idx = sorted.findIndex((s) => s.id === selected.id);
-    if (idx < 0 || idx === sorted.length - 1) return;
-    const [item] = sorted.splice(idx, 1);
-    sorted.push(item);
-    sorted.forEach((s, i) => { s.z_index = i; });
+    if (!selected || selectedItems.length === 0) return;
+    normalizeDisplayZIndices();
+    const ordered = getDisplayListObjects();
+    const selectedKeys = new Set(selectedItems.map((item) => `${isStickerItem(item) ? "sticker" : "strokeGroup"}:${String(isStickerItem(item) ? item.id : (item.actionGroupId || item.id || ""))}`));
+    const moving = [];
+    const staying = [];
+    ordered.forEach((entry) => {
+      const key = entry.type === "sticker"
+        ? `sticker:${String(entry.item?.id || "")}`
+        : `strokeGroup:${String(entry.actionGroupId || "")}`;
+      if (selectedKeys.has(key)) moving.push(entry);
+      else staying.push(entry);
+    });
+    if (!moving.length || moving[moving.length - 1] === ordered[ordered.length - 1]) return;
+    const nextOrdered = [...staying, ...moving];
+    nextOrdered.forEach((item, index) => {
+      if (item.type === "sticker" && item.item) item.item.z_index = index;
+      if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
+    });
     editor._sortedItemsCache = null;
     pushHistory();
+    commitAndRefreshNode();
     updateSelectionMenu();
     requestDraw();
   }
 
   function sendSelectedToBack() {
     if (readOnly) return;
-    if (type !== "stickers") return;
+    const selectedItems = getSelectedItems();
     const selected = getSelected();
-    if (!selected) return;
-    normalizeStickerZIndices();
-    const sorted = [...state.stickers].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
-    const idx = sorted.findIndex((s) => s.id === selected.id);
-    if (idx <= 0) return;
-    const [item] = sorted.splice(idx, 1);
-    sorted.unshift(item);
-    sorted.forEach((s, i) => { s.z_index = i; });
+    if (!selected || selectedItems.length === 0) return;
+    normalizeDisplayZIndices();
+    const ordered = getDisplayListObjects();
+    const selectedKeys = new Set(selectedItems.map((item) => `${isStickerItem(item) ? "sticker" : "strokeGroup"}:${String(isStickerItem(item) ? item.id : (item.actionGroupId || item.id || ""))}`));
+    const moving = [];
+    const staying = [];
+    ordered.forEach((entry) => {
+      const key = entry.type === "sticker"
+        ? `sticker:${String(entry.item?.id || "")}`
+        : `strokeGroup:${String(entry.actionGroupId || "")}`;
+      if (selectedKeys.has(key)) moving.push(entry);
+      else staying.push(entry);
+    });
+    if (!moving.length || moving[0] === ordered[0]) return;
+    const nextOrdered = [...moving, ...staying];
+    nextOrdered.forEach((item, index) => {
+      if (item.type === "sticker" && item.item) item.item.z_index = index;
+      if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
+    });
     editor._sortedItemsCache = null;
     pushHistory();
+    commitAndRefreshNode();
     updateSelectionMenu();
     requestDraw();
   }
@@ -4947,7 +5848,9 @@ function showEditor(node, type, options = {}) {
 
   function getActiveCutoutShot() {
     if (type !== "cutout") return null;
-    return getSelected() || state.shots?.[0] || null;
+    const shots = Array.isArray(state.shots) ? state.shots : [];
+    const preferredId = String(state.active?.selected_shot_id || "");
+    return shots.find((shot) => String(shot?.id || "") === preferredId) || shots[0] || null;
   }
 
   function getFrameViewRect(shot = getActiveCutoutShot()) {
@@ -5346,6 +6249,7 @@ function showEditor(node, type, options = {}) {
     if (geometry.geometryKind === "lasso_fill") {
       const points = Array.isArray(geometry.points) ? geometry.points : [];
       if (points.length < 3) return false;
+      if (interaction.layerKind === "paint") ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
       getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
       return true;
     }
@@ -5353,13 +6257,93 @@ function showEditor(node, type, options = {}) {
     if (rawPoints.length < 1) return false;
     // ADR 0006: processedPoints is durable; rasterizer (Python) uses it directly.
     geometry.processedPoints = processFreehandPoints(rawPoints, interaction.stroke.targetSpace, true);
+    if (interaction.layerKind === "paint") ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
   }
 
   function hitObjectAt(p) {
-    const items = [...getList()].sort((a, b) => Number(b.z_index || 0) - Number(a.z_index || 0));
+    if (type === "cutout" && editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      const rect = getFrameViewRect(shot);
+      if (!shot || !rect) return null;
+      const insideRect = Number(p?.x || 0) >= Number(rect.x || 0)
+        && Number(p?.x || 0) <= Number(rect.x || 0) + Number(rect.w || 0)
+        && Number(p?.y || 0) >= Number(rect.y || 0)
+        && Number(p?.y || 0) <= Number(rect.y || 0) + Number(rect.h || 0);
+      if (!insideRect) return null;
+      const erpPoint = screenPosToFrameAsErpPoint(p, shot, performance.now());
+      const dir = erpPoint ? erpPointToWorldDir(erpPoint) : null;
+      if (dir) {
+        for (const item of getCutoutSelectableItemsForHit()) {
+          if (!isStickerItem(item)) continue;
+          const local = worldDirToFrameLocalPoint(item, dir);
+          if (!local) continue;
+          if (Number(local.x) >= 0 && Number(local.x) <= 1 && Number(local.y) >= 0 && Number(local.y) <= 1) {
+            const geom = objectGeom(item);
+            if (geom?.visible) return { item, geom };
+          }
+        }
+      }
+      const items = getOrderedDisplayListObjects(false).slice().sort((a, b) => Number(b?.z_index || 0) - Number(a?.z_index || 0));
+      for (const entry of items) {
+        if (entry.type === "strokeGroup") {
+          const item = getStrokeGroupItem(makeStrokeGroupSelectionId("paint", entry.actionGroupId || entry.id || ""));
+          if (!item) continue;
+          const geom = objectGeom(item);
+          if (!geom?.visible) continue;
+          const paths = Array.isArray(geom.strokePaths) ? geom.strokePaths : [];
+          for (const path of paths) {
+            const pts = Array.isArray(path?.points) ? path.points : [];
+            if (!pts.length) continue;
+            if (path.closed && pts.length >= 3 && pointInPoly(p, pts)) return { item, geom };
+            const threshold = Math.max(8, Number(path?.lineWidth || 0) * 0.5 + 6);
+            for (let i = 0; i < pts.length - 1; i += 1) {
+              if (distToSegment2(p, pts[i], pts[i + 1]) <= threshold * threshold) return { item, geom };
+            }
+            if (pts.length === 1 && dist2(p, pts[0]) <= threshold * threshold) return { item, geom };
+          }
+          continue;
+        }
+        const item = entry.item;
+        if (!item || !isStickerItem(item)) continue;
+        if (!dir) continue;
+        const local = worldDirToFrameLocalPoint(item, dir);
+        if (!local) continue;
+        if (Number(local.x) >= 0 && Number(local.x) <= 1 && Number(local.y) >= 0 && Number(local.y) <= 1) {
+          const geom = objectGeom(item);
+          if (geom?.visible) return { item, geom };
+        }
+      }
+      return null;
+    }
+    const items = [
+      ...getOrderedDisplayListObjects(false)
+      .slice()
+      .sort((a, b) => Number(b?.z_index || 0) - Number(a?.z_index || 0))
+      .map((entry) => entry.type === "strokeGroup"
+        ? getStrokeGroupItem(makeStrokeGroupSelectionId("paint", entry.actionGroupId || entry.id || ""))
+        : entry.item)
+      .filter(Boolean),
+      ...(type === "cutout" ? getCutoutSelectableItemsForHit().filter((item) => isShotItem(item)) : []),
+    ];
     for (const item of items) {
+      if (isStrokeGroupItem(item)) {
+        const geom = objectGeom(item);
+        if (!geom?.visible) continue;
+        const paths = Array.isArray(geom.strokePaths) ? geom.strokePaths : [];
+        for (const path of paths) {
+          const pts = Array.isArray(path?.points) ? path.points : [];
+          if (!pts.length) continue;
+          if (path.closed && pts.length >= 3 && pointInPoly(p, pts)) return { item, geom };
+          const threshold = Math.max(8, Number(path?.lineWidth || 0) * 0.5 + 6);
+          for (let i = 0; i < pts.length - 1; i += 1) {
+            if (distToSegment2(p, pts[i], pts[i + 1]) <= threshold * threshold) return { item, geom };
+          }
+          if (pts.length === 1 && dist2(p, pts[0]) <= threshold * threshold) return { item, geom };
+        }
+        continue;
+      }
       const g = objectGeom(item);
       if (!g.visible) continue;
       if (pointInPoly(p, g.corners)) return { item, geom: g };
@@ -5369,6 +6353,27 @@ function showEditor(node, type, options = {}) {
 
   function handleHit(geom, p) {
     if (!geom || !geom.visible) return { kind: "none", cursor: editor.mode === "pano" ? "grab" : "default" };
+    if (geom.kind === "strokeGroup") {
+      const cornerIdx = geom.corners.findIndex((c) => dist2(c, p) <= 11 * 11);
+      if (cornerIdx >= 0) {
+        const c = geom.corners[cornerIdx];
+        const vx = c.x - geom.center.x;
+        const vy = c.y - geom.center.y;
+        const cursor = (vx * vy) >= 0 ? "nwse-resize" : "nesw-resize";
+        return { kind: "scale", cornerIdx, cursor };
+      }
+      const paths = Array.isArray(geom.strokePaths) ? geom.strokePaths : [];
+      for (const path of paths) {
+        const pts = Array.isArray(path?.points) ? path.points : [];
+        if (path.closed && pts.length >= 3 && pointInPoly(p, pts)) return { kind: "move", cursor: "default" };
+        const threshold = Math.max(8, Number(path?.lineWidth || 0) * 0.5 + 6);
+        for (let i = 0; i < pts.length - 1; i += 1) {
+          if (distToSegment2(p, pts[i], pts[i + 1]) <= threshold * threshold) return { kind: "move", cursor: "default" };
+        }
+      }
+      if (pointInPoly(p, geom.corners)) return { kind: "move", cursor: "default" };
+      return { kind: "none", cursor: editor.mode === "pano" ? "grab" : "default" };
+    }
     if (type === "cutout" && Array.isArray(geom.edgeMidpoints)) {
       const mid = geom.edgeMidpoints.find((m) => dist2(m, p) <= 13 * 13);
       if (mid) {
@@ -5385,8 +6390,34 @@ function showEditor(node, type, options = {}) {
       return { kind: "scale", cornerIdx, cursor };
     }
     if (dist2(geom.rotateHandle, p) <= 12 * 12) return { kind: "rotate", cursor: "grab" };
-    if (pointInPoly(p, geom.corners)) return { kind: "move", cursor: "move" };
+    if (pointInPoly(p, geom.corners)) return { kind: "move", cursor: "default" };
     return { kind: "none", cursor: editor.mode === "pano" ? "grab" : "default" };
+  }
+
+  function rectFromPoints(a, b) {
+    return {
+      x0: Math.min(Number(a?.x || 0), Number(b?.x || 0)),
+      y0: Math.min(Number(a?.y || 0), Number(b?.y || 0)),
+      x1: Math.max(Number(a?.x || 0), Number(b?.x || 0)),
+      y1: Math.max(Number(a?.y || 0), Number(b?.y || 0)),
+    };
+  }
+
+  function rectContainsPoint(rect, point) {
+    return !!rect && !!point
+      && Number(point.x) >= Number(rect.x0)
+      && Number(point.x) <= Number(rect.x1)
+      && Number(point.y) >= Number(rect.y0)
+      && Number(point.y) <= Number(rect.y1);
+  }
+
+  function rectIntersectsGeom(rect, geom) {
+    if (!rect || !geom?.visible || !Array.isArray(geom.corners)) return false;
+    if (geom.corners.some((corner) => rectContainsPoint(rect, corner))) return true;
+    const cx = (Number(rect.x0) + Number(rect.x1)) * 0.5;
+    const cy = (Number(rect.y0) + Number(rect.y1)) * 0.5;
+    if (pointInPoly({ x: cx, y: cy }, geom.corners)) return true;
+    return false;
   }
 
   function updateCursor(p) {
@@ -5395,7 +6426,7 @@ function showEditor(node, type, options = {}) {
       if (editor.interaction.kind === "paint_stroke" || editor.interaction.kind === "paint_lasso_fill") canvas.style.cursor = "none";
       else if (editor.interaction.kind === "view") canvas.style.cursor = "grabbing";
       else if (editor.interaction.kind === "pan_frame") canvas.style.cursor = "grabbing";
-      else if (editor.interaction.kind === "move") canvas.style.cursor = "move";
+      else if (editor.interaction.kind === "move" || editor.interaction.kind === "move_multi" || editor.interaction.kind === "move_stroke_group") canvas.style.cursor = "move";
       else if (editor.interaction.kind === "scale" || editor.interaction.kind === "scale_x" || editor.interaction.kind === "scale_y") canvas.style.cursor = editor.interaction.cursor || "nwse-resize";
       else if (editor.interaction.kind === "rotate") canvas.style.cursor = "grabbing";
       else canvas.style.cursor = "default";
@@ -5406,31 +6437,102 @@ function showEditor(node, type, options = {}) {
       return;
     }
     if (editor.mode === "frame") {
-      canvas.style.cursor = editor.primaryTool === "cursor" ? "grab" : "default";
+      if (editor.primaryTool === "cursor") {
+        const hit = hitObjectAt(p);
+        canvas.style.cursor = hit ? "default" : "default";
+      } else {
+        canvas.style.cursor = "default";
+      }
       return;
     }
     const selected = getSelected();
     const geom = selected ? objectGeom(selected) : null;
     const h = handleHit(geom, p);
-    canvas.style.cursor = h.cursor;
+    if (h.kind !== "none") {
+      canvas.style.cursor = h.cursor;
+      return;
+    }
+    if (editor.primaryTool === "cursor") {
+      const hit = hitObjectAt(p);
+      if (hit) {
+        canvas.style.cursor = "default";
+        return;
+      }
+    }
+    canvas.style.cursor = editor.mode === "pano" ? "grab" : "default";
   }
 
   function updateSelectionMenu() {
     if (!selectionMenu) return;
-    if (editor.mode === "frame") {
-      selectionMenu.style.display = "none";
-      return;
-    }
     const selected = getSelected();
-    if (!selected || editor.interaction) {
+    const selectedItems = getSelectedItems();
+    if ((!selected && selectedItems.length === 0) || editor.interaction) {
       selectionMenu.style.display = "none";
       return;
     }
-    const menuMode = type === "stickers"
+    if (selectedItems.length > 1) {
+      const menuMode = "multi";
+      if (editor.menuMode !== menuMode) {
+        selectionMenu.innerHTML = `
+          <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
+          <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
+          <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
+        `;
+        editor.menuMode = menuMode;
+        editor.menuSize.measured = false;
+        installTooltipHandlers(selectionMenu);
+      }
+      const multiGeom = getMultiSelectionGeom(selectedItems);
+      if (!multiGeom?.visible) {
+        selectionMenu.style.display = "none";
+        return;
+      }
+      const xs = multiGeom.corners.map((p) => p.x);
+      const ys = multiGeom.corners.map((p) => p.y);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const maxY = Math.max(...ys);
+      const prevDisplay = selectionMenu.style.display;
+      const prevVisibility = selectionMenu.style.visibility;
+      selectionMenu.style.display = "flex";
+      selectionMenu.style.visibility = "hidden";
+      const rect = selectionMenu.getBoundingClientRect();
+      const measuredW = Math.round(Number(rect?.width || 0)) || selectionMenu.offsetWidth || editor.menuSize.w || 220;
+      const measuredH = Math.round(Number(rect?.height || 0)) || selectionMenu.offsetHeight || editor.menuSize.h || 40;
+      editor.menuSize.w = Number.isFinite(measuredW) && measuredW > 0 ? measuredW : 220;
+      editor.menuSize.h = Number.isFinite(measuredH) && measuredH > 0 ? measuredH : 40;
+      selectionMenu.style.display = prevDisplay;
+      selectionMenu.style.visibility = prevVisibility;
+      editor.menuSize.measured = true;
+      const menuW = editor.menuSize.w;
+      const menuH = editor.menuSize.h;
+      const pad = 14;
+      selectionMenu.style.display = "flex";
+      let x = (minX + maxX) * 0.5 - menuW * 0.5;
+      let y = maxY + 22;
+      x = clamp(x, pad, canvas.width - menuW - pad);
+      if (y + menuH > canvas.height - pad) {
+        selectionMenu.style.display = "none";
+        return;
+      }
+      selectionMenu.style.left = `${x}px`;
+      selectionMenu.style.top = `${y}px`;
+      return;
+    }
+    const selectedKind = getSelectedKind();
+    const menuMode = selectedKind === "stroke"
+      ? "stroke:paint"
+      : (type === "stickers" || selectedKind === "image")
       ? `stickers:${isExternalSticker(selected) ? "external" : "normal"}`
       : `cutout:${editor.cutoutAspectOpen ? "open" : "closed"}`;
     if (editor.menuMode !== menuMode) {
-      if (type === "stickers") {
+      if (selectedKind === "stroke") {
+        selectionMenu.innerHTML = `
+          <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
+          <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
+          <button class="pano-btn pano-btn-icon" data-action="delete" aria-label="Delete" data-tip="Delete">${ICON.delete}</button>
+        `;
+      } else if (type === "stickers" || selectedKind === "image") {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
@@ -5460,7 +6562,7 @@ function showEditor(node, type, options = {}) {
       editor.menuSize.measured = false;
       installTooltipHandlers(selectionMenu);
     }
-    if (type === "stickers" && isExternalSticker(selected)) {
+    if ((type === "stickers" || selectedKind === "image") && isExternalSticker(selected)) {
       const backBtn = selectionMenu.querySelector("[data-action='back-initial']");
       if (backBtn) {
         const enabled = canRestoreSelectedToInitial();
@@ -5610,9 +6712,7 @@ function showEditor(node, type, options = {}) {
     viewController.state.inertia.vy = 0;
     if (e.button === 1) {
       e.preventDefault();
-      if (editor.mode === "frame") {
-        editor.interaction = { kind: "pan_frame", last: p };
-      } else {
+      if (editor.mode !== "frame") {
         editor.interaction = { kind: "view", last: p, lastTs: performance.now() };
         viewController.startDrag(p.x, p.y, e.pointerId, performance.now());
       }
@@ -5625,10 +6725,6 @@ function showEditor(node, type, options = {}) {
       if (editor.mode === "pano") {
         editor.interaction = { kind: "view", last: p, lastTs: performance.now() };
         viewController.startDrag(p.x, p.y, e.pointerId, performance.now());
-        updateCursor(p);
-        canvas.setPointerCapture(e.pointerId);
-      } else if (editor.mode === "frame") {
-        editor.interaction = { kind: "pan_frame", last: p };
         updateCursor(p);
         canvas.setPointerCapture(e.pointerId);
       }
@@ -5672,31 +6768,79 @@ function showEditor(node, type, options = {}) {
       return;
     }
 
-    if (editor.mode === "frame") {
-      if (editor.primaryTool === "cursor") {
-        editor.interaction = { kind: "pan_frame", last: p };
-        updateCursor(p);
-        canvas.setPointerCapture(e.pointerId);
-      }
+    const selectedItems = getSelectedItems();
+    const selected = getSelected();
+    const selGeom = selectedItems.length > 1 ? getMultiSelectionGeom(selectedItems) : (selected ? objectGeom(selected) : null);
+
+    if (editor.primaryTool === "cursor" && (e.ctrlKey || e.metaKey)) {
+      editor.interaction = { kind: "marquee_select", start: p, current: p };
       updateCursor(p);
+      canvas.setPointerCapture(e.pointerId);
+      requestDraw({ localOnly: true });
       return;
     }
 
-    const selected = getSelected();
-    const selGeom = selected ? objectGeom(selected) : null;
-
-    if (selected && selGeom?.visible) {
+    if (selectedItems.length > 1 && selGeom?.visible) {
+      const h = handleHit(selGeom, p);
+      if (h.kind === "move") {
+        const startUv = editor.mode === "frame"
+          ? (() => {
+            const shot = getActiveCutoutShot();
+            return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+          })()
+          : screenPosToErpPoint(p, performance.now());
+        editor.interaction = {
+          kind: "move_multi",
+          items: selectedItems.map((item) => item),
+          offset: { x: p.x - selGeom.center.x, y: p.y - selGeom.center.y },
+          startCenter: { x: selGeom.center.x, y: selGeom.center.y },
+          startAnchorYawPitch: (() => {
+            const dir = screenToWorldDir(selGeom.center.x, selGeom.center.y);
+            return dirToYawPitch(dir);
+          })(),
+          startUv,
+          stickerSnapshots: selectedItems
+            .filter((item) => isStickerItem(item))
+            .map((item) => ({
+              id: String(item.id || ""),
+              yaw_deg: Number(item.yaw_deg || 0),
+              pitch_deg: Number(item.pitch_deg || 0),
+            })),
+          strokeSnapshots: selectedItems
+            .filter((item) => isStrokeGroupItem(item))
+            .map((item) => ({
+              id: String(item.actionGroupId || item.id || ""),
+              layerKind: String(item.layerKind || "paint"),
+              snapshot: cloneJson(getStrokeGroupStrokes(item.actionGroupId, item.layerKind)),
+              frameSnapshot: cloneJson(ensureGroupFrame(item.actionGroupId, item.layerKind)),
+            })),
+        };
+        updateCursor(p);
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+    } else if (selected && selGeom?.visible) {
       const h = handleHit(selGeom, p);
       if (h.kind === "scale") {
-        editor.interaction = {
-          kind: "scale",
-          item: selected,
-          center: selGeom.center,
-          startDist: Math.max(1, Math.hypot(p.x - selGeom.center.x, p.y - selGeom.center.y)),
-          startHFOV: Number(selected.hFOV_deg || 20),
-          startVFOV: Number(selected.vFOV_deg || 20),
-          cursor: h.cursor,
-        };
+        editor.interaction = isStrokeGroupItem(selected)
+          ? {
+            kind: "scale_stroke_group",
+            item: selected,
+            center: selGeom.center,
+            startDist: Math.max(1, Math.hypot(p.x - selGeom.center.x, p.y - selGeom.center.y)),
+            snapshot: cloneJson(getStrokeGroupStrokes(selected.actionGroupId, selected.layerKind)),
+            frameSnapshot: cloneJson(ensureGroupFrame(selected.actionGroupId, selected.layerKind)),
+            cursor: h.cursor,
+          }
+          : {
+            kind: "scale",
+            item: selected,
+            center: selGeom.center,
+            startDist: Math.max(1, Math.hypot(p.x - selGeom.center.x, p.y - selGeom.center.y)),
+            startHFOV: Number(selected.hFOV_deg || 20),
+            startVFOV: Number(selected.vFOV_deg || 20),
+            cursor: h.cursor,
+          };
         updateCursor(p);
         canvas.setPointerCapture(e.pointerId);
         return;
@@ -5717,18 +6861,45 @@ function showEditor(node, type, options = {}) {
         return;
       }
       if (h.kind === "rotate") {
-        editor.interaction = {
-          kind: "rotate",
-          item: selected,
-          center: selGeom.center,
-          startRot: Number(selected.rot_deg || selected.roll_deg || 0),
-          startAng: Math.atan2(p.y - selGeom.center.y, p.x - selGeom.center.x),
-        };
+        editor.interaction = isStrokeGroupItem(selected)
+          ? {
+            kind: "rotate_stroke_group",
+            item: selected,
+            center: selGeom.center,
+            startAng: Math.atan2(p.y - selGeom.center.y, p.x - selGeom.center.x),
+            snapshot: cloneJson(getStrokeGroupStrokes(selected.actionGroupId, selected.layerKind)),
+            frameSnapshot: cloneJson(ensureGroupFrame(selected.actionGroupId, selected.layerKind)),
+          }
+          : {
+            kind: "rotate",
+            item: selected,
+            center: selGeom.center,
+            startRot: Number(selected.rot_deg || selected.roll_deg || 0),
+            startAng: Math.atan2(p.y - selGeom.center.y, p.x - selGeom.center.x),
+          };
         updateCursor(p);
         canvas.setPointerCapture(e.pointerId);
         return;
       }
       if (h.kind === "move") {
+        if (isStrokeGroupItem(selected)) {
+          const startUv = editor.mode === "frame"
+            ? (() => {
+              const shot = getActiveCutoutShot();
+              return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+            })()
+            : screenPosToErpPoint(p, performance.now());
+          editor.interaction = {
+            kind: "move_stroke_group",
+            item: selected,
+            startUv,
+            snapshot: cloneJson(getStrokeGroupStrokes(selected.actionGroupId, selected.layerKind)),
+            frameSnapshot: cloneJson(ensureGroupFrame(selected.actionGroupId, selected.layerKind)),
+          };
+          updateCursor(p);
+          canvas.setPointerCapture(e.pointerId);
+          return;
+        }
         editor.interaction = {
           kind: "move",
           item: selected,
@@ -5747,10 +6918,8 @@ function showEditor(node, type, options = {}) {
         pushHistory();
         commitState();
       }
-      editor.selectedId = hit.item.id;
+      setSelectedItem(hit.item);
       if (type === "cutout" && isNewSelection) editor.cutoutAspectOpen = false;
-      if (type === "stickers") state.active.selected_sticker_id = hit.item.id;
-      else state.active.selected_shot_id = hit.item.id;
       if (isNewSelection) updateSidePanel();
       updateSelectionMenu();
       requestDraw();
@@ -5759,38 +6928,35 @@ function showEditor(node, type, options = {}) {
         return;
       }
       editor.interaction = {
-        kind: "move",
+        kind: isStrokeGroupItem(hit.item) ? "move_stroke_group" : "move",
         item: hit.item,
         offset: { x: p.x - hit.geom.center.x, y: p.y - hit.geom.center.y },
+        startUv: isStrokeGroupItem(hit.item)
+          ? (editor.mode === "frame"
+            ? (() => {
+              const shot = getActiveCutoutShot();
+              return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+            })()
+            : screenPosToErpPoint(p, performance.now()))
+          : null,
+        snapshot: isStrokeGroupItem(hit.item)
+          ? cloneJson(getStrokeGroupStrokes(hit.item.actionGroupId, hit.item.layerKind))
+          : null,
+        frameSnapshot: isStrokeGroupItem(hit.item)
+          ? cloneJson(ensureGroupFrame(hit.item.actionGroupId, hit.item.layerKind))
+          : null,
       };
       updateCursor(p);
       canvas.setPointerCapture(e.pointerId);
       return;
     }
 
-    const selectedBeforeClear = getSelected();
-    if (selectedBeforeClear) {
-      editor.panelLastValues = {
-        yaw_deg: Number(selectedBeforeClear.yaw_deg || 0),
-        pitch_deg: Number(selectedBeforeClear.pitch_deg || 0),
-        hFOV_deg: Number(selectedBeforeClear.hFOV_deg || (type === "stickers" ? 30 : 90)),
-        vFOV_deg: Number(selectedBeforeClear.vFOV_deg || (type === "stickers" ? 30 : 60)),
-        rot_deg: Number(selectedBeforeClear.rot_deg || 0),
-        roll_deg: Number(selectedBeforeClear.roll_deg || 0),
-        out_w: Number(selectedBeforeClear.out_w || 1024),
-        out_h: Number(selectedBeforeClear.out_h || 1024),
-        aspect_id: getCutoutAspectLabel(selectedBeforeClear),
-      };
-    }
     const hadSelection = !!editor.selectedId;
     if (hadSelection) {
       pushHistory();
       commitState();
     }
-    editor.selectedId = null;
-    if (type === "cutout") editor.cutoutAspectOpen = false;
-    if (type === "stickers") state.active.selected_sticker_id = null;
-    else state.active.selected_shot_id = null;
+    clearSelection();
     if (hadSelection) updateSidePanel();
     updateSelectionMenu();
     requestDraw();
@@ -5860,7 +7026,20 @@ function showEditor(node, type, options = {}) {
     if (it.kind === "move") {
       const tx = p.x - it.offset.x;
       const ty = p.y - it.offset.y;
-      if (editor.mode === "unwrap") {
+      if (editor.mode === "frame" && type === "cutout") {
+        const shot = getActiveCutoutShot();
+        const rect = getFrameViewRect(shot);
+        if (!shot || !rect) return;
+        const framePoint = {
+          x: clamp((tx - rect.x) / Math.max(1, rect.w), 0, 1),
+          y: clamp((ty - rect.y) / Math.max(1, rect.h), 0, 1),
+        };
+        const dir = frameLocalPointToWorldDir(shot, framePoint);
+        if (!dir) return;
+        const yp = dirToYawPitch(dir);
+        it.item.yaw_deg = yp.yaw;
+        it.item.pitch_deg = yp.pitch;
+      } else if (editor.mode === "unwrap") {
         const r = getUnwrapRect();
         const nx = clamp((tx - r.x) / Math.max(r.w, 1), 0, 1);
         const ny = clamp((ty - r.y) / Math.max(r.h, 1), 0, 1);
@@ -5872,6 +7051,98 @@ function showEditor(node, type, options = {}) {
         it.item.yaw_deg = yp.yaw;
         it.item.pitch_deg = yp.pitch;
       }
+      requestDraw({ localOnly: true });
+      return;
+    }
+
+    if (it.kind === "move_stroke_group") {
+      const currentUv = editor.mode === "frame"
+        ? (() => {
+          const shot = getActiveCutoutShot();
+          return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+        })()
+        : screenPosToErpPoint(p, performance.now());
+      if (!currentUv || !it.startUv) return;
+      const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
+      const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
+      if (applyStrokeGroupOffset(it.item?.actionGroupId, du, dv, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
+        editor.paintStrokeRevision += 1;
+        editor.paintEngineRevisionKey = null;
+        editor.paintEngine?.rebuildCommitted?.(state);
+        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        requestDraw({ localOnly: true });
+      }
+      return;
+    }
+
+    if (it.kind === "move_multi") {
+      const tx = p.x - Number(it.offset?.x || 0);
+      const ty = p.y - Number(it.offset?.y || 0);
+      let changed = false;
+      const currentYawPitch = dirToYawPitch(screenToWorldDir(tx, ty));
+      const startYawPitch = it.startAnchorYawPitch || currentYawPitch;
+      const dyaw = shortestYawDelta(Number(currentYawPitch?.yaw || 0), Number(startYawPitch?.yaw || 0));
+      const dpitch = Number(currentYawPitch?.pitch || 0) - Number(startYawPitch?.pitch || 0);
+      for (const snap of (Array.isArray(it.stickerSnapshots) ? it.stickerSnapshots : [])) {
+        const sticker = (type === "cutout" ? getCutoutSelectableItems() : getList()).find((entry) => String(entry?.id || "") === String(snap.id || ""));
+        if (!sticker || !isStickerItem(sticker)) continue;
+        sticker.yaw_deg = wrapYaw(Number(snap.yaw_deg || 0) + dyaw);
+        sticker.pitch_deg = clamp(Number(snap.pitch_deg || 0) + dpitch, -90, 90);
+        changed = true;
+      }
+      const currentUv = editor.mode === "frame"
+        ? (() => {
+          const shot = getActiveCutoutShot();
+          return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+        })()
+        : screenPosToErpPoint(p, performance.now());
+      if (currentUv && it.startUv) {
+        const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
+        const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
+        for (const snap of (Array.isArray(it.strokeSnapshots) ? it.strokeSnapshots : [])) {
+          if (applyStrokeGroupOffset(snap.id, du, dv, snap.snapshot, snap.layerKind, snap.frameSnapshot)) {
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        editor.paintStrokeRevision += 1;
+        editor.paintEngineRevisionKey = null;
+        editor.paintEngine?.rebuildCommitted?.(state);
+        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        requestDraw({ localOnly: true });
+      }
+      return;
+    }
+
+    if (it.kind === "scale_stroke_group") {
+      const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
+      const ratio = d / Math.max(1, Number(it.startDist || 1));
+      if (applyStrokeGroupTransform(it.item?.actionGroupId, ratio, 0, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
+        editor.paintStrokeRevision += 1;
+        editor.paintEngineRevisionKey = null;
+        editor.paintEngine?.rebuildCommitted?.(state);
+        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        requestDraw({ localOnly: true });
+      }
+      return;
+    }
+
+    if (it.kind === "rotate_stroke_group") {
+      let delta = (Math.atan2(p.y - it.center.y, p.x - it.center.x) - Number(it.startAng || 0)) * RAD2DEG;
+      if (e.shiftKey) delta = Math.round(delta / 45) * 45;
+      if (applyStrokeGroupTransform(it.item?.actionGroupId, 1, delta, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
+        editor.paintStrokeRevision += 1;
+        editor.paintEngineRevisionKey = null;
+        editor.paintEngine?.rebuildCommitted?.(state);
+        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        requestDraw({ localOnly: true });
+      }
+      return;
+    }
+
+    if (it.kind === "marquee_select") {
+      it.current = p;
       requestDraw({ localOnly: true });
       return;
     }
@@ -5907,7 +7178,7 @@ function showEditor(node, type, options = {}) {
       let delta = (a - it.startAng) * RAD2DEG;
       let out = it.startRot - delta;
       if (e.shiftKey) out = Math.round(out / 45) * 45;
-      const key = type === "stickers" ? "rot_deg" : "roll_deg";
+      const key = isStickerItem(it.item) ? "rot_deg" : "roll_deg";
       it.item[key] = out;
       requestDraw({ localOnly: true });
     }
@@ -5918,6 +7189,12 @@ function showEditor(node, type, options = {}) {
     if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
       if (commitPaintInteraction(editor.interaction)) {
         editor.paintStrokeRevision += 1;
+        // Invalidate the persistent frame so objectGeom() recomputes bbox on next select.
+        const committedGroupId = String(editor.interaction.stroke?.actionGroupId || "").trim();
+        if (committedGroupId) {
+          const grpEntry = getPaintingGroupList().find((g) => String(g?.actionGroupId || "") === committedGroupId);
+          if (grpEntry) grpEntry.frame = null;
+        }
         const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
         if (targetDescriptor) editor.paintEngine.commitActiveStroke(editor.interaction.stroke, targetDescriptor);
         pushHistory();
@@ -5929,9 +7206,25 @@ function showEditor(node, type, options = {}) {
         const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
         if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
       }
+    } else if (editor.interaction?.kind === "marquee_select") {
+      const rect = rectFromPoints(editor.interaction.start, editor.interaction.current);
+      const pool = [
+        ...(type === "cutout" ? getCutoutSelectableItemsForHit() : [...getList()]),
+        ...getSelectableStrokeGroupItems(),
+      ];
+      const hits = pool.filter((item) => rectIntersectsGeom(rect, objectGeom(item)));
+      setSelectedItems(hits, hits[hits.length - 1]?.id || null);
+      if (type === "cutout" && hits.length) editor.cutoutAspectOpen = false;
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
     } else if (editor.interaction && editor.interaction.kind !== "view" && editor.interaction.kind !== "pan_frame") {
       pushHistory();
       commitState();
+      if (editor.interaction.kind === "move_stroke_group") syncPaintingLayerAsync();
+      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.strokeSnapshots) && editor.interaction.strokeSnapshots.length) {
+        syncPaintingLayerAsync();
+      }
       node.setDirtyCanvas(true, true);
       syncSidePanelControls();
       editor.hqFrames = 1;
@@ -5992,13 +7285,13 @@ function showEditor(node, type, options = {}) {
   };
 
   canvas.ondragover = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     e.preventDefault();
     setDropCue(true);
   };
 
   canvas.ondrop = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     e.preventDefault();
     e.stopPropagation();
     dragCue.depth = 0;
@@ -6010,26 +7303,26 @@ function showEditor(node, type, options = {}) {
   };
 
   const onWindowDragEnter = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     if (!dragHasImageFiles(e)) return;
     dragCue.depth += 1;
     setDropCue(true);
     e.preventDefault();
   };
   const onWindowDragOver = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     if (!dragCue.active && dragHasImageFiles(e)) setDropCue(true);
     if (dragCue.active) e.preventDefault();
   };
   const onWindowDragLeave = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     if (!dragCue.active) return;
     dragCue.depth = Math.max(0, dragCue.depth - 1);
     const leftWindow = (Number(e.clientX) <= 0 && Number(e.clientY) <= 0);
     if (dragCue.depth === 0 || leftWindow) setDropCue(false);
   };
   const onWindowDrop = (e) => {
-    if (type !== "stickers" || readOnly) return;
+    if ((type !== "stickers" && type !== "cutout") || readOnly) return;
     dragCue.depth = 0;
     setDropCue(false);
     if (dragHasImageFiles(e)) e.preventDefault();
@@ -6043,6 +7336,11 @@ function showEditor(node, type, options = {}) {
     btn.onclick = () => {
       if (btn.disabled) return;
       editor.mode = btn.dataset.view;
+      if (type === "cutout" && editor.mode === "frame" && getSelected() && isShotItem(getSelected())) {
+        clearSelection({ preservePanelValues: true });
+        updateSidePanel();
+        updateSelectionMenu();
+      }
       forceCursorTool();
       syncViewToggleState();
       requestDraw();
@@ -6110,12 +7408,11 @@ function showEditor(node, type, options = {}) {
         const newTool = String(btn.getAttribute("data-tool-mode") || "cursor");
         editor.primaryTool = newTool;
         if (newTool === "paint" || newTool === "mask") {
-          editor.selectedId = null;
-          if (type === "stickers") state.active.selected_sticker_id = null;
-          else state.active.selected_shot_id = null;
+          clearSelection({ preservePanelValues: true });
         }
         syncPaintUi();
         updateSidePanel();
+        updateSelectionMenu();
         requestDraw();
       };
     });
@@ -6127,13 +7424,16 @@ function showEditor(node, type, options = {}) {
         else if (action === "redo") restoreHistory(1);
         else if (action === "clear") clearAll();
         else if (action === "add") addImageSticker();
+        else if (action === "add-image") addImageSticker();
         else if (action === "add-or-look") {
-          if (getList().length === 0) {
+          const activeShot = getActiveCutoutShot();
+          if ((state.shots || []).length === 0) {
             addCutoutFrame();
           } else {
-            const target = getSelected() || getList()[0];
+            const target = activeShot;
             if (!target) return;
             editor.selectedId = target.id || null;
+            editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
             state.active.selected_shot_id = editor.selectedId;
             const targetYaw = wrapYaw(Number(target.yaw_deg || 0));
             const targetPitch = clamp(Number(target.pitch_deg || 0), -89.9, 89.9);
@@ -6152,9 +7452,11 @@ function showEditor(node, type, options = {}) {
         editor.primaryTool = "paint";
         const tool = String(btn.getAttribute("data-paint-tool") || "pen");
         editor.paintTool = tool;
+        clearSelection({ preservePanelValues: true });
         if (BRUSH_PRESETS[tool]) editor.activeBrushPresetId = tool;
         syncPaintUi();
         updateSidePanel();
+        updateSelectionMenu();
         requestDraw();
       };
     });
@@ -6162,8 +7464,10 @@ function showEditor(node, type, options = {}) {
       btn.onclick = () => {
         editor.primaryTool = "mask";
         editor.maskTool = String(btn.getAttribute("data-mask-tool") || "pen");
+        clearSelection({ preservePanelValues: true });
         syncPaintUi();
         updateSidePanel();
+        updateSelectionMenu();
         requestDraw();
       };
     });

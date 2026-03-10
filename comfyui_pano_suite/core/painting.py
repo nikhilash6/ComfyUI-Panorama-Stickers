@@ -467,6 +467,87 @@ def _load_painting_layer_erp(painting_layer: dict) -> tuple[np.ndarray, np.ndarr
     return paint_erp, mask_erp
 
 
+def _resize_rgba_layer(layer: np.ndarray | None, width: int, height: int) -> np.ndarray | None:
+    if layer is None:
+        return None
+    if layer.ndim != 3 or layer.shape[-1] != 4:
+        return None
+    target_w = max(1, int(width))
+    target_h = max(1, int(height))
+    if layer.shape[1] == target_w and layer.shape[0] == target_h:
+        return np.clip(layer.astype(np.float32), 0.0, 1.0)
+    resized = Image.fromarray((np.clip(layer, 0.0, 1.0) * 255.0).astype(np.uint8), mode="RGBA").resize(
+        (target_w, target_h),
+        Image.BILINEAR,
+    )
+    return np.asarray(resized, dtype=np.float32) / 255.0
+
+
+def _resize_mask_layer(layer: np.ndarray | None, width: int, height: int) -> np.ndarray | None:
+    if layer is None:
+        return None
+    if layer.ndim != 2:
+        return None
+    target_w = max(1, int(width))
+    target_h = max(1, int(height))
+    if layer.shape[1] == target_w and layer.shape[0] == target_h:
+        return np.clip(layer.astype(np.float32), 0.0, 1.0)
+    resized = Image.fromarray((np.clip(layer, 0.0, 1.0) * 255.0).astype(np.uint8), mode="L").resize(
+        (target_w, target_h),
+        Image.BILINEAR,
+    )
+    return np.asarray(resized, dtype=np.float32) / 255.0
+
+
+def load_painting_layer_payload(
+    painting_layer: dict | None,
+    *,
+    erp_width: int | None = None,
+    erp_height: int | None = None,
+) -> dict | None:
+    if not isinstance(painting_layer, dict):
+        return None
+    target_w = int(erp_width) if erp_width is not None else None
+    target_h = int(erp_height) if erp_height is not None else None
+    pair = _load_painting_layer_erp(painting_layer)
+    paint_erp = None
+    mask_erp = None
+    if pair is not None:
+        paint_erp, mask_erp = pair
+    if target_w is not None and target_h is not None:
+        paint_erp = _resize_rgba_layer(paint_erp, target_w, target_h)
+        mask_erp = _resize_mask_layer(mask_erp, target_w, target_h)
+
+    groups = {}
+    raw_groups = painting_layer.get("groups")
+    if isinstance(raw_groups, list):
+        for item in raw_groups:
+            if not isinstance(item, dict):
+                continue
+            action_group_id = str(item.get("actionGroupId") or item.get("id") or "").strip()
+            image_asset = item.get("image")
+            if not action_group_id or not isinstance(image_asset, dict):
+                continue
+            path = _resolve_comfy_image_path(image_asset)
+            if path is None:
+                continue
+            try:
+                layer = np.asarray(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
+            except Exception:
+                continue
+            if target_w is not None and target_h is not None:
+                layer = _resize_rgba_layer(layer, target_w, target_h)
+            groups[action_group_id] = layer
+
+    if paint_erp is None and mask_erp is None and not groups:
+        return None
+    return {
+        "paint": paint_erp,
+        "mask": mask_erp,
+        "groups": groups,
+    }
+
+
 def render_painting_to_cutout(
     painting_state: dict,
     shot: dict,
@@ -478,9 +559,14 @@ def render_painting_to_cutout(
     painting_layer: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     # Prefer the uploaded ERP raster (exact WebGL render) when available.
-    layer = _load_painting_layer_erp(painting_layer)
-    if layer is not None:
-        paint_erp, mask_erp = layer
+    payload = load_painting_layer_payload(
+        painting_layer,
+        erp_width=erp_width,
+        erp_height=erp_height,
+    )
+    if payload is not None:
+        paint_erp = payload.get("paint")
+        mask_erp = payload.get("mask")
         if paint_erp is None:
             paint_erp = _empty_rgba(erp_width, erp_height)
         if mask_erp is None:

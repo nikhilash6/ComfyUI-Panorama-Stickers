@@ -1535,6 +1535,42 @@ function buildRuntimePreviewTextures(node, state, scene) {
   return buildStickerTexturesFromState(state, (assetId, asset) => getNodePreviewImage(node, assetId, asset), { scene });
 }
 
+function buildSingleRuntimePreviewScene(state, item) {
+  return buildStickerSceneFromState(state, {
+    stickers: item ? [item] : [],
+    selectedId: null,
+    hoveredId: null,
+  });
+}
+
+function buildSingleRuntimePreviewTextures(node, state, item, scene) {
+  return buildStickerTexturesFromState(
+    state,
+    (assetId, asset, sticker) => getNodePreviewImage(node, assetId, asset),
+    { scene, stickers: item ? [item] : [] },
+  );
+}
+
+function getNodePreviewDisplayObjects(state) {
+  const stickers = Array.isArray(state?.stickers)
+    ? state.stickers.map((item) => ({
+      type: "sticker",
+      id: String(item?.id || ""),
+      z_index: Number(item?.z_index || 0),
+      item,
+    }))
+    : [];
+  const groups = Array.isArray(state?.painting?.groups)
+    ? state.painting.groups.map((item) => ({
+      type: "strokeGroup",
+      id: String(item?.id || item?.actionGroupId || ""),
+      actionGroupId: String(item?.actionGroupId || item?.id || ""),
+      z_index: Number(item?.z_index || 0),
+    }))
+    : [];
+  return [...stickers, ...groups].sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+}
+
 function expandTri(d0, d1, d2, px = 0.45) {
   const cx = (d0.x + d1.x + d2.x) / 3;
   const cy = (d0.y + d1.y + d2.y) / 3;
@@ -1998,7 +2034,7 @@ function attachLegacyStickersPreview(node) {
 
 // Returns the display paint canvas for a node's paint state, or null if there are no strokes.
 // Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
-function getNodePreviewPaintCanvas(node, state) {
+function getNodePreviewPaintEngine(node, state) {
   const strokes = state?.painting?.paint?.strokes;
   if (!Array.isArray(strokes) || strokes.length === 0) return null;
 
@@ -2014,7 +2050,12 @@ function getNodePreviewPaintCanvas(node, state) {
     node.__panoPreviewPaintEngine.rebuildCommitted(state);
   }
 
-  return node.__panoPreviewPaintEngine.getErpTarget().displayPaint.canvas;
+  return node.__panoPreviewPaintEngine;
+}
+
+function getNodePreviewPaintCanvas(node, state) {
+  const engine = getNodePreviewPaintEngine(node, state);
+  return engine ? engine.getErpTarget().displayPaint.canvas : null;
 }
 
 // Returns a canvas with bgImg and the paint layer pre-composited (ERP space).
@@ -2086,7 +2127,8 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
       () => node.__panoDomPreview?.requestDraw?.(),
     );
     const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
-    const paintCanvas = getNodePreviewPaintCanvas(node, state);
+    const paintEngine = getNodePreviewPaintEngine(node, state);
+    const paintCanvas = paintEngine ? paintEngine.getErpTarget().displayPaint.canvas : null;
     const bgSource = bgReady ? bgImg : paintCanvas;
     let statusType = "none";
     let hintText = "Open editor and add frame";
@@ -2099,36 +2141,62 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
         hintText = "Open editor and add frame";
       }
     } else if (bgReady || paintCanvas) {
-      const glDrawn = renderCutoutViewToContext2D({
-        owner: node,
-        cacheKey: "runtime_cutout_bg",
-        ctx,
-        rect: contain,
-        img: bgSource,
-        view: cutoutView,
-      });
+      let glDrawn = false;
+      if (bgSource) {
+        glDrawn = renderCutoutViewToContext2D({
+          owner: node,
+          cacheKey: "runtime_cutout_bg_only",
+          ctx,
+          rect: contain,
+          img: bgSource,
+          view: cutoutView,
+        });
+      }
+      if (bgReady) {
+        for (const entry of getNodePreviewDisplayObjects(state)) {
+          if (entry.type === "sticker" && entry.item) {
+            const scene = buildSingleRuntimePreviewScene(state, entry.item);
+            const textures = buildSingleRuntimePreviewTextures(node, state, entry.item, scene);
+            const drewSticker = renderSceneToContext2D({
+              owner: node,
+              cacheKey: `runtime_cutout_sticker_${String(entry.id || "")}`,
+              ctx,
+              rect: contain,
+              backgroundSource: null,
+              scene,
+              textures,
+              view: cutoutView,
+            });
+            glDrawn = glDrawn || !!drewSticker;
+            continue;
+          }
+          if (entry.type === "strokeGroup") {
+            const groupCanvas = paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
+            if (!groupCanvas) continue;
+            renderCutoutViewToContext2D({
+              owner: node,
+              cacheKey: `runtime_cutout_group_${String(entry.actionGroupId || "")}`,
+              ctx,
+              rect: contain,
+              img: groupCanvas,
+              view: cutoutView,
+              backgroundRevision: `${String(node.__panoPreviewPaintRevision || "")}_${String(entry.actionGroupId || "")}`,
+              backgroundOpacity: 1,
+            });
+            glDrawn = true;
+          }
+        }
+      }
       const fallbackDrawn = !glDrawn && !!drawCutoutProjectionPreview(ctx, node, bgSource, contain, shot, "draft");
-      const rawLiveDrawn = glDrawn || fallbackDrawn;
       panoPreviewLog(node, "cutout.path", {
         glDrawn: !!glDrawn,
         fallbackDrawn: !!fallbackDrawn,
         hasShot: !!shot,
         hasPaint: !!paintCanvas,
+        hasStickers: Array.isArray(state?.stickers) && state.stickers.length > 0,
       });
       const liveDrawnValidated = !!glDrawn || (!!fallbackDrawn && hasValidCutoutStats(node));
       if (liveDrawnValidated) {
-        if (paintCanvas) {
-          renderCutoutViewToContext2D({
-            owner: node,
-            cacheKey: "runtime_cutout_paint",
-            ctx,
-            rect: contain,
-            img: paintCanvas,
-            view: cutoutView,
-            backgroundRevision: String(node.__panoPreviewPaintRevision || ""),
-            backgroundOpacity: 1,
-          });
-        }
       } else if (ownOutReady) {
         ctx.drawImage(ownOut, contain.x, contain.y, contain.w, contain.h);
       } else {

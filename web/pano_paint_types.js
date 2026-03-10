@@ -6,9 +6,30 @@ function finiteNumber(value, fallback = null) {
 function emptyPaintingState() {
   return {
     version: 1,
+    groups: [],
     paint: { strokes: [] },
     mask: { strokes: [] },
   };
+}
+
+function normalizeGroups(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const actionGroupId = String(item.actionGroupId || item.id || "").trim();
+    if (!actionGroupId || seen.has(actionGroupId)) continue;
+    seen.add(actionGroupId);
+    const z = finiteNumber(item.z_index ?? item.zIndex, out.length);
+    out.push({
+      id: String(item.id || actionGroupId),
+      type: "strokeGroup",
+      actionGroupId,
+      z_index: Math.max(0, Math.round(z ?? out.length)),
+    });
+  }
+  return out;
 }
 
 function normalizeTargetSpace(raw) {
@@ -134,6 +155,7 @@ export function normalizePaintingState(raw) {
   if (!raw || typeof raw !== "object") return base;
   return {
     version: 1,
+    groups: normalizeGroups(raw.groups),
     paint: normalizeLayer(raw.paint, "paint"),
     mask: normalizeLayer(raw.mask, "mask"),
   };
