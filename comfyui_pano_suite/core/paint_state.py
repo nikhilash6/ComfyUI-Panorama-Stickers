@@ -7,6 +7,7 @@ EMPTY_PAINTING_STATE = {
     "groups": [],
     "paint": {"strokes": []},
     "mask": {"strokes": []},
+    "raster_objects": [],
 }
 
 PAINT_TOOL_KINDS = {"pen", "marker", "brush", "eraser", "lasso_fill"}
@@ -234,6 +235,76 @@ def _normalize_groups(raw_groups):
     return out
 
 
+def _normalize_raster_bbox(raw):
+    if not isinstance(raw, dict):
+        return None
+    u0 = _finite_float(raw.get("u0"))
+    v0 = _finite_float(raw.get("v0"))
+    u1 = _finite_float(raw.get("u1"))
+    v1 = _finite_float(raw.get("v1"))
+    if None in (u0, v0, u1, v1):
+        return None
+    if u1 <= u0 or v1 <= v0:
+        return None
+    clamp = lambda v: max(0.0, min(1.0, float(v)))
+    return {"u0": clamp(u0), "v0": clamp(v0), "u1": clamp(u1), "v1": clamp(v1)}
+
+
+def _normalize_raster_transform(raw):
+    tf = raw if isinstance(raw, dict) else {}
+    du = _finite_float(tf.get("du")) or 0.0
+    dv = _finite_float(tf.get("dv")) or 0.0
+    rot_deg = _finite_float(tf.get("rot_deg")) or 0.0
+    scale_raw = _finite_float(tf.get("scale"))
+    scale = max(0.01, float(scale_raw)) if scale_raw is not None else 1.0
+    return {"du": float(du), "dv": float(dv), "rot_deg": float(rot_deg), "scale": scale}
+
+
+def _normalize_raster_object(item, fallback_z):
+    if not isinstance(item, dict):
+        return None
+    if str(item.get("type") or "") != "raster_frozen":
+        return None
+    obj_id = str(item.get("id") or "").strip()
+    if not obj_id:
+        return None
+    layer_kind = str(item.get("layerKind") or "paint")
+    if layer_kind not in {"paint", "mask"}:
+        return None
+    raster_data_url = str(item.get("rasterDataUrl") or "").strip()
+    if not raster_data_url.startswith("data:"):
+        return None
+    bbox = _normalize_raster_bbox(item.get("bbox"))
+    if bbox is None:
+        return None
+    z_raw = _finite_float(item.get("z_index", item.get("zIndex", fallback_z)))
+    z_index = max(0.0, float(z_raw)) if z_raw is not None else float(fallback_z)
+    return {
+        "id": obj_id,
+        "type": "raster_frozen",
+        "layerKind": layer_kind,
+        "z_index": z_index,
+        "locked": item.get("locked") is True,
+        "bbox": bbox,
+        "rasterDataUrl": raster_data_url,
+        "transform": _normalize_raster_transform(item.get("transform")),
+    }
+
+
+def _normalize_raster_objects(raw):
+    if not isinstance(raw, list):
+        return []
+    out = []
+    seen = set()
+    for item in raw:
+        normalized = _normalize_raster_object(item, len(out))
+        if normalized is None or normalized["id"] in seen:
+            continue
+        seen.add(normalized["id"])
+        out.append(normalized)
+    return out
+
+
 def normalize_painting_state(raw) -> dict:
     out = empty_painting_state()
     if not isinstance(raw, dict):
@@ -243,4 +314,5 @@ def normalize_painting_state(raw) -> dict:
     out["groups"] = _normalize_groups(raw.get("groups"))
     out["paint"] = _normalize_layer(raw.get("paint"), "paint")
     out["mask"] = _normalize_layer(raw.get("mask"), "mask")
+    out["raster_objects"] = _normalize_raster_objects(raw.get("raster_objects"))
     return out

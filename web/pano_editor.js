@@ -385,6 +385,25 @@ function paintingStrokeCount(painting) {
   return { paintCount, maskCount };
 }
 
+function paintingCompositeCount(painting) {
+  const { paintCount, maskCount } = paintingStrokeCount(painting);
+  const rasterObjects = Array.isArray(painting?.raster_objects) ? painting.raster_objects : [];
+  let paintRasterCount = 0;
+  let maskRasterCount = 0;
+  rasterObjects.forEach((item) => {
+    if (String(item?.layerKind || "paint") === "mask") maskRasterCount += 1;
+    else paintRasterCount += 1;
+  });
+  return {
+    paintCount,
+    maskCount,
+    paintRasterCount,
+    maskRasterCount,
+    totalPaintCount: paintCount + paintRasterCount,
+    totalMaskCount: maskCount + maskRasterCount,
+  };
+}
+
 function makePaintId(prefix) {
   return `${prefix}_${Math.random().toString(16).slice(2, 10)}`;
 }
@@ -1302,54 +1321,65 @@ function showEditor(node, type, options = {}) {
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="undo" aria-label="Undo" data-tip="Undo">${ICON.undo}</button>
         <button class="pano-btn pano-btn-icon" type="button" data-tool-ui-action="redo" aria-label="Redo" data-tip="Redo">${ICON.redo}</button>
       </div>
-      <div class="pano-paint-color-float" data-paint-color-row hidden>
-        ${PAINT_COLOR_SWATCHES.map((swatch) => `<button class="pano-paint-color-dot" type="button" data-paint-color-swatch="${swatch.id}" aria-label="${swatch.label}" data-tip="${swatch.label}" style="--swatch:${colorToCss(swatch.color, 1)}"></button>`).join("")}
-        <button class="pano-paint-color-dot pano-paint-color-dot-rainbow" type="button" data-paint-color-custom aria-label="Custom color" data-tip="Custom color"></button>
-        <div class="pano-paint-color-pop" data-paint-color-pop hidden>
-          <div class="pano-paint-color-pop-head">
-            <span class="pano-paint-color-preview" data-paint-color-preview></span>
-            <span class="pano-paint-color-pop-label">Custom Color</span>
-          </div>
-          <div class="pano-paint-color-field">
-            <div class="pano-paint-sv-panel" data-paint-color-sv>
-              <div class="pano-paint-sv-cursor" data-paint-color-sv-cursor></div>
+      <div class="pano-paint-dock is-hidden" data-paint-dock>
+        <div class="pano-paint-pane" data-paint-pane="paint">
+          <div class="pano-paint-color-float" data-paint-color-row hidden>
+            ${PAINT_COLOR_SWATCHES.map((swatch) => `<button class="pano-paint-color-dot" type="button" data-paint-color-swatch="${swatch.id}" aria-label="${swatch.label}" data-tip="${swatch.label}" style="--swatch:${colorToCss(swatch.color, 1)}"></button>`).join("")}
+            <button class="pano-paint-color-dot pano-paint-color-dot-rainbow" type="button" data-paint-color-custom aria-label="Custom color" data-tip="Custom color"></button>
+            <div class="pano-paint-color-pop" data-paint-color-pop hidden>
+              <div class="pano-paint-color-pop-head">
+                <span class="pano-paint-color-preview" data-paint-color-preview></span>
+                <span class="pano-paint-color-pop-label">Custom Color</span>
+              </div>
+              <div class="pano-paint-color-field">
+                <div class="pano-paint-sv-panel" data-paint-color-sv>
+                  <div class="pano-paint-sv-cursor" data-paint-color-sv-cursor></div>
+                </div>
+                <div class="pano-paint-hue-strip" data-paint-hue-strip>
+                  <div class="pano-paint-hue-handle" data-paint-hue-handle></div>
+                </div>
+              </div>
+              <label class="pano-paint-color-field">
+                <span>Opacity</span>
+                <div class="pano-paint-alpha-wrap">
+                  <input type="range" min="0" max="100" step="1" value="100" data-paint-alpha-slider>
+                  <span data-paint-alpha-value>100%</span>
+                </div>
+              </label>
+              <div class="pano-paint-color-history" data-paint-color-history-wrap>
+                <div class="pano-paint-color-history-list" data-paint-color-history></div>
+              </div>
             </div>
-            <div class="pano-paint-hue-strip" data-paint-hue-strip>
-              <div class="pano-paint-hue-handle" data-paint-hue-handle></div>
+          </div>
+          <div class="pano-paint-footer" data-paint-footer="paint">
+            <div class="pano-paint-footer-group" data-paint-group="paint">
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pencil_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Soft Brush" data-tip="Soft Brush">${ICON.spray_can_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.highlighter_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="crayon" aria-label="Pastel" data-tip="Pastel">${ICON.paintbrush_vertical_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.eraser_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.lasso_tool}</button>
+            </div>
+            <div class="pano-paint-size-row" data-paint-size-row hidden>
+              <input class="pano-paint-size-slider" data-paint-size-slider type="range" min="1" max="120" step="1" value="10">
+              <span class="pano-paint-size-value" data-paint-size-value>10</span>
+            </div>
+            <div class="pano-paint-clear-row" data-paint-clear-row hidden>
+              <button class="pano-btn pano-btn-icon pano-paint-layer-clear" type="button" data-paint-layer-clear-current="paint" aria-label="Clear paint" data-tip="Clear paint">${ICON.clear}</button>
             </div>
           </div>
-          <label class="pano-paint-color-field">
-            <span>Opacity</span>
-            <div class="pano-paint-alpha-wrap">
-              <input type="range" min="0" max="100" step="1" value="100" data-paint-alpha-slider>
-              <span data-paint-alpha-value>100%</span>
+        </div>
+        <div class="pano-paint-pane" data-paint-pane="mask">
+          <div class="pano-paint-footer" data-paint-footer="mask">
+            <div class="pano-paint-footer-group" data-paint-group="mask">
+              <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pencil_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.eraser_tool}</button>
+              <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="lasso_fill" aria-label="Mask Lasso" data-tip="Mask lasso">${ICON.lasso_tool}</button>
             </div>
-          </label>
-          <div class="pano-paint-color-history" data-paint-color-history-wrap>
-            <div class="pano-paint-color-history-list" data-paint-color-history></div>
+            <div class="pano-paint-clear-row" data-paint-clear-row>
+              <button class="pano-btn pano-btn-icon pano-paint-layer-clear" type="button" data-paint-layer-clear-current="mask" aria-label="Clear mask" data-tip="Clear mask">${ICON.clear}</button>
+            </div>
           </div>
-        </div>
-      </div>
-      <div class="pano-paint-footer" data-paint-footer hidden>
-        <div class="pano-paint-footer-group" data-paint-group="paint" hidden>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="pen" aria-label="Pen" data-tip="Pen">${ICON.pencil_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="brush" aria-label="Soft Brush" data-tip="Soft Brush">${ICON.spray_can_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="marker" aria-label="Marker" data-tip="Marker">${ICON.highlighter_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="crayon" aria-label="Pastel" data-tip="Pastel">${ICON.paintbrush_vertical_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="eraser" aria-label="Eraser" data-tip="Eraser">${ICON.eraser_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-paint-tool="lasso_fill" aria-label="Lasso" data-tip="Lasso">${ICON.lasso_tool}</button>
-        </div>
-        <div class="pano-paint-footer-group" data-paint-group="mask" hidden>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="pen" aria-label="Mask Pen" data-tip="Mask pen">${ICON.pencil_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.eraser_tool}</button>
-          <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="lasso_fill" aria-label="Mask Lasso" data-tip="Mask lasso">${ICON.lasso_tool}</button>
-        </div>
-        <div class="pano-paint-size-row" data-paint-size-row hidden>
-          <input class="pano-paint-size-slider" data-paint-size-slider type="range" min="1" max="120" step="1" value="10">
-          <span class="pano-paint-size-value" data-paint-size-value>10</span>
-        </div>
-        <div class="pano-paint-clear-row" data-paint-clear-row hidden>
-          <button class="pano-btn pano-btn-icon pano-paint-layer-clear" type="button" data-paint-layer-clear-current aria-label="Clear Current Layer" data-tip="Clear current">${ICON.clear}</button>
         </div>
       </div>`}
       <div class="pano-floating-top">
@@ -1360,8 +1390,7 @@ function showEditor(node, type, options = {}) {
         </div>
       </div>
       <div class="pano-floating-right">
-        <span>FOV</span>
-        <span class="pano-fov-value" data-fov-value>100.0</span>
+        <span class="pano-fov-value" data-fov-value aria-label="Field of view">100.0</span>
         <button class="pano-btn pano-btn-icon" data-action="reset-view" aria-label="Reset View" data-tip="Reset view">${ICON.reset}</button>
         <button class="pano-btn pano-btn-icon" data-action="toggle-grid" aria-label="Hide Grid" data-tip="Hide grid" aria-pressed="true">${ICON.eye}</button>
         ${fullscreenBtnHtml}
@@ -1414,7 +1443,8 @@ function showEditor(node, type, options = {}) {
   const fullscreenBtn = root.querySelector("[data-action='toggle-fullscreen']");
   const tooltipEl = root.querySelector("[data-tooltip]");
   const toolRail = root.querySelector("[data-tool-rail]");
-  const paintFooter = root.querySelector("[data-paint-footer]");
+  const paintDock = root.querySelector("[data-paint-dock]");
+  const paintPanes = Array.from(root.querySelectorAll("[data-paint-pane]"));
   const paintColorRow = root.querySelector("[data-paint-color-row]");
   const paintColorPop = root.querySelector("[data-paint-color-pop]");
   const paintColorPreview = root.querySelector("[data-paint-color-preview]");
@@ -1427,16 +1457,23 @@ function showEditor(node, type, options = {}) {
   const paintColorHistoryWrap = root.querySelector("[data-paint-color-history-wrap]");
   const paintColorHistory = root.querySelector("[data-paint-color-history]");
   const paintSizeRow = root.querySelector("[data-paint-size-row]");
-  const paintClearRow = root.querySelector("[data-paint-clear-row]");
-  const paintLayerClearCurrentBtn = root.querySelector("[data-paint-layer-clear-current]");
+  const paintClearRows = Array.from(root.querySelectorAll("[data-paint-clear-row]"));
+  const paintLayerClearCurrentBtns = Array.from(root.querySelectorAll("[data-paint-layer-clear-current]"));
   const paintSizeSlider = root.querySelector("[data-paint-size-slider]");
   const paintSizeValue = root.querySelector("[data-paint-size-value]");
   let paintSizePreviewTimer = 0;
+  let paintPaneFadeTimer = 0;
+  let visiblePaintPaneMode = "";
   if (type === "cutout") canvas.style.opacity = "0";
   if (hideSidebar) {
     side?.remove();
     root.classList.add("pano-modal-readonly");
   }
+  function setPaintDockVisible(visible) {
+    if (!paintDock) return;
+    paintDock.classList.toggle("is-hidden", !visible);
+  }
+
   const commitCustomPaintHistory = () => {
     if (!editor.customPaintSessionStart) return;
     if (colorsApproximatelyEqual(editor.customPaintSessionStart, editor.customPaintColor)) {
@@ -1523,6 +1560,7 @@ function showEditor(node, type, options = {}) {
     paintEngine: createPaintEngineManager(),
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
+    paintCompositeRevision: 0,
     selectedIds: [],
     _sortedItemsCache: null,
     _strokeGeomCache: new Map(),
@@ -1540,6 +1578,8 @@ function showEditor(node, type, options = {}) {
   }
   editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
   const imageCache = new Map();
+  const rasterImageCache = new Map();
+  const rasterErpCanvasCache = new Map();
   const runtime = {
     dirty: true,
     rafId: 0,
@@ -1634,6 +1674,16 @@ function showEditor(node, type, options = {}) {
     const gid = String(actionGroupId || "").trim();
     return gid ? `${layerKind === "mask" ? "mask" : "paint"}:${gid}` : "";
   }
+  function makeRasterObjectSelectionId(id) {
+    const rid = String(id || "").trim();
+    return rid ? `raster:${rid}` : "";
+  }
+  function parseRasterObjectSelectionId(idOrRasterId) {
+    const raw = String(idOrRasterId || "").trim();
+    if (!raw) return "";
+    const m = raw.match(/^raster:(.*)$/);
+    return String(m ? (m[1] || "") : raw).trim();
+  }
   function parseStrokeGroupSelectionId(idOrActionGroupId, layerKind = null) {
     const raw = String(idOrActionGroupId || "").trim();
     if (!raw) return { layerKind: "paint", actionGroupId: "" };
@@ -1648,6 +1698,10 @@ function showEditor(node, type, options = {}) {
     }
     for (const group of getPaintingGroupList()) {
       maxZ = Math.max(maxZ, Number(group?.z_index || 0));
+    }
+    for (const item of (Array.isArray(state.painting?.raster_objects) ? state.painting.raster_objects : [])) {
+      if (String(item?.layerKind || "paint") !== "paint") continue;
+      maxZ = Math.max(maxZ, Number(item?.z_index || 0));
     }
     return maxZ + 1;
   }
@@ -1759,7 +1813,15 @@ function showEditor(node, type, options = {}) {
       z_index: Number(group?.z_index || 0),
       item: group,
     }));
-    return [...stickers, ...groups].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
+    const rasterObjects = (Array.isArray(state.painting?.raster_objects) ? state.painting.raster_objects : [])
+      .filter((item) => String(item?.layerKind || "paint") === "paint")
+      .map((item) => ({
+        type: "rasterObject",
+        id: String(item?.id || ""),
+        z_index: Number(item?.z_index || 0),
+        item,
+      }));
+    return [...stickers, ...groups, ...rasterObjects].sort((a, b) => Number(a.z_index || 0) - Number(b.z_index || 0));
   }
   function getOrderedPaintGroupIds(includeActive = true) {
     const ordered = getDisplayListObjects()
@@ -1769,7 +1831,8 @@ function showEditor(node, type, options = {}) {
     if (includeActive) {
       const activeGid = String(editor.interaction?.stroke?.actionGroupId || "").trim();
       const activeLayerKind = String(editor.interaction?.stroke?.layerKind || "").trim();
-      if (activeGid && activeLayerKind === "paint" && !ordered.includes(activeGid)) {
+      const activeToolKind = String(editor.interaction?.stroke?.toolKind || "").trim();
+      if (activeGid && activeLayerKind === "paint" && activeToolKind !== "eraser" && !ordered.includes(activeGid)) {
         ordered.push(activeGid);
       }
     }
@@ -1781,7 +1844,8 @@ function showEditor(node, type, options = {}) {
     if (!includeActivePaint) return ordered;
     const activeGid = String(editor.interaction?.stroke?.actionGroupId || "").trim();
     const activeLayerKind = String(editor.interaction?.stroke?.layerKind || "").trim();
-    if (!activeGid || activeLayerKind !== "paint") return ordered;
+    const activeToolKind = String(editor.interaction?.stroke?.toolKind || "").trim();
+    if (!activeGid || activeLayerKind !== "paint" || activeToolKind === "eraser") return ordered;
     if (ordered.some((entry) => entry.type === "strokeGroup" && String(entry.actionGroupId || "") === activeGid)) {
       return ordered;
     }
@@ -1808,6 +1872,14 @@ function showEditor(node, type, options = {}) {
       .map((item) => getStrokeGroupItem(makeStrokeGroupSelectionId("paint", item?.actionGroupId || item?.id || "")))
       .filter(Boolean);
   }
+  function getSelectableRasterObjectItems() {
+    return (Array.isArray(state.painting?.raster_objects) ? state.painting.raster_objects : [])
+      .filter((item) => String(item?.layerKind || "paint") === "paint")
+      .slice()
+      .sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0))
+      .map((item) => getRasterObjectItem(makeRasterObjectSelectionId(item?.id || "")))
+      .filter(Boolean);
+  }
 
   function getLivePaintRevisionSuffix() {
     const interactionKind = String(editor.interaction?.kind || "");
@@ -1815,7 +1887,8 @@ function showEditor(node, type, options = {}) {
     if (interactionKind !== "paint_stroke" && interactionKind !== "paint_lasso_fill") return "";
     const layerKind = String(editor.interaction?.stroke?.layerKind || "");
     const pointCount = geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0;
-    return `_${layerKind || "paint"}_live${pointCount}`;
+    const stamp = String(editor.interaction?._livePreviewToken || "");
+    return `_${layerKind || "paint"}_live${stamp}_${pointCount}`;
   }
   function getCutoutSelectableItems() {
     return [
@@ -1828,6 +1901,27 @@ function showEditor(node, type, options = {}) {
   }
   function isStickerItem(item) {
     return !!item && Array.isArray(state.stickers) && state.stickers.includes(item);
+  }
+  function getRasterObjectList() {
+    return Array.isArray(state.painting?.raster_objects) ? state.painting.raster_objects : [];
+  }
+  function getRasterObjectItem(idOrRasterId) {
+    const rid = parseRasterObjectSelectionId(idOrRasterId);
+    if (!rid) return null;
+    const item = getRasterObjectList().find((entry) => String(entry?.id || "").trim() === rid);
+    if (!item || String(item?.layerKind || "paint") !== "paint") return null;
+    return {
+      ...item,
+      id: makeRasterObjectSelectionId(rid),
+      type: "rasterObject",
+      rasterObjectId: rid,
+    };
+  }
+  function isRasterObjectItem(item) {
+    if (!item || typeof item !== "object") return false;
+    if (String(item.type || "") !== "rasterObject") return false;
+    const rid = parseRasterObjectSelectionId(item.rasterObjectId || item.id || "");
+    return !!rid && !!getRasterObjectItem(makeRasterObjectSelectionId(rid));
   }
   function getStrokeGroupItem(idOrActionGroupId) {
     const resolved = parseStrokeGroupSelectionId(idOrActionGroupId);
@@ -1863,6 +1957,15 @@ function showEditor(node, type, options = {}) {
     const groups = getPaintingGroupList().slice().sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
     const idx = groups.findIndex((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
     return idx >= 0 ? `Stroke ${idx + 1}` : "Stroke";
+  }
+  function getRasterObjectDisplayName(item) {
+    const rid = parseRasterObjectSelectionId(item?.rasterObjectId || item?.id || "");
+    const items = getRasterObjectList()
+      .filter((entry) => String(entry?.layerKind || "paint") === "paint")
+      .slice()
+      .sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    const idx = items.findIndex((entry) => String(entry?.id || "").trim() === rid);
+    return idx >= 0 ? `Raster ${idx + 1}` : "Raster";
   }
   function getStrokeGeomCacheKey(actionGroupId, layerKind = "paint") {
     const gid = String(actionGroupId || "").trim();
@@ -2055,11 +2158,27 @@ function showEditor(node, type, options = {}) {
     }
     return changed;
   }
+  function applyRasterObjectOffset(idOrRasterId, du, dv, snapshot = null) {
+    const rid = parseRasterObjectSelectionId(idOrRasterId);
+    if (!rid) return false;
+    const item = getRasterObjectList().find((entry) => String(entry?.id || "").trim() === rid);
+    if (!item) return false;
+    const source = snapshot && typeof snapshot === "object" ? snapshot : item;
+    const sourceTf = source?.transform || {};
+    const nextDu = Number(sourceTf.du || 0) + Number(du || 0);
+    const nextDv = clamp(Number(sourceTf.dv || 0) + Number(dv || 0), -1, 1);
+    if (!item.transform) item.transform = { du: 0, dv: 0, rot_deg: 0, scale: 1 };
+    item.transform.du = nextDu;
+    item.transform.dv = nextDv;
+    return true;
+  }
   function getSelected() {
     const id = String(editor.selectedId || "");
     if (!id) return null;
     const groupItem = getStrokeGroupItem(id);
     if (groupItem) return groupItem;
+    const rasterItem = getRasterObjectItem(id);
+    if (rasterItem) return rasterItem;
     if (type === "cutout") {
       return getCutoutSelectableItems().find((item) => String(item?.id || "") === id) || null;
     }
@@ -2077,6 +2196,7 @@ function showEditor(node, type, options = {}) {
       seen.add(key);
       const item = key === String(editor.selectedId || "") ? getSelected() : (
         getStrokeGroupItem(key)
+        || getRasterObjectItem(key)
         || (type === "cutout"
           ? getCutoutSelectableItems().find((entry) => String(entry?.id || "") === key)
           : getList().find((entry) => String(entry?.id || "") === key))
@@ -2125,7 +2245,7 @@ function showEditor(node, type, options = {}) {
   function getSelectedKind() {
     const selected = getSelected();
     if (!selected) return null;
-    if (isStrokeGroupItem(selected)) return "stroke";
+    if (isStrokeGroupItem(selected) || isRasterObjectItem(selected)) return "stroke";
     return isShotItem(selected) ? "frame" : "image";
   }
   function isItemLocked(item) {
@@ -2134,6 +2254,11 @@ function showEditor(node, type, options = {}) {
       const gid = String(item.actionGroupId || item.id || "").trim();
       const group = getPaintingGroupList().find((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
       return group?.locked === true;
+    }
+    if (isRasterObjectItem(item)) {
+      const rid = parseRasterObjectSelectionId(item.rasterObjectId || item.id || "");
+      const raster = getRasterObjectList().find((entry) => String(entry?.id || "").trim() === rid);
+      return raster?.locked === true;
     }
     return item.locked === true;
   }
@@ -2149,6 +2274,13 @@ function showEditor(node, type, options = {}) {
       const group = getPaintingGroupList().find((entry) => String(entry?.actionGroupId || entry?.id || "").trim() === gid);
       if (!group || group.locked === next) return false;
       group.locked = next;
+      return true;
+    }
+    if (isRasterObjectItem(item)) {
+      const rid = parseRasterObjectSelectionId(item.rasterObjectId || item.id || "");
+      const raster = getRasterObjectList().find((entry) => String(entry?.id || "").trim() === rid);
+      if (!raster || raster.locked === next) return false;
+      raster.locked = next;
       return true;
     }
     if (item.locked === next) return false;
@@ -2750,6 +2882,269 @@ function showEditor(node, type, options = {}) {
     return img;
   }
 
+  function getRasterObjectImage(item, onLoad = null) {
+    const dataUrl = String(item?.rasterDataUrl || "").trim();
+    if (!dataUrl) return null;
+    const cached = rasterImageCache.get(dataUrl);
+    if (cached) {
+      if (cached.complete || cached.width || cached.naturalWidth) return cached;
+      return cached;
+    }
+    const img = new Image();
+    img.onload = () => {
+      if (typeof onLoad === "function") onLoad();
+    };
+    img.src = dataUrl;
+    rasterImageCache.set(dataUrl, img);
+    return img;
+  }
+
+  function getRasterCompositeErpSize() {
+    const erpTarget = editor.paintEngine?.getErpTarget?.(getOrderedPaintGroupIds(false)) || null;
+    const width = Math.max(1, Number(erpTarget?.descriptor?.width || erpTarget?.displayPaint?.canvas?.width || 2048));
+    const height = Math.max(1, Number(erpTarget?.descriptor?.height || erpTarget?.displayPaint?.canvas?.height || 1024));
+    return { width, height };
+  }
+
+  function getComposedPaintErpCanvas(orderedGroupIds = null) {
+    rebuildPaintEngineIfNeeded();
+    const groupIds = Array.isArray(orderedGroupIds) ? orderedGroupIds : getOrderedPaintGroupIds(false);
+    const erpTarget = editor.paintEngine?.getErpTarget?.(groupIds) || null;
+    const width = Math.max(1, Number(erpTarget?.descriptor?.width || erpTarget?.displayPaint?.canvas?.width || 2048));
+    const height = Math.max(1, Number(erpTarget?.descriptor?.height || erpTarget?.displayPaint?.canvas?.height || 1024));
+    if (!editor._rasterComposeSurface
+      || Number(editor._rasterComposeSurface.canvas?.width || 0) !== width
+      || Number(editor._rasterComposeSurface.canvas?.height || 0) !== height) {
+      editor._rasterComposeSurface = createRasterSurface(width, height);
+    }
+    const surface = editor._rasterComposeSurface;
+    surface.ctx.clearRect(0, 0, width, height);
+    let drew = false;
+    for (const entry of getDisplayListObjects()) {
+      if (entry.type === "strokeGroup") {
+        const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
+        if (!groupCanvas) continue;
+        surface.ctx.drawImage(groupCanvas, 0, 0);
+        drew = true;
+        continue;
+      }
+      if (entry.type === "rasterObject" && String(entry.item?.layerKind || "paint") === "paint") {
+        const rasterCanvas = getRasterObjectErpCanvas(entry.item, () => requestDraw());
+        if (!rasterCanvas) continue;
+        surface.ctx.drawImage(rasterCanvas, 0, 0);
+        drew = true;
+      }
+    }
+    return drew ? surface.canvas : null;
+  }
+
+  function getComposedMaskErpCanvas(erpTarget = null) {
+    rebuildPaintEngineIfNeeded();
+    const target = erpTarget || editor.paintEngine?.getErpTarget?.(getOrderedPaintGroupIds(false)) || null;
+    const baseMask = target?.committedMask?.canvas || null;
+    const width = Math.max(1, Number(target?.descriptor?.width || baseMask?.width || 2048));
+    const height = Math.max(1, Number(target?.descriptor?.height || baseMask?.height || 1024));
+    const rasters = getRasterObjectList()
+      .filter((item) => String(item?.layerKind || "paint") === "mask")
+      .slice()
+      .sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    if (!baseMask && !rasters.length) return null;
+    if (!editor._maskComposeSurface
+      || Number(editor._maskComposeSurface.canvas?.width || 0) !== width
+      || Number(editor._maskComposeSurface.canvas?.height || 0) !== height) {
+      editor._maskComposeSurface = createRasterSurface(width, height);
+    }
+    const surface = editor._maskComposeSurface;
+    surface.ctx.clearRect(0, 0, width, height);
+    if (baseMask) surface.ctx.drawImage(baseMask, 0, 0);
+    for (const obj of rasters) {
+      const rasterCanvas = getRasterObjectErpCanvas(obj, () => requestDraw());
+      if (rasterCanvas) surface.ctx.drawImage(rasterCanvas, 0, 0);
+    }
+    return surface.canvas;
+  }
+
+  function getActivePaintEraserPreviewInfo() {
+    const interaction = editor.interaction;
+    if (interaction?.kind !== "paint_stroke") return null;
+    const stroke = interaction?.stroke || null;
+    if (!stroke || String(stroke?.layerKind || "") !== "paint" || String(stroke?.toolKind || "") !== "eraser") return null;
+    const erpDesc = getActivePaintTargetDescriptor();
+    const liveKey = `${getLivePaintRevisionSuffix()}:${erpDesc.width}:${erpDesc.height}`;
+    if (editor._activePaintEraserPreviewInfo?.cacheKey === liveKey) {
+      return editor._activePaintEraserPreviewInfo.value || null;
+    }
+    const previewStroke = cloneJson(stroke);
+    const geometry = previewStroke?.geometry || null;
+    if (geometry && String(geometry.geometryKind || "") !== "lasso_fill") {
+      const raw = Array.isArray(geometry.rawPoints) && geometry.rawPoints.length
+        ? geometry.rawPoints
+        : (Array.isArray(geometry.points) ? geometry.points : []);
+      geometry.processedPoints = processFreehandPoints(raw, previewStroke.targetSpace, true);
+    }
+    const surface = createRasterSurface(erpDesc.width, erpDesc.height);
+    if (!rasterizeStrokeToSurface(surface, previewStroke, { w: erpDesc.width, h: erpDesc.height })) return null;
+    const data = surface.ctx?.getImageData(0, 0, erpDesc.width, erpDesc.height)?.data || null;
+    if (!data) return null;
+    let minX = erpDesc.width;
+    let minY = erpDesc.height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < erpDesc.height; y += 1) {
+      for (let x = 0; x < erpDesc.width; x += 1) {
+        if (data[(y * erpDesc.width + x) * 4 + 3] <= 8) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < minX || maxY < minY) {
+      editor._activePaintEraserPreviewInfo = { cacheKey: liveKey, value: null };
+      return null;
+    }
+    const info = {
+      surface,
+      bounds: { minX, minY, maxX, maxY },
+      key: `${liveKey}:${minX}:${minY}:${maxX}:${maxY}`,
+    };
+    editor._activePaintEraserPreviewInfo = { cacheKey: liveKey, value: info };
+    editor._liveEraserPreviewCanvasCache = new Map();
+    return info;
+  }
+
+  function invalidateLivePaintPreviewCaches() {
+    editor._activePaintEraserPreviewInfo = null;
+    editor._liveEraserPreviewCanvasCache = null;
+  }
+
+  function getPaintObjectApproxErpBounds(entry, width, height) {
+    if (!entry) return null;
+    if (entry.type === "rasterObject" && entry.item?.bbox) {
+      const bbox = entry.item.bbox;
+      const tf = entry.item?.transform || {};
+      const u0 = Number(bbox.u0 || 0) + Number(tf.du || 0);
+      const u1 = Number(bbox.u1 || 0) + Number(tf.du || 0);
+      const v0 = Number(bbox.v0 || 0) + Number(tf.dv || 0);
+      const v1 = Number(bbox.v1 || 0) + Number(tf.dv || 0);
+      return {
+        minX: Math.floor((((u0 % 1) + 1) % 1) * width),
+        maxX: Math.ceil((((u1 % 1) + 1) % 1) * width),
+        minY: Math.floor(clamp(v0, 0, 1) * height),
+        maxY: Math.ceil(clamp(v1, 0, 1) * height),
+        wraps: (u1 - u0) >= 1 || u0 < 0 || u1 > 1,
+      };
+    }
+    if (entry.type === "strokeGroup") {
+      const strokes = getStrokeGroupStrokes(entry.actionGroupId, "paint");
+      const frame = ensureGroupFrame(entry.actionGroupId, "paint", strokes);
+      if (!frame) return null;
+      const minU = frame.centerUv.u - frame.halfW;
+      const maxU = frame.centerUv.u + frame.halfW;
+      const minV = frame.centerUv.v - frame.halfH;
+      const maxV = frame.centerUv.v + frame.halfH;
+      return {
+        minX: Math.floor((((minU % 1) + 1) % 1) * width),
+        maxX: Math.ceil((((maxU % 1) + 1) % 1) * width),
+        minY: Math.floor(clamp(minV, 0, 1) * height),
+        maxY: Math.ceil(clamp(maxV, 0, 1) * height),
+        wraps: (maxU - minU) >= 1 || minU < 0 || maxU > 1,
+      };
+    }
+    return null;
+  }
+
+  function erpBoundsIntersect(a, b, width) {
+    if (!a || !b) return false;
+    const split = (box) => {
+      if (!box.wraps) return [box];
+      return [
+        { minX: 0, maxX: box.maxX, minY: box.minY, maxY: box.maxY, wraps: false },
+        { minX: box.minX, maxX: width - 1, minY: box.minY, maxY: box.maxY, wraps: false },
+      ];
+    };
+    const aa = split(a);
+    const bb = split(b);
+    return aa.some((x) => bb.some((y) => !(x.maxX < y.minX || y.maxX < x.minX || x.maxY < y.minY || y.maxY < x.minY)));
+  }
+
+  function getLiveEraserAppliedCanvas(sourceCanvas, entry, previewInfo) {
+    if (!sourceCanvas || !entry || !previewInfo?.surface?.canvas) return sourceCanvas;
+    if (entry.type !== "rasterObject") return sourceCanvas;
+    const width = Number(sourceCanvas.width || previewInfo.surface.canvas.width || 0);
+    const height = Number(sourceCanvas.height || previewInfo.surface.canvas.height || 0);
+    if (width < 1 || height < 1) return sourceCanvas;
+    const objectBounds = getPaintObjectApproxErpBounds(entry, width, height);
+    if (objectBounds && !erpBoundsIntersect(objectBounds, previewInfo.bounds, width)) return sourceCanvas;
+    const rid = String(entry.item?.id || entry.id || "");
+    const tf = entry.item?.transform || {};
+    const cacheKey = `${previewInfo.key}:${rid}:${width}:${height}:${Number(tf.du || 0).toFixed(6)}:${Number(tf.dv || 0).toFixed(6)}:${Number(tf.rot_deg || 0).toFixed(3)}:${Number(tf.scale || 1).toFixed(4)}`;
+    const cache = editor._liveEraserPreviewCanvasCache instanceof Map
+      ? editor._liveEraserPreviewCanvasCache
+      : (editor._liveEraserPreviewCanvasCache = new Map());
+    if (cache.has(cacheKey)) return cache.get(cacheKey);
+    const surface = createRasterSurface(width, height);
+    surface.ctx.clearRect(0, 0, width, height);
+    surface.ctx.drawImage(sourceCanvas, 0, 0);
+    surface.ctx.save();
+    surface.ctx.globalCompositeOperation = "destination-out";
+    surface.ctx.drawImage(previewInfo.surface.canvas, 0, 0);
+    surface.ctx.restore();
+    if (cache.size > 64) cache.clear();
+    cache.set(cacheKey, surface.canvas);
+    return surface.canvas;
+  }
+
+  function getRasterObjectErpCanvas(item, onLoad = null) {
+    const rid = parseRasterObjectSelectionId(item?.rasterObjectId || item?.id || "");
+    const bbox = item?.bbox || null;
+    if (!rid || !bbox) return null;
+    const img = getRasterObjectImage(item, onLoad);
+    if (!img || !(img.complete || img.width || img.naturalWidth)) return null;
+    const { width, height } = getRasterCompositeErpSize();
+    const tf = item?.transform || {};
+    const key = [
+      rid,
+      width,
+      height,
+      bbox.u0,
+      bbox.v0,
+      bbox.u1,
+      bbox.v1,
+      tf.du,
+      tf.dv,
+      tf.rot_deg,
+      tf.scale,
+      getPaintingRevisionKey(),
+    ].join(":");
+    const cached = rasterErpCanvasCache.get(key);
+    if (cached) return cached;
+    if (rasterErpCanvasCache.size > 64) rasterErpCanvasCache.clear();
+    const erpCanvas = document.createElement("canvas");
+    erpCanvas.width = width;
+    erpCanvas.height = height;
+    const erpCtx = erpCanvas.getContext("2d");
+    if (!erpCtx) return null;
+    const px = Number(bbox.u0 || 0) * width;
+    const py = Number(bbox.v0 || 0) * height;
+    const pw = Math.max(1, (Number(bbox.u1 || 0) - Number(bbox.u0 || 0)) * width);
+    const ph = Math.max(1, (Number(bbox.v1 || 0) - Number(bbox.v0 || 0)) * height);
+    const cx = px + pw * 0.5 + (Number(tf.du || 0) * width);
+    const cy = py + ph * 0.5 + (Number(tf.dv || 0) * height);
+    const rot = Number(tf.rot_deg || 0) * DEG2RAD;
+    const scale = Math.max(0.01, Number(tf.scale || 1));
+    for (const wrapOffset of [-width, 0, width]) {
+      erpCtx.save();
+      erpCtx.translate(cx + wrapOffset, cy);
+      erpCtx.rotate(rot);
+      erpCtx.scale(scale, scale);
+      erpCtx.drawImage(img, -pw * 0.5, -ph * 0.5, pw, ph);
+      erpCtx.restore();
+    }
+    rasterErpCanvasCache.set(key, erpCanvas);
+    return erpCanvas;
+  }
+
   function buildEditorStickerScene() {
     return buildStickerSceneFromState(state, {
       selectedId: editor.selectedId || null,
@@ -2786,6 +3181,7 @@ function showEditor(node, type, options = {}) {
   function drawOrderedDisplayListInView(ctx, rect, view, bgImg, cachePrefix = "modal_object_view") {
     if (!ctx || !rect || !view) return false;
     let drewAnything = false;
+    const liveEraserPreview = getActivePaintEraserPreviewInfo();
     if (bgImg && editor.showPanorama) {
       const bgDrawn = renderCutoutViewToContext2D({
         owner: node,
@@ -2815,9 +3211,33 @@ function showEditor(node, type, options = {}) {
           drewAnything = drewAnything || !!stickerDrawn;
           continue;
         }
+        if (entry.type === "rasterObject" && entry.item) {
+          let rasterCanvas = getRasterObjectErpCanvas(entry.item, () => requestDraw());
+          if (!rasterCanvas) continue;
+          const livePreviewRevision = liveEraserPreview ? `_${liveEraserPreview.key}` : "";
+          if (liveEraserPreview) {
+            rasterCanvas = getLiveEraserAppliedCanvas(rasterCanvas, entry, liveEraserPreview);
+          }
+          const tf = entry.item?.transform || {};
+          renderCutoutViewToContext2D({
+            owner: node,
+            cacheKey: `${cachePrefix}_raster_${String(entry.id || entry.item.id || "")}`,
+            ctx,
+            rect,
+            img: rasterCanvas,
+            view,
+            backgroundRevision: `${getPaintingCompositeRevisionKey()}_raster_${String(entry.id || entry.item.id || "")}_${Number(tf.du || 0).toFixed(6)}_${Number(tf.dv || 0).toFixed(6)}_${Number(tf.rot_deg || 0).toFixed(3)}_${Number(tf.scale || 1).toFixed(4)}${livePreviewRevision}`,
+            backgroundOpacity: 1,
+          });
+          drewAnything = true;
+          continue;
+        }
         if (entry.type === "strokeGroup") {
-          const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
+          let groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(entry.actionGroupId) || null;
           if (!groupCanvas) continue;
+          if (liveEraserPreview) {
+            groupCanvas = getLiveEraserAppliedCanvas(groupCanvas, entry, liveEraserPreview);
+          }
           renderCutoutViewToContext2D({
             owner: node,
             cacheKey: `${cachePrefix}_group_${String(entry.actionGroupId || "")}`,
@@ -2898,9 +3318,9 @@ function showEditor(node, type, options = {}) {
   function syncPaintingLayerAsync() {
     const nodeId = String(node.id ?? "0");
     const promise = (async () => {
-      const rev = getPaintingRevisionKey();
-      const counts = paintingStrokeCount(state.painting);
-      if (counts.paintCount <= 0 && counts.maskCount <= 0) {
+      const rev = getPaintingCompositeRevisionKey();
+      const counts = paintingCompositeCount(state.painting);
+      if (counts.totalPaintCount <= 0 && counts.totalMaskCount <= 0) {
         if (state.painting_layer !== null) {
           state.painting_layer = null;
           _paintLayerSyncRevision = rev;
@@ -2915,17 +3335,29 @@ function showEditor(node, type, options = {}) {
         rebuildPaintEngineIfNeeded();
         const orderedGroupIds = getOrderedPaintGroupIds(false);
         const erpTarget = editor.paintEngine?.getErpTarget?.(orderedGroupIds) || null;
-        const paintCanvas = erpTarget?.displayPaint?.canvas || null;
-        const maskCanvas = erpTarget?.committedMask?.canvas || null;
-        if (!paintCanvas || !maskCanvas) return;
+        const paintCanvas = getComposedPaintErpCanvas(orderedGroupIds);
+        const maskCanvas = getComposedMaskErpCanvas(erpTarget);
+        const width = Math.max(1, Number(erpTarget?.descriptor?.width || paintCanvas?.width || maskCanvas?.width || 2048));
+        const height = Math.max(1, Number(erpTarget?.descriptor?.height || paintCanvas?.height || maskCanvas?.height || 1024));
+        if ((!paintCanvas && counts.totalPaintCount > 0) || (!maskCanvas && counts.totalMaskCount > 0)) {
+          if (!editor._paintLayerSyncBlankSurface
+            || Number(editor._paintLayerSyncBlankSurface.canvas?.width || 0) !== width
+            || Number(editor._paintLayerSyncBlankSurface.canvas?.height || 0) !== height) {
+            editor._paintLayerSyncBlankSurface = createRasterSurface(width, height);
+          }
+          editor._paintLayerSyncBlankSurface.ctx.clearRect(0, 0, width, height);
+        }
+        const uploadPaintCanvas = paintCanvas || (counts.totalPaintCount > 0 ? editor._paintLayerSyncBlankSurface?.canvas || null : null);
+        const uploadMaskCanvas = maskCanvas || (counts.totalMaskCount > 0 ? editor._paintLayerSyncBlankSurface?.canvas || null : null);
+        if (!uploadPaintCanvas && !uploadMaskCanvas) return;
         let paintRef = null;
         let maskRef = null;
         const groupRefs = [];
-        if (counts.paintCount > 0) {
-          paintRef = await uploadCanvasAsPaintLayer(paintCanvas, `pano_paint_${nodeId}.png`);
-          for (const actionGroupId of orderedGroupIds) {
-            const groupTarget = editor.paintEngine?.getGroupTarget?.(actionGroupId) || null;
-            const groupCanvas = groupTarget?.committedPaint?.canvas || null;
+        if (counts.totalPaintCount > 0) {
+          paintRef = await uploadCanvasAsPaintLayer(uploadPaintCanvas, `pano_paint_${nodeId}.png`);
+          for (const entry of getDisplayListObjects().filter((item) => item.type === "strokeGroup")) {
+            const actionGroupId = String(entry.actionGroupId || "");
+            const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(actionGroupId) || null;
             if (!groupCanvas) continue;
             const safeGroupId = String(actionGroupId || "").replace(/[^a-zA-Z0-9_-]/g, "_");
             const ref = await uploadCanvasAsPaintLayer(groupCanvas, `pano_paint_${nodeId}_${safeGroupId}.png`);
@@ -2937,10 +3369,10 @@ function showEditor(node, type, options = {}) {
             });
           }
         }
-        if (counts.maskCount > 0) {
-          maskRef = await uploadCanvasAsPaintLayer(maskCanvas, `pano_mask_${nodeId}.png`);
+        if (counts.totalMaskCount > 0) {
+          maskRef = await uploadCanvasAsPaintLayer(uploadMaskCanvas, `pano_mask_${nodeId}.png`);
         }
-        if (rev === getPaintingRevisionKey()) {
+        if (rev === getPaintingCompositeRevisionKey()) {
           state.painting_layer = {
             paint: paintRef,
             mask: maskRef,
@@ -3225,6 +3657,50 @@ function showEditor(node, type, options = {}) {
     drawImageTriTo(ctx, img, s0, s1, s2, d0, d1, d2);
   }
 
+  function getRasterObjectCenterUv(item) {
+    const bbox = item?.bbox || null;
+    const tf = item?.transform || {};
+    if (!bbox) return { u: 0.5, v: 0.5 };
+    const centerU = (Number(bbox.u0 || 0) + Number(bbox.u1 || 0)) * 0.5 + Number(tf.du || 0);
+    return {
+      u: ((centerU % 1) + 1) % 1,
+      v: clamp((Number(bbox.v0 || 0) + Number(bbox.v1 || 0)) * 0.5 + Number(tf.dv || 0), 0, 1),
+    };
+  }
+
+  function getRasterObjectTransformedErpPoints(item) {
+    const bbox = item?.bbox || null;
+    if (!bbox) return [];
+    const center = {
+      u: (Number(bbox.u0 || 0) + Number(bbox.u1 || 0)) * 0.5,
+      v: (Number(bbox.v0 || 0) + Number(bbox.v1 || 0)) * 0.5,
+    };
+    const scale = Math.max(0.01, Number(item?.transform?.scale || 1));
+    const rotationDeg = Number(item?.transform?.rot_deg || 0);
+    const du = Number(item?.transform?.du || 0);
+    const dv = Number(item?.transform?.dv || 0);
+    const base = [
+      { u: Number(bbox.u0 || 0), v: Number(bbox.v0 || 0) },
+      { u: Number(bbox.u1 || 0), v: Number(bbox.v0 || 0) },
+      { u: Number(bbox.u1 || 0), v: Number(bbox.v1 || 0) },
+      { u: Number(bbox.u0 || 0), v: Number(bbox.v1 || 0) },
+    ];
+    return base.map((pt) => translateErpPoint(transformErpPointAround(pt, center, scale, rotationDeg), du, dv));
+  }
+
+  function getRasterObjectGeomCacheKey(item) {
+    const rid = parseRasterObjectSelectionId(item?.rasterObjectId || item?.id || "");
+    const tf = item?.transform || {};
+    const bbox = item?.bbox || {};
+    const base = `${rid}:${editor.mode}:${getPaintingRevisionKey()}:${bbox.u0}:${bbox.v0}:${bbox.u1}:${bbox.v1}:${tf.du}:${tf.dv}:${tf.rot_deg}:${tf.scale}`;
+    if (editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      const rect = shot ? getFrameViewRect(shot) : null;
+      return `${base}:frame:${String(shot?.id || "")}:${Math.round(Number(rect?.x || 0))}:${Math.round(Number(rect?.y || 0))}:${Math.round(Number(rect?.w || 0))}:${Math.round(Number(rect?.h || 0))}`;
+    }
+    return `${base}:view:${Math.round(Number(editor.viewYaw || 0) * 100)}:${Math.round(Number(editor.viewPitch || 0) * 100)}:${Math.round(Number(editor.viewFov || 0) * 100)}:${Math.round(Number(canvas?.width || 0))}:${Math.round(Number(canvas?.height || 0))}`;
+  }
+
   function getMeshDivisions() {
     const q = String(state.ui_settings?.preview_quality || "balanced");
     if (q === "draft") {
@@ -3472,6 +3948,38 @@ function showEditor(node, type, options = {}) {
           y: topMid.y - 30,
         },
         strokePaths,
+        visible: true,
+      };
+      editor._strokeGeomCache.set(cacheKey, geom);
+      return geom;
+    }
+    if (isRasterObjectItem(item)) {
+      const cacheKey = getRasterObjectGeomCacheKey(item);
+      const cached = editor._strokeGeomCache.get(cacheKey);
+      if (cached) return cached;
+      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
+      const erpPoints = getRasterObjectTransformedErpPoints(item);
+      const projected = editor.mode === "frame"
+        ? (() => {
+          const shot = getActiveCutoutShot();
+          const rect = getFrameViewRect(shot);
+          return projectErpPointsToFrameRect(erpPoints, shot, rect);
+        })()
+        : projectErpPointsToCurrentView(erpPoints);
+      if (!Array.isArray(projected) || projected.length < 4) {
+        const hidden = { visible: false, kind: "rasterObject" };
+        editor._strokeGeomCache.set(cacheKey, hidden);
+        return hidden;
+      }
+      const corners = projected.slice(0, 4).map((pt) => ({ x: Number(pt?.x || 0), y: Number(pt?.y || 0) }));
+      const center = {
+        x: corners.reduce((sum, pt) => sum + Number(pt.x || 0), 0) / corners.length,
+        y: corners.reduce((sum, pt) => sum + Number(pt.y || 0), 0) / corners.length,
+      };
+      const geom = {
+        kind: "rasterObject",
+        center,
+        corners,
         visible: true,
       };
       editor._strokeGeomCache.set(cacheKey, geom);
@@ -3870,7 +4378,7 @@ function showEditor(node, type, options = {}) {
       }
     } else {
       selectedItems.forEach((selected) => {
-        if (!isStrokeGroupItem(selected)) return;
+        if (!isStrokeGroupItem(selected) && !isRasterObjectItem(selected)) return;
         const g = objectGeom(selected);
         if (!g?.visible) return;
         const accent = isItemLocked(selected) ? "#ff4d4f" : "#0070f3";
@@ -3884,8 +4392,10 @@ function showEditor(node, type, options = {}) {
         ctx.closePath();
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = accent;
-        g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
+        if (isStrokeGroupItem(selected)) {
+          ctx.fillStyle = accent;
+          g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
+        }
         ctx.restore();
       });
     }
@@ -3979,7 +4489,7 @@ function showEditor(node, type, options = {}) {
 
     const img = getConnectedErpImage();
     const previewRect = { x: px, y: py, w: pw, h: ph };
-    const erpPreviewRaster = editor.paintEngine?.getErpTarget?.(getOrderedPaintGroupIds())?.displayPaint?.canvas || null;
+    const erpPreviewRaster = getComposedPaintErpCanvas(getOrderedPaintGroupIds());
     const renderPreviewPaint = () => {
       if (!erpPreviewRaster) return;
       renderCutoutViewToContext2D({
@@ -3989,7 +4499,7 @@ function showEditor(node, type, options = {}) {
         rect: previewRect,
         img: erpPreviewRaster,
         view: cutoutView,
-        backgroundRevision: getPaintingRevisionKey() + getLivePaintRevisionSuffix(),
+        backgroundRevision: getPaintingCompositeRevisionKey() + getLivePaintRevisionSuffix(),
         backgroundOpacity: 1,
       });
     };
@@ -4208,6 +4718,19 @@ function showEditor(node, type, options = {}) {
     return String(editor.paintStrokeRevision);
   }
 
+  function getPaintingCompositeRevisionKey() {
+    return `${String(editor.paintStrokeRevision)}:${String(editor.paintCompositeRevision)}`;
+  }
+
+  function bumpPaintingStrokeRevision() {
+    editor.paintStrokeRevision += 1;
+    editor.paintCompositeRevision += 1;
+  }
+
+  function bumpPaintingCompositeRevision() {
+    editor.paintCompositeRevision += 1;
+  }
+
   function rebuildPaintEngineIfNeeded() {
     const key = getPaintingRevisionKey();
     if (editor.paintEngineRevisionKey === key) return;
@@ -4411,6 +4934,170 @@ function showEditor(node, type, options = {}) {
     targetCtx.closePath();
     targetCtx.fill();
     targetCtx.restore();
+  }
+
+  function getStrokeRasterPoints(stroke) {
+    const geometry = stroke?.geometry || null;
+    if (!geometry) return [];
+    if (String(geometry.geometryKind || "") === "lasso_fill") {
+      return Array.isArray(geometry.points) ? geometry.points : [];
+    }
+    return Array.isArray(geometry.processedPoints) && geometry.processedPoints.length
+      ? geometry.processedPoints
+      : (Array.isArray(geometry.rawPoints) && geometry.rawPoints.length
+        ? geometry.rawPoints
+        : (Array.isArray(geometry.points) ? geometry.points : []));
+  }
+
+  function buildNativeStrokeSamples(stroke, bounds) {
+    const points = getStrokeRasterPoints(stroke);
+    if (!Array.isArray(points) || !points.length) return [];
+    return points.map((point) => ({
+      x: Number(point?.u || 0) * Number(bounds?.w || 1),
+      y: Number(point?.v || 0) * Number(bounds?.h || 1),
+      radiusPx: getNativeRadiusPxForStrokePoint(stroke, point, Number(bounds?.w || 1), Number(bounds?.h || 1)),
+    }));
+  }
+
+  function rasterizeStrokeToSurface(surface, stroke, bounds = null) {
+    if (!surface?.ctx || !stroke) return false;
+    const targetBounds = bounds || { w: Number(surface.canvas?.width || 0), h: Number(surface.canvas?.height || 0) };
+    const rasterStroke = String(stroke?.toolKind || "") === "eraser"
+      ? {
+        ...stroke,
+        layerKind: "mask",
+        toolKind: String(stroke?.geometry?.geometryKind || "") === "lasso_fill" ? "lasso_fill" : "pen",
+      }
+      : stroke;
+    const geometryKind = String(stroke?.geometry?.geometryKind || "");
+    if (geometryKind === "lasso_fill") {
+      drawNativeLassoFill(surface.ctx, getStrokeRasterPoints(rasterStroke), rasterStroke, targetBounds);
+      return true;
+    }
+    const samples = buildNativeStrokeSamples(rasterStroke, targetBounds);
+    if (!samples.length) return false;
+    drawNativeStrokePath(surface.ctx, samples, rasterStroke, targetBounds);
+    return true;
+  }
+
+  function getAlphaBounds(alpha, width, height, threshold = 8) {
+    let minX = width;
+    let minY = height;
+    let maxX = -1;
+    let maxY = -1;
+    for (let y = 0; y < height; y += 1) {
+      const row = y * width;
+      for (let x = 0; x < width; x += 1) {
+        if (alpha[row + x] <= threshold) continue;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+    if (maxX < minX || maxY < minY) return null;
+    return { minX, minY, maxX, maxY };
+  }
+
+  function findAlphaConnectedComponents(alpha, width, height, threshold = 8) {
+    const visited = new Uint8Array(width * height);
+    const components = [];
+    const queueX = new Int32Array(width * height);
+    const queueY = new Int32Array(width * height);
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const idx = y * width + x;
+        if (visited[idx] || alpha[idx] <= threshold) continue;
+        let qh = 0;
+        let qt = 0;
+        queueX[qt] = x;
+        queueY[qt] = y;
+        qt += 1;
+        visited[idx] = 1;
+        const pixels = [];
+        let minX = x;
+        let minY = y;
+        let maxX = x;
+        let maxY = y;
+        while (qh < qt) {
+          const cx = queueX[qh];
+          const cy = queueY[qh];
+          qh += 1;
+          pixels.push({ x: cx, y: cy });
+          if (cx < minX) minX = cx;
+          if (cy < minY) minY = cy;
+          if (cx > maxX) maxX = cx;
+          if (cy > maxY) maxY = cy;
+          const neighbors = [
+            [cx - 1, cy],
+            [cx + 1, cy],
+            [cx, cy - 1],
+            [cx, cy + 1],
+          ];
+          for (const [nx, ny] of neighbors) {
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const nidx = ny * width + nx;
+            if (visited[nidx] || alpha[nidx] <= threshold) continue;
+            visited[nidx] = 1;
+            queueX[qt] = nx;
+            queueY[qt] = ny;
+            qt += 1;
+          }
+        }
+        components.push({ pixels, minX, minY, maxX, maxY });
+      }
+    }
+    return components;
+  }
+
+  function createRasterFrozenObjectsFromCanvas(canvas, layerKind, baseMeta = {}) {
+    const w = Number(canvas?.width || 0);
+    const h = Number(canvas?.height || 0);
+    const ctx2d = canvas?.getContext?.("2d");
+    if (!ctx2d || w < 1 || h < 1) return [];
+    const imageData = ctx2d.getImageData(0, 0, w, h);
+    const alpha = new Uint8Array(w * h);
+    for (let i = 0; i < alpha.length; i += 1) alpha[i] = imageData.data[i * 4 + 3];
+    const components = findAlphaConnectedComponents(alpha, w, h, 8);
+    return components.map((component, index) => {
+      const cw = component.maxX - component.minX + 1;
+      const ch = component.maxY - component.minY + 1;
+      const out = document.createElement("canvas");
+      out.width = cw;
+      out.height = ch;
+      const outCtx = out.getContext("2d");
+      if (!outCtx) return null;
+      const outData = outCtx.createImageData(cw, ch);
+      component.pixels.forEach(({ x, y }) => {
+        const srcIdx = (y * w + x) * 4;
+        const dstIdx = ((y - component.minY) * cw + (x - component.minX)) * 4;
+        outData.data[dstIdx + 0] = imageData.data[srcIdx + 0];
+        outData.data[dstIdx + 1] = imageData.data[srcIdx + 1];
+        outData.data[dstIdx + 2] = imageData.data[srcIdx + 2];
+        outData.data[dstIdx + 3] = imageData.data[srcIdx + 3];
+      });
+      outCtx.putImageData(outData, 0, 0);
+      return {
+        id: makePaintId("raster"),
+        type: "raster_frozen",
+        layerKind: layerKind === "mask" ? "mask" : "paint",
+        z_index: Number(baseMeta?.z_index || 0) + (index * 0.001),
+        locked: baseMeta?.locked === true,
+        bbox: {
+          u0: component.minX / w,
+          v0: component.minY / h,
+          u1: (component.maxX + 1) / w,
+          v1: (component.maxY + 1) / h,
+        },
+        rasterDataUrl: out.toDataURL("image/png"),
+        transform: {
+          du: 0,
+          dv: 0,
+          rot_deg: 0,
+          scale: 1,
+        },
+      };
+    }).filter(Boolean);
   }
 
   function worldDirToFrameLocalPoint(shot, dir) {
@@ -4617,7 +5304,7 @@ function showEditor(node, type, options = {}) {
     drawObjects();
     if (editor.mode !== "frame") drawCutoutOutputPreview();
     drawLassoOutlineOverlay();
-    if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}`;
+    if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}°`;
     updateSelectionMenu();
     if (!runtime.hasPresentedFrame) {
       runtime.hasPresentedFrame = true;
@@ -4728,11 +5415,13 @@ function showEditor(node, type, options = {}) {
   function pushHistory() {
     if (readOnly) return;
     editor.historyController.commitActionGroup(JSON.stringify(cloneStateForHistorySnapshot(state)));
+    syncUndoRedoButtons();
   }
 
   function restoreHistory(step) {
     if (readOnly) return;
     const snapshot = step < 0 ? editor.historyController.undo() : editor.historyController.redo();
+    syncUndoRedoButtons();
     if (!snapshot) return;
     const parsed = JSON.parse(snapshot);
     Object.keys(state).forEach((k) => delete state[k]);
@@ -4741,12 +5430,21 @@ function showEditor(node, type, options = {}) {
       ? state.active.selected_sticker_id
       : (type === "cutout" ? state.active.selected_sticker_id : state.active.selected_shot_id);
     editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
-    editor.paintStrokeRevision += 1;
+    bumpPaintingStrokeRevision();
     syncPaintUi();
     updateSidePanel();
     commitState();
     requestDraw();
     syncPaintingLayerAsync();
+  }
+
+  function getHistoryCapabilities() {
+    const historyEntries = Array.isArray(editor.historyController?.entries) ? editor.historyController.entries : [];
+    const historyIndex = Number(editor.historyController?.index);
+    return {
+      canUndo: !readOnly && historyEntries.length > 1 && historyIndex > 0,
+      canRedo: !readOnly && historyEntries.length > 1 && historyIndex >= 0 && historyIndex < historyEntries.length - 1,
+    };
   }
 
   function syncPaintUi() {
@@ -4755,33 +5453,44 @@ function showEditor(node, type, options = {}) {
       btn.classList.toggle("active", active);
       btn.setAttribute("aria-pressed", active ? "true" : "false");
     });
-    if (paintFooter) {
-      const showFooter = editor.primaryTool === "paint" || editor.primaryTool === "mask";
-      paintFooter.hidden = !showFooter;
-      paintFooter.querySelectorAll("[data-paint-group]").forEach((group) => {
-        const mode = group.getAttribute("data-paint-group");
-        group.hidden = mode !== editor.primaryTool;
-      });
-      if (paintSizeRow) paintSizeRow.hidden = editor.primaryTool !== "paint";
-      if (paintClearRow) paintClearRow.hidden = !(editor.primaryTool === "paint" || editor.primaryTool === "mask");
-      if (paintLayerClearCurrentBtn) {
-        const label = editor.primaryTool === "mask" ? "Clear mask" : "Clear paint";
-        paintLayerClearCurrentBtn.setAttribute("aria-label", label);
-        paintLayerClearCurrentBtn.setAttribute("data-tip", label);
-      }
-      paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
-        btn.classList.toggle("active", btn.getAttribute("data-paint-tool") === editor.paintTool && editor.primaryTool === "paint");
-      });
-      paintFooter.querySelectorAll("[data-mask-tool]").forEach((btn) => {
-        btn.classList.toggle("active", btn.getAttribute("data-mask-tool") === editor.maskTool && editor.primaryTool === "mask");
-      });
+    const showFooter = editor.primaryTool === "paint" || editor.primaryTool === "mask";
+    if (paintDock) {
+      setPaintDockVisible(showFooter);
     }
+    if (!showFooter) {
+      visiblePaintPaneMode = "";
+      return;
+    }
+    const nextMode = editor.primaryTool;
+    const nextPane = paintPanes.find((pane) => String(pane.getAttribute("data-paint-pane") || "") === nextMode) || null;
+    paintPanes.forEach((pane) => {
+      pane.classList.toggle("is-active", pane === nextPane);
+    });
+    visiblePaintPaneMode = nextMode;
+    if (paintSizeRow) paintSizeRow.hidden = false;
+    paintClearRows.forEach((row) => {
+      row.hidden = false;
+    });
+    if (paintPaneFadeTimer) {
+      clearTimeout(paintPaneFadeTimer);
+      paintPaneFadeTimer = 0;
+    }
+    root.querySelectorAll("[data-paint-tool]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-paint-tool") === editor.paintTool);
+    });
+    root.querySelectorAll("[data-mask-tool]").forEach((btn) => {
+      btn.classList.toggle("active", btn.getAttribute("data-mask-tool") === editor.maskTool);
+    });
     if (paintColorRow) {
-      const showColorRow = editor.primaryTool === "paint";
-      const colorEnabled = showColorRow && editor.paintTool !== "eraser";
-      paintColorRow.hidden = !showColorRow;
+      const colorEnabled = editor.paintTool !== "eraser";
+      paintColorRow.hidden = false;
       paintColorRow.classList.toggle("disabled", !colorEnabled);
-      if (!colorEnabled && paintColorPop) paintColorPop.hidden = true;
+      if (!colorEnabled && paintColorPop && !paintColorPop.hidden) {
+        paintPaneFadeTimer = window.setTimeout(() => {
+          paintColorPop.hidden = true;
+          paintPaneFadeTimer = 0;
+        }, 170);
+      }
       const matchedSwatchId = PAINT_COLOR_SWATCHES.find((swatch) => colorsApproximatelyEqual(editor.paintColor, swatch.color))?.id || "";
       paintColorRow.querySelectorAll("[data-paint-color-swatch]").forEach((btn) => {
         const active = btn.getAttribute("data-paint-color-swatch") === matchedSwatchId;
@@ -4831,19 +5540,6 @@ function showEditor(node, type, options = {}) {
             syncPaintUi();
           };
         });
-      }
-    }
-    if (paintColorRow && paintFooter && stageWrap) {
-      if (paintColorRow.hidden || paintFooter.hidden) {
-        paintColorRow.style.left = "";
-        paintColorRow.style.bottom = "";
-      } else {
-        const stageRect = stageWrap.getBoundingClientRect();
-        const footerRect = paintFooter.getBoundingClientRect();
-        const centerX = ((footerRect.left + footerRect.right) * 0.5) - stageRect.left;
-        const bottom = stageRect.bottom - footerRect.top + 10;
-        paintColorRow.style.left = `${Math.round(centerX)}px`;
-        paintColorRow.style.bottom = `${Math.round(bottom)}px`;
       }
     }
     const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
@@ -5269,13 +5965,27 @@ function showEditor(node, type, options = {}) {
         </div>
       </div>
     `;
+    const paintStrokeCount = Array.isArray(state?.painting?.paint?.strokes) ? state.painting.paint.strokes.length : 0;
+    const maskStrokeCount = Array.isArray(state?.painting?.mask?.strokes) ? state.painting.mask.strokes.length : 0;
+    const linkedPanoramaSource = findLinkedInputImageSource(node);
+    const hasPanoramaLayer = !!String(linkedPanoramaSource?.src || "").trim();
+    const hasObjectLayer = (Array.isArray(getList()) && getList().length > 0) || paintStrokeCount > 0;
+    const hasMaskLayer = maskStrokeCount > 0;
+    const isVisibilityEnabled = (key) => {
+      if (key === "panorama") return hasPanoramaLayer;
+      if (key === "objects") return hasObjectLayer;
+      return hasMaskLayer;
+    };
     const syncVisibilityButton = (btn, visible) => {
       const row = btn.closest("[data-visibility-row]");
+      const enabled = isVisibilityEnabled(String(btn.getAttribute("data-visibility") || ""));
       btn.innerHTML = visible ? ICON.eye : ICON.eye_dashed;
       btn.setAttribute("aria-pressed", visible ? "true" : "false");
       btn.setAttribute("data-tip", visible ? "Hide" : "Show");
+      btn.disabled = !enabled;
       btn.classList.toggle("active", !!visible);
       row?.classList.toggle("is-hidden", !visible);
+      row?.classList.toggle("is-disabled", !enabled);
     };
     visibilitySection.querySelectorAll("[data-visibility]").forEach((btn) => {
       const key = String(btn.getAttribute("data-visibility") || "");
@@ -5286,6 +5996,7 @@ function showEditor(node, type, options = {}) {
       };
       syncVisibilityButton(btn, readValue());
       btn.onclick = () => {
+        if (!isVisibilityEnabled(key)) return;
         if (key === "panorama") editor.showPanorama = !editor.showPanorama;
         else if (key === "objects") editor.showObjects = !editor.showObjects;
         else editor.showMask = !editor.showMask;
@@ -5478,9 +6189,11 @@ function showEditor(node, type, options = {}) {
         z_index: getNextStickerZIndex(),
       });
       setSelectedItem(state.stickers[state.stickers.length - 1]);
+      forceCursorTool();
       pushHistory();
       commitAndRefreshNode();
       updateSidePanel();
+      updateSelectionMenu();
       requestDraw();
     } catch (err) {
       console.error("[PanoramaSuite] failed to add sticker asset", err);
@@ -5619,7 +6332,7 @@ function showEditor(node, type, options = {}) {
     );
     if (!ok) return;
     state.painting = normalizePaintingState(null);
-    editor.paintStrokeRevision += 1;
+    bumpPaintingStrokeRevision();
     if (type === "stickers") {
       state.stickers = [];
       state.assets = {};
@@ -5664,10 +6377,11 @@ function showEditor(node, type, options = {}) {
       editor.interaction = null;
     }
     strokes.length = 0;
+    state.painting.raster_objects = getRasterObjectList().filter((item) => String(item?.layerKind || "paint") !== kind);
     if (kind === "paint") {
       getPaintingGroupList().length = 0;
     }
-    editor.paintStrokeRevision += 1;
+    bumpPaintingStrokeRevision();
     pushHistory();
     commitAndRefreshNode();
     updateSidePanel();
@@ -5705,12 +6419,19 @@ function showEditor(node, type, options = {}) {
       const paintStrokeIds = new Set(selectedItems
         .filter((item) => isStrokeGroupItem(item))
         .map((item) => String(item.actionGroupId || item.id || "")));
+      const rasterIds = new Set(selectedItems
+        .filter((item) => isRasterObjectItem(item))
+        .map((item) => parseRasterObjectSelectionId(item.rasterObjectId || item.id || "")));
       const stickerIds = new Set(selectedItems.filter(isStickerItem).map((item) => String(item.id || "")));
       if (paintStrokeIds.size > 0) {
         state.painting.paint.strokes = (Array.isArray(state.painting?.paint?.strokes) ? state.painting.paint.strokes : [])
           .filter((stroke) => !paintStrokeIds.has(String(stroke?.actionGroupId || "")));
         state.painting.groups = getPaintingGroupList()
           .filter((group) => !paintStrokeIds.has(String(group?.actionGroupId || group?.id || "")));
+      }
+      if (rasterIds.size > 0) {
+        state.painting.raster_objects = getRasterObjectList()
+          .filter((item) => !rasterIds.has(String(item?.id || "")));
       }
       if (stickerIds.size > 0) {
         state.stickers = (Array.isArray(state.stickers) ? state.stickers : [])
@@ -5732,6 +6453,19 @@ function showEditor(node, type, options = {}) {
         .filter((stroke) => String(stroke?.actionGroupId || "").trim() !== gid);
       state.painting.groups = getPaintingGroupList()
         .filter((group) => String(group?.actionGroupId || group?.id || "").trim() !== gid);
+      editor.selectedId = null;
+      editor.selectedIds = [];
+      pushHistory();
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+      return;
+    }
+    if (isRasterObjectItem(selected)) {
+      const rid = parseRasterObjectSelectionId(selected.rasterObjectId || selected.id || "");
+      state.painting.raster_objects = getRasterObjectList()
+        .filter((item) => String(item?.id || "").trim() !== rid);
       editor.selectedId = null;
       editor.selectedIds = [];
       pushHistory();
@@ -5844,6 +6578,7 @@ function showEditor(node, type, options = {}) {
     ordered.forEach((entry, index) => {
       if (entry.type === "sticker" && entry.item) entry.item.z_index = index;
       if (entry.type === "strokeGroup" && entry.item) entry.item.z_index = index;
+      if (entry.type === "rasterObject" && entry.item) entry.item.z_index = index;
     });
   }
 
@@ -5854,13 +6589,19 @@ function showEditor(node, type, options = {}) {
     if (!selected || selectedItems.length === 0) return;
     normalizeDisplayZIndices();
     const ordered = getDisplayListObjects();
-    const selectedKeys = new Set(selectedItems.map((item) => `${isStickerItem(item) ? "sticker" : "strokeGroup"}:${String(isStickerItem(item) ? item.id : (item.actionGroupId || item.id || ""))}`));
+    const selectedKeys = new Set(selectedItems.map((item) => {
+      if (isStickerItem(item)) return `sticker:${String(item.id || "")}`;
+      if (isRasterObjectItem(item)) return `rasterObject:${parseRasterObjectSelectionId(item.rasterObjectId || item.id || "")}`;
+      return `strokeGroup:${String(item.actionGroupId || item.id || "")}`;
+    }));
     const moving = [];
     const staying = [];
     ordered.forEach((entry) => {
       const key = entry.type === "sticker"
         ? `sticker:${String(entry.item?.id || "")}`
-        : `strokeGroup:${String(entry.actionGroupId || "")}`;
+        : (entry.type === "rasterObject"
+          ? `rasterObject:${String(entry.item?.id || entry.id || "")}`
+          : `strokeGroup:${String(entry.actionGroupId || "")}`);
       if (selectedKeys.has(key)) moving.push(entry);
       else staying.push(entry);
     });
@@ -5869,6 +6610,7 @@ function showEditor(node, type, options = {}) {
     nextOrdered.forEach((item, index) => {
       if (item.type === "sticker" && item.item) item.item.z_index = index;
       if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
+      if (item.type === "rasterObject" && item.item) item.item.z_index = index;
     });
     editor._sortedItemsCache = null;
     pushHistory();
@@ -5884,13 +6626,19 @@ function showEditor(node, type, options = {}) {
     if (!selected || selectedItems.length === 0) return;
     normalizeDisplayZIndices();
     const ordered = getDisplayListObjects();
-    const selectedKeys = new Set(selectedItems.map((item) => `${isStickerItem(item) ? "sticker" : "strokeGroup"}:${String(isStickerItem(item) ? item.id : (item.actionGroupId || item.id || ""))}`));
+    const selectedKeys = new Set(selectedItems.map((item) => {
+      if (isStickerItem(item)) return `sticker:${String(item.id || "")}`;
+      if (isRasterObjectItem(item)) return `rasterObject:${parseRasterObjectSelectionId(item.rasterObjectId || item.id || "")}`;
+      return `strokeGroup:${String(item.actionGroupId || item.id || "")}`;
+    }));
     const moving = [];
     const staying = [];
     ordered.forEach((entry) => {
       const key = entry.type === "sticker"
         ? `sticker:${String(entry.item?.id || "")}`
-        : `strokeGroup:${String(entry.actionGroupId || "")}`;
+        : (entry.type === "rasterObject"
+          ? `rasterObject:${String(entry.item?.id || entry.id || "")}`
+          : `strokeGroup:${String(entry.actionGroupId || "")}`);
       if (selectedKeys.has(key)) moving.push(entry);
       else staying.push(entry);
     });
@@ -5899,6 +6647,7 @@ function showEditor(node, type, options = {}) {
     nextOrdered.forEach((item, index) => {
       if (item.type === "sticker" && item.item) item.item.z_index = index;
       if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
+      if (item.type === "rasterObject" && item.item) item.item.z_index = index;
     });
     editor._sortedItemsCache = null;
     pushHistory();
@@ -6129,6 +6878,8 @@ function showEditor(node, type, options = {}) {
     let borderRadius = "999px";
     let rotateDeg = 0;
     let background = cursor.fillStyle;
+    const borderColorInner = "rgba(222, 222, 222, 0.72)";
+    const borderColorOuter = "rgba(52, 52, 52, 0.72)";
 
     if (cursor.layerKind === "mask") {
       background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.72) 0px, rgba(18,18,18,0.72) 4px, rgba(18,18,18,0.16) 4px, rgba(18,18,18,0.16) 8px)`;
@@ -6152,6 +6903,8 @@ function showEditor(node, type, options = {}) {
     paintCursorEl.style.width = `${Math.round(width)}px`;
     paintCursorEl.style.height = `${Math.round(height)}px`;
     paintCursorEl.style.borderRadius = borderRadius;
+    paintCursorEl.style.border = `1px solid ${borderColorInner}`;
+    paintCursorEl.style.boxShadow = `0 0 0 1px ${borderColorOuter}`;
     paintCursorEl.style.background = background;
     paintCursorEl.style.transform = `translate(${Math.round(cursor.x - width * 0.5)}px, ${Math.round(cursor.y - height * 0.5)}px) rotate(${rotateDeg}deg)`;
   }
@@ -6181,6 +6934,8 @@ function showEditor(node, type, options = {}) {
     let borderRadius = "999px";
     let rotateDeg = 0;
     let background = fill;
+    const borderColorInner = "rgba(222, 222, 222, 0.72)";
+    const borderColorOuter = "rgba(52, 52, 52, 0.72)";
 
     if (layerKind === "mask") {
       background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.78) 0px, rgba(18,18,18,0.78) 4px, rgba(18,18,18,0.18) 4px, rgba(18,18,18,0.18) 8px)`;
@@ -6204,7 +6959,8 @@ function showEditor(node, type, options = {}) {
     paintSizePreviewSampleEl.style.height = `${Math.round(height)}px`;
     paintSizePreviewSampleEl.style.borderRadius = borderRadius;
     paintSizePreviewSampleEl.style.background = background;
-    paintSizePreviewSampleEl.style.border = `2px solid ${stroke}`;
+    paintSizePreviewSampleEl.style.border = `1px solid ${borderColorInner}`;
+    paintSizePreviewSampleEl.style.boxShadow = `0 0 0 1px ${borderColorOuter}`;
     paintSizePreviewSampleEl.style.transform = `rotate(${rotateDeg}deg)`;
 
     if (paintSizePreviewTimer) {
@@ -6357,13 +7113,303 @@ function showEditor(node, type, options = {}) {
     return true;
   }
 
+  function getStrokeRadiusUvValue(stroke) {
+    const spec = getStrokeRadiusSpec(stroke);
+    if (spec.model === "erp_uv_norm") return Math.max(1e-6, Number(spec.value || 0));
+    return Math.max(1e-6, Number(stroke?.size || 10) * 0.5 / 2048);
+  }
+
+  function getFreehandPointEraseRadiusUv(stroke, point) {
+    return getStrokeRadiusUvValue(stroke)
+      * getStrokePointScalar(point, "widthScale", 1)
+      * getStrokePointScalar(point, "pressureLike", 1);
+  }
+
+  function getWrappedDistancePointToSegment(point, a, b) {
+    const px = Number(point?.u || 0);
+    const py = Number(point?.v || 0);
+    const ax = px + shortestWrappedDelta(Number(a?.u || 0), px);
+    const ay = Number(a?.v || 0);
+    const bx = px + shortestWrappedDelta(Number(b?.u || 0), px);
+    const by = Number(b?.v || 0);
+    const abx = bx - ax;
+    const aby = by - ay;
+    const denom = abx * abx + aby * aby;
+    if (denom <= 1e-12) return Math.hypot(px - ax, py - ay);
+    const t = clamp(((px - ax) * abx + (py - ay) * aby) / denom, 0, 1);
+    return Math.hypot(px - (ax + abx * t), py - (ay + aby * t));
+  }
+
+  function isPointErasedByStroke(point, pointRadiusUv, eraserPoints, eraserRadiusUv) {
+    const threshold = Math.max(1e-6, pointRadiusUv + eraserRadiusUv);
+    for (let i = 0; i < eraserPoints.length; i += 1) {
+      const sample = eraserPoints[i];
+      const sampleDist = Math.hypot(
+        shortestWrappedDelta(Number(sample?.u || 0), Number(point?.u || 0)),
+        Number(sample?.v || 0) - Number(point?.v || 0),
+      );
+      if (sampleDist <= threshold) return true;
+      if (i === 0) continue;
+      if (getWrappedDistancePointToSegment(point, eraserPoints[i - 1], sample) <= threshold) return true;
+    }
+    return false;
+  }
+
+  function movePointTowardWrapped(startPoint, endPoint, distanceUv) {
+    const sx = Number(startPoint?.u || 0);
+    const sy = Number(startPoint?.v || 0);
+    const dx = shortestWrappedDelta(Number(endPoint?.u || 0), sx);
+    const dy = Number(endPoint?.v || 0) - sy;
+    const len = Math.hypot(dx, dy);
+    if (!Number.isFinite(len) || len <= 1e-8) return { ...startPoint };
+    const t = clamp(Number(distanceUv || 0) / len, 0, 0.49);
+    return {
+      ...startPoint,
+      u: ((sx + dx * t) % 1 + 1) % 1,
+      v: sy + dy * t,
+    };
+  }
+
+  function trimSplitChunkEndpoints(stroke, chunkPoints, options = {}) {
+    if (!Array.isArray(chunkPoints) || chunkPoints.length < 2) return Array.isArray(chunkPoints) ? chunkPoints.map((pt) => ({ ...pt })) : [];
+    const trimmed = chunkPoints.map((pt) => ({ ...pt }));
+    if (options.trimStart) {
+      trimmed[0] = movePointTowardWrapped(trimmed[0], trimmed[1], getFreehandPointEraseRadiusUv(stroke, trimmed[0]));
+    }
+    if (options.trimEnd) {
+      const lastIndex = trimmed.length - 1;
+      trimmed[lastIndex] = movePointTowardWrapped(trimmed[lastIndex], trimmed[lastIndex - 1], getFreehandPointEraseRadiusUv(stroke, trimmed[lastIndex]));
+    }
+    return trimmed;
+  }
+
+  function splitFreehandStrokeByEraser(stroke, eraserStroke) {
+    const geometry = stroke?.geometry || null;
+    if (!geometry || String(geometry.geometryKind || "") !== "freehand_open") {
+      return { changed: false, chunks: [] };
+    }
+    const strokePoints = Array.isArray(geometry.processedPoints) && geometry.processedPoints.length
+      ? geometry.processedPoints
+      : (Array.isArray(geometry.rawPoints) && geometry.rawPoints.length ? geometry.rawPoints : (Array.isArray(geometry.points) ? geometry.points : []));
+    const eraserPoints = Array.isArray(eraserStroke?.geometry?.processedPoints) && eraserStroke.geometry.processedPoints.length
+      ? eraserStroke.geometry.processedPoints
+      : (Array.isArray(eraserStroke?.geometry?.rawPoints) && eraserStroke.geometry.rawPoints.length ? eraserStroke.geometry.rawPoints : (Array.isArray(eraserStroke?.geometry?.points) ? eraserStroke.geometry.points : []));
+    if (!strokePoints.length || !eraserPoints.length) return { changed: false, chunks: [] };
+    const eraserRadiusUv = getStrokeRadiusUvValue(eraserStroke);
+    const erasedFlags = strokePoints.map((pt) => isPointErasedByStroke(pt, getFreehandPointEraseRadiusUv(stroke, pt), eraserPoints, eraserRadiusUv));
+    if (!erasedFlags.some(Boolean)) return { changed: false, chunks: [] };
+    const chunks = [];
+    let current = [];
+    let currentStartIndex = -1;
+    strokePoints.forEach((pt, index) => {
+      if (erasedFlags[index]) {
+        if (current.length) {
+          chunks.push({ points: current, startIndex: currentStartIndex, endIndex: index - 1 });
+        }
+        current = [];
+        currentStartIndex = -1;
+        return;
+      }
+      if (!current.length) currentStartIndex = index;
+      current.push({ ...pt });
+    });
+    if (current.length) chunks.push({ points: current, startIndex: currentStartIndex, endIndex: strokePoints.length - 1 });
+    return { changed: true, chunks };
+  }
+
+  function applyPaintEraserInteraction(interaction) {
+    const eraserStroke = interaction?.stroke || null;
+    if (!eraserStroke || interaction?.layerKind !== "paint" || String(eraserStroke?.toolKind || "") !== "eraser") return false;
+    rebuildPaintEngineIfNeeded();
+    const erpDesc = getActivePaintTargetDescriptor();
+    const eraserSurface = createRasterSurface(erpDesc.width, erpDesc.height);
+    if (!rasterizeStrokeToSurface(eraserSurface, eraserStroke, { w: erpDesc.width, h: erpDesc.height })) return false;
+    const eraserData = eraserSurface.ctx?.getImageData(0, 0, erpDesc.width, erpDesc.height)?.data || null;
+    if (!eraserData) return false;
+
+    const groupMeta = new Map(getPaintingGroupList().map((group) => [String(group?.actionGroupId || group?.id || "").trim(), group ? { ...group } : null]));
+    const nextStrokes = [];
+    const nextGroups = [];
+    const nextRasterObjects = [...getRasterObjectList().filter((item) => String(item?.layerKind || "paint") !== "paint")];
+    let changed = false;
+    let nextReplacementZ = getDisplayListObjects().reduce((max, entry) => Math.max(max, Number(entry?.z_index || 0)), -1) + 1;
+
+    function getAlphaBoundsFromData(alphaData, width, height, threshold = 8) {
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < height; y += 1) {
+        for (let x = 0; x < width; x += 1) {
+          if (alphaData[(y * width + x) * 4 + 3] <= threshold) continue;
+          if (x < minX) minX = x;
+          if (y < minY) minY = y;
+          if (x > maxX) maxX = x;
+          if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < minX || maxY < minY) return null;
+      return { minX, minY, maxX, maxY };
+    }
+
+    const eraserBoundsPx = getAlphaBoundsFromData(eraserData, erpDesc.width, erpDesc.height, 8);
+    if (!eraserBoundsPx) return false;
+
+    function boxesIntersect(a, b) {
+      if (!a || !b) return false;
+      return !(a.maxX < b.minX || b.maxX < a.minX || a.maxY < b.minY || b.maxY < a.minY);
+    }
+
+    function getGroupApproxBoundsPx(group, strokes) {
+      const frame = ensureGroupFrame(group?.actionGroupId || group?.id || "", "paint", strokes);
+      if (!frame) return null;
+      const minU = frame.centerUv.u - frame.halfW;
+      const maxU = frame.centerUv.u + frame.halfW;
+      const minV = frame.centerUv.v - frame.halfH;
+      const maxV = frame.centerUv.v + frame.halfH;
+      const width = erpDesc.width;
+      const height = erpDesc.height;
+      return {
+        minX: Math.floor(((minU % 1 + 1) % 1) * width),
+        maxX: Math.ceil((((maxU % 1 + 1) % 1) * width)),
+        minY: Math.floor(clamp(minV, 0, 1) * height),
+        maxY: Math.ceil(clamp(maxV, 0, 1) * height),
+        wraps: (maxU - minU) >= 1 || minU < 0 || maxU > 1,
+      };
+    }
+
+    function getRasterApproxBoundsPx(item) {
+      const bbox = item?.bbox || null;
+      if (!bbox) return null;
+      const tf = item?.transform || {};
+      const width = erpDesc.width;
+      const height = erpDesc.height;
+      const u0 = Number(bbox.u0 || 0) + Number(tf.du || 0);
+      const u1 = Number(bbox.u1 || 0) + Number(tf.du || 0);
+      const v0 = Number(bbox.v0 || 0) + Number(tf.dv || 0);
+      const v1 = Number(bbox.v1 || 0) + Number(tf.dv || 0);
+      return {
+        minX: Math.floor((((u0 % 1) + 1) % 1) * width),
+        maxX: Math.ceil((((u1 % 1) + 1) % 1) * width),
+        minY: Math.floor(clamp(v0, 0, 1) * height),
+        maxY: Math.ceil(clamp(v1, 0, 1) * height),
+        wraps: (u1 - u0) >= 1 || u0 < 0 || u1 > 1,
+      };
+    }
+
+    function approxBoundsHit(bounds) {
+      if (!bounds) return true;
+      if (bounds.wraps) {
+        return boxesIntersect(eraserBoundsPx, { minX: 0, maxX: bounds.maxX, minY: bounds.minY, maxY: bounds.maxY })
+          || boxesIntersect(eraserBoundsPx, { minX: bounds.minX, maxX: erpDesc.width - 1, minY: bounds.minY, maxY: bounds.maxY });
+      }
+      return boxesIntersect(eraserBoundsPx, bounds);
+    }
+
+    function eraseCanvasAndDetectTouch(sourceCanvas) {
+      if (!sourceCanvas) return { touched: false, canvas: null };
+      const working = createRasterSurface(erpDesc.width, erpDesc.height);
+      working.ctx.drawImage(sourceCanvas, 0, 0);
+      const beforeData = working.ctx.getImageData(0, 0, erpDesc.width, erpDesc.height);
+      working.ctx.save();
+      working.ctx.globalCompositeOperation = "destination-out";
+      working.ctx.drawImage(eraserSurface.canvas, 0, 0);
+      working.ctx.restore();
+      const afterData = working.ctx.getImageData(0, 0, erpDesc.width, erpDesc.height);
+      for (let i = 0; i < erpDesc.width * erpDesc.height; i += 1) {
+        const eraserAlpha = eraserData[i * 4 + 3];
+        if (eraserAlpha <= 8) continue;
+        const beforeAlpha = beforeData.data[i * 4 + 3];
+        const afterAlpha = afterData.data[i * 4 + 3];
+        if (beforeAlpha > afterAlpha) {
+          return { touched: true, canvas: working.canvas };
+        }
+      }
+      return { touched: false, canvas: null };
+    }
+
+    function createReplacementObjects(canvas, layerKind, baseMeta) {
+      const baseZ = Number(baseMeta?.z_index);
+      const created = createRasterFrozenObjectsFromCanvas(canvas, layerKind, baseMeta).map((item, index) => ({
+        ...item,
+        z_index: Number.isFinite(baseZ) ? baseZ + (index * 0.001) : nextReplacementZ + (index * 0.001),
+      }));
+      if (created.length) {
+        nextReplacementZ = Math.max(nextReplacementZ, ...created.map((item) => Number(item?.z_index || 0))) + 1;
+      }
+      return created;
+    }
+
+    for (const group of getPaintingGroupList()) {
+      const gid = String(group?.actionGroupId || group?.id || "").trim();
+      if (!gid) continue;
+      const groupStrokes = getStrokeGroupStrokes(gid, "paint");
+      if (!approxBoundsHit(getGroupApproxBoundsPx(group, groupStrokes))) {
+        nextGroups.push(group);
+        nextStrokes.push(...groupStrokes);
+        continue;
+      }
+      const groupTarget = editor.paintEngine?.getGroupTarget?.(gid) || null;
+      const groupCanvas = groupTarget?.committedPaint?.canvas || null;
+      if (!groupCanvas) {
+        nextGroups.push(group);
+        nextStrokes.push(...groupStrokes);
+        continue;
+      }
+      const erased = eraseCanvasAndDetectTouch(groupCanvas);
+      if (!erased.touched || !erased.canvas) {
+        nextGroups.push(group);
+        nextStrokes.push(...groupStrokes);
+        continue;
+      }
+      changed = true;
+      const created = createReplacementObjects(erased.canvas, "paint", groupMeta.get(gid) || group || {});
+      nextRasterObjects.push(...created);
+    }
+
+    for (const rasterObject of getRasterObjectList().filter((item) => String(item?.layerKind || "paint") === "paint")) {
+      if (!approxBoundsHit(getRasterApproxBoundsPx(rasterObject))) {
+        nextRasterObjects.push(rasterObject);
+        continue;
+      }
+      const rasterCanvas = getRasterObjectErpCanvas(rasterObject, null);
+      if (!rasterCanvas) {
+        nextRasterObjects.push(rasterObject);
+        continue;
+      }
+      const erased = eraseCanvasAndDetectTouch(rasterCanvas);
+      if (!erased.touched || !erased.canvas) {
+        nextRasterObjects.push(rasterObject);
+        continue;
+      }
+      changed = true;
+      const created = createReplacementObjects(erased.canvas, "paint", rasterObject);
+      nextRasterObjects.push(...created);
+    }
+
+    if (!changed) return false;
+    state.painting.paint.strokes = nextStrokes;
+    state.painting.groups = nextGroups.sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    state.painting.raster_objects = nextRasterObjects.sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0));
+    clearSelection({ preservePanelValues: false });
+    return true;
+  }
+
   function commitPaintInteraction(interaction) {
     const geometry = interaction?.stroke?.geometry || null;
     if (!geometry) return false;
+    const toolKind = String(interaction?.stroke?.toolKind || "pen");
+    if (interaction.layerKind === "paint" && toolKind === "eraser") {
+      if (geometry.geometryKind !== "lasso_fill") {
+        geometry.processedPoints = processFreehandPoints(geometry.rawPoints || geometry.points || [], interaction.stroke.targetSpace, true);
+      }
+      return applyPaintEraserInteraction(interaction);
+    }
+    const shouldCreatePaintGroup = interaction.layerKind === "paint" && toolKind !== "eraser";
     if (geometry.geometryKind === "lasso_fill") {
       const points = Array.isArray(geometry.points) ? geometry.points : [];
       if (points.length < 3) return false;
-      if (interaction.layerKind === "paint") ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
+      if (shouldCreatePaintGroup) ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
       getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
       return true;
     }
@@ -6371,7 +7417,7 @@ function showEditor(node, type, options = {}) {
     if (rawPoints.length < 1) return false;
     // ADR 0006: processedPoints is durable; rasterizer (Python) uses it directly.
     geometry.processedPoints = processFreehandPoints(rawPoints, interaction.stroke.targetSpace, true);
-    if (interaction.layerKind === "paint") ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
+    if (shouldCreatePaintGroup) ensurePaintingGroupEntry(interaction.stroke?.actionGroupId);
     getPaintingLayerList(interaction.layerKind).push(interaction.stroke);
     return true;
   }
@@ -6419,6 +7465,13 @@ function showEditor(node, type, options = {}) {
           }
           continue;
         }
+        if (entry.type === "rasterObject") {
+          const item = getRasterObjectItem(makeRasterObjectSelectionId(entry.item?.id || entry.id || ""));
+          if (!item) continue;
+          const geom = objectGeom(item);
+          if (geom?.visible && pointInPoly(p, geom.corners)) return { item, geom };
+          continue;
+        }
         const item = entry.item;
         if (!item || !isStickerItem(item)) continue;
         if (!dir) continue;
@@ -6435,9 +7488,15 @@ function showEditor(node, type, options = {}) {
       ...getOrderedDisplayListObjects(false)
       .slice()
       .sort((a, b) => Number(b?.z_index || 0) - Number(a?.z_index || 0))
-      .map((entry) => entry.type === "strokeGroup"
-        ? getStrokeGroupItem(makeStrokeGroupSelectionId("paint", entry.actionGroupId || entry.id || ""))
-        : entry.item)
+      .map((entry) => {
+        if (entry.type === "strokeGroup") {
+          return getStrokeGroupItem(makeStrokeGroupSelectionId("paint", entry.actionGroupId || entry.id || ""));
+        }
+        if (entry.type === "rasterObject") {
+          return getRasterObjectItem(makeRasterObjectSelectionId(entry.item?.id || entry.id || ""));
+        }
+        return entry.item;
+      })
       .filter(Boolean),
       ...(type === "cutout" ? getCutoutSelectableItemsForHit().filter((item) => isShotItem(item)) : []),
     ];
@@ -6456,6 +7515,12 @@ function showEditor(node, type, options = {}) {
           }
           if (pts.length === 1 && dist2(p, pts[0]) <= threshold * threshold) return { item, geom };
         }
+        continue;
+      }
+      if (isRasterObjectItem(item)) {
+        const geom = objectGeom(item);
+        if (!geom?.visible) continue;
+        if (pointInPoly(p, geom.corners)) return { item, geom };
         continue;
       }
       const g = objectGeom(item);
@@ -6485,6 +7550,10 @@ function showEditor(node, type, options = {}) {
           if (distToSegment2(p, pts[i], pts[i + 1]) <= threshold * threshold) return { kind: "move", cursor: "default" };
         }
       }
+      if (pointInPoly(p, geom.corners)) return { kind: "move", cursor: "default" };
+      return { kind: "none", cursor: editor.mode === "pano" ? "grab" : "default" };
+    }
+    if (geom.kind === "rasterObject") {
       if (pointInPoly(p, geom.corners)) return { kind: "move", cursor: "default" };
       return { kind: "none", cursor: editor.mode === "pano" ? "grab" : "default" };
     }
@@ -6540,7 +7609,7 @@ function showEditor(node, type, options = {}) {
       if (editor.interaction.kind === "paint_stroke" || editor.interaction.kind === "paint_lasso_fill") canvas.style.cursor = "none";
       else if (editor.interaction.kind === "view") canvas.style.cursor = "grabbing";
       else if (editor.interaction.kind === "pan_frame") canvas.style.cursor = "grabbing";
-      else if (editor.interaction.kind === "move" || editor.interaction.kind === "move_multi" || editor.interaction.kind === "move_stroke_group") canvas.style.cursor = "move";
+    else if (editor.interaction.kind === "move" || editor.interaction.kind === "move_multi" || editor.interaction.kind === "move_stroke_group" || editor.interaction.kind === "move_raster_object") canvas.style.cursor = "move";
       else if (editor.interaction.kind === "scale" || editor.interaction.kind === "scale_x" || editor.interaction.kind === "scale_y") canvas.style.cursor = editor.interaction.cursor || "nwse-resize";
       else if (editor.interaction.kind === "rotate") canvas.style.cursor = "grabbing";
       else canvas.style.cursor = "default";
@@ -6879,10 +7948,12 @@ function showEditor(node, type, options = {}) {
       editor.interaction = {
         kind: toolKind === "lasso_fill" ? "paint_lasso_fill" : "paint_stroke",
         layerKind,
+        _livePreviewToken: makePaintId("live"),
         stroke: toolKind === "lasso_fill"
           ? buildLassoFillStrokeRecord(layerKind, toolKind, [startPoint], targetSpace)
           : buildFreehandStrokeRecord(layerKind, toolKind, [startPoint], targetSpace),
       };
+      invalidateLivePaintPreviewCaches();
       const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
       if (targetDescriptor) {
         editor.paintEngine.beginStroke(editor.interaction.stroke, targetDescriptor);
@@ -6946,6 +8017,17 @@ function showEditor(node, type, options = {}) {
                 return geom?.visible ? { x: Number(geom.center?.x || 0), y: Number(geom.center?.y || 0) } : { x: p.x, y: p.y };
               })(),
               centerUv: getStrokeGroupCenterUv(item.actionGroupId, item.layerKind),
+            })),
+          rasterSnapshots: selectedItems
+            .filter((item) => isRasterObjectItem(item))
+            .map((item) => ({
+              id: parseRasterObjectSelectionId(item.rasterObjectId || item.id || ""),
+              snapshot: cloneJson(getRasterObjectList().find((entry) => String(entry?.id || "") === parseRasterObjectSelectionId(item.rasterObjectId || item.id || ""))),
+              center: (() => {
+                const geom = objectGeom(item);
+                return geom?.visible ? { x: Number(geom.center?.x || 0), y: Number(geom.center?.y || 0) } : { x: p.x, y: p.y };
+              })(),
+              centerUv: getRasterObjectCenterUv(item),
             })),
         };
         updateCursor(p);
@@ -7033,6 +8115,23 @@ function showEditor(node, type, options = {}) {
           canvas.setPointerCapture(e.pointerId);
           return;
         }
+        if (isRasterObjectItem(selected)) {
+          const startUv = editor.mode === "frame"
+            ? (() => {
+              const shot = getActiveCutoutShot();
+              return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+            })()
+            : screenPosToErpPoint(p, performance.now());
+          editor.interaction = {
+            kind: "move_raster_object",
+            item: selected,
+            startUv,
+            snapshot: cloneJson(getRasterObjectList().find((entry) => String(entry?.id || "") === parseRasterObjectSelectionId(selected.rasterObjectId || selected.id || ""))),
+          };
+          updateCursor(p);
+          canvas.setPointerCapture(e.pointerId);
+          return;
+        }
         editor.interaction = {
           kind: "move",
           item: selected,
@@ -7065,10 +8164,10 @@ function showEditor(node, type, options = {}) {
         return;
       }
       editor.interaction = {
-        kind: isStrokeGroupItem(hit.item) ? "move_stroke_group" : "move",
+        kind: isStrokeGroupItem(hit.item) ? "move_stroke_group" : (isRasterObjectItem(hit.item) ? "move_raster_object" : "move"),
         item: hit.item,
         offset: { x: p.x - hit.geom.center.x, y: p.y - hit.geom.center.y },
-        startUv: isStrokeGroupItem(hit.item)
+        startUv: (isStrokeGroupItem(hit.item) || isRasterObjectItem(hit.item))
           ? (editor.mode === "frame"
             ? (() => {
               const shot = getActiveCutoutShot();
@@ -7078,7 +8177,9 @@ function showEditor(node, type, options = {}) {
           : null,
         snapshot: isStrokeGroupItem(hit.item)
           ? cloneJson(getStrokeGroupStrokes(hit.item.actionGroupId, hit.item.layerKind))
-          : null,
+          : (isRasterObjectItem(hit.item)
+            ? cloneJson(getRasterObjectList().find((entry) => String(entry?.id || "") === parseRasterObjectSelectionId(hit.item.rasterObjectId || hit.item.id || "")))
+            : null),
         frameSnapshot: isStrokeGroupItem(hit.item)
           ? cloneJson(ensureGroupFrame(hit.item.actionGroupId, hit.item.layerKind))
           : null,
@@ -7203,10 +8304,26 @@ function showEditor(node, type, options = {}) {
       const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
       const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
       if (applyStrokeGroupOffset(it.item?.actionGroupId, du, dv, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        editor.paintStrokeRevision += 1;
+        bumpPaintingStrokeRevision();
         editor.paintEngineRevisionKey = null;
         editor.paintEngine?.rebuildCommitted?.(state);
         editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        requestDraw({ localOnly: true });
+      }
+      return;
+    }
+
+    if (it.kind === "move_raster_object") {
+      const currentUv = editor.mode === "frame"
+        ? (() => {
+          const shot = getActiveCutoutShot();
+          return shot ? screenPosToFrameAsErpPoint(p, shot, performance.now()) : null;
+        })()
+        : screenPosToErpPoint(p, performance.now());
+      if (!currentUv || !it.startUv) return;
+      const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
+      const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
+      if (applyRasterObjectOffset(it.item?.rasterObjectId || it.item?.id || "", du, dv, it.snapshot)) {
         requestDraw({ localOnly: true });
       }
       return;
@@ -7216,6 +8333,8 @@ function showEditor(node, type, options = {}) {
       const tx = p.x - Number(it.offset?.x || 0);
       const ty = p.y - Number(it.offset?.y || 0);
       let changed = false;
+      let paintStrokeChanged = false;
+      let rasterChanged = false;
       const dx = tx - Number(it.startCenter?.x || tx);
       const dy = ty - Number(it.startCenter?.y || ty);
       for (const snap of (Array.isArray(it.stickerSnapshots) ? it.stickerSnapshots : [])) {
@@ -7269,14 +8388,40 @@ function showEditor(node, type, options = {}) {
           const dv = Number(currentUv.v || 0) - Number(startUvForGroup.v || 0);
           if (applyStrokeGroupOffset(snap.id, du, dv, snap.snapshot, snap.layerKind, snap.frameSnapshot)) {
             changed = true;
+            paintStrokeChanged = true;
+          }
+        }
+      }
+      for (const snap of (Array.isArray(it.rasterSnapshots) ? it.rasterSnapshots : [])) {
+        const targetScreen = {
+          x: Number(snap.center?.x || 0) + dx,
+          y: Number(snap.center?.y || 0) + dy,
+        };
+        const currentUv = editor.mode === "frame"
+          ? (() => {
+            const shot = getActiveCutoutShot();
+            return shot ? screenPosToFrameAsErpPoint(targetScreen, shot, performance.now()) : null;
+          })()
+          : screenPosToErpPoint(targetScreen, performance.now());
+        const startUvForObject = snap.centerUv || null;
+        if (currentUv && startUvForObject) {
+          const du = Number(currentUv.u || 0) - Number(startUvForObject.u || 0);
+          const dv = Number(currentUv.v || 0) - Number(startUvForObject.v || 0);
+          if (applyRasterObjectOffset(snap.id, du, dv, snap.snapshot)) {
+            changed = true;
+            rasterChanged = true;
           }
         }
       }
       if (changed) {
-        editor.paintStrokeRevision += 1;
-        editor.paintEngineRevisionKey = null;
-        editor.paintEngine?.rebuildCommitted?.(state);
-        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        if (paintStrokeChanged) {
+          bumpPaintingStrokeRevision();
+          editor.paintEngineRevisionKey = null;
+          editor.paintEngine?.rebuildCommitted?.(state);
+          editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        } else if (rasterChanged) {
+          bumpPaintingCompositeRevision();
+        }
         requestDraw({ localOnly: true });
       }
       return;
@@ -7286,7 +8431,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / Math.max(1, Number(it.startDist || 1));
       if (applyStrokeGroupTransform(it.item?.actionGroupId, ratio, 0, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        editor.paintStrokeRevision += 1;
+        bumpPaintingStrokeRevision();
         editor.paintEngineRevisionKey = null;
         editor.paintEngine?.rebuildCommitted?.(state);
         editor.paintEngineRevisionKey = getPaintingRevisionKey();
@@ -7299,7 +8444,7 @@ function showEditor(node, type, options = {}) {
       let delta = (Math.atan2(p.y - it.center.y, p.x - it.center.x) - Number(it.startAng || 0)) * RAD2DEG;
       if (e.shiftKey) delta = Math.round(delta / 45) * 45;
       if (applyStrokeGroupTransform(it.item?.actionGroupId, 1, delta, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        editor.paintStrokeRevision += 1;
+        bumpPaintingStrokeRevision();
         editor.paintEngineRevisionKey = null;
         editor.paintEngine?.rebuildCommitted?.(state);
         editor.paintEngineRevisionKey = getPaintingRevisionKey();
@@ -7354,8 +8499,9 @@ function showEditor(node, type, options = {}) {
   canvas.onpointerup = () => {
     const ended = editor.interaction;
     if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
+      invalidateLivePaintPreviewCaches();
       if (commitPaintInteraction(editor.interaction)) {
-        editor.paintStrokeRevision += 1;
+        bumpPaintingStrokeRevision();
         // Invalidate the persistent frame so objectGeom() recomputes bbox on next select.
         const committedGroupId = String(editor.interaction.stroke?.actionGroupId || "").trim();
         if (committedGroupId) {
@@ -7363,9 +8509,19 @@ function showEditor(node, type, options = {}) {
           if (grpEntry) grpEntry.frame = null;
         }
         const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
-        if (targetDescriptor) editor.paintEngine.commitActiveStroke(editor.interaction.stroke, targetDescriptor);
+        if (targetDescriptor) {
+          if (String(editor.interaction.stroke?.toolKind || "") === "eraser") {
+            editor.paintEngine.cancelActiveStroke(targetDescriptor);
+            editor.paintEngineRevisionKey = null;
+            rebuildPaintEngineIfNeeded();
+          } else {
+            editor.paintEngine.commitActiveStroke(editor.interaction.stroke, targetDescriptor);
+          }
+        }
         pushHistory();
         commitState();
+        updateSidePanel();
+        updateSelectionMenu();
         node.setDirtyCanvas(true, true);
         requestDraw();
         syncPaintingLayerAsync();
@@ -7380,6 +8536,7 @@ function showEditor(node, type, options = {}) {
           ? getCutoutSelectableItemsForHit().filter((item) => !isShotItem(item))
           : [...getList()]),
         ...getSelectableStrokeGroupItems(),
+        ...getSelectableRasterObjectItems(),
       ];
       const hits = pool.filter((item) => rectIntersectsGeom(rect, objectGeom(item)));
       setSelectedItems(hits, hits[hits.length - 1]?.id || null);
@@ -7388,10 +8545,24 @@ function showEditor(node, type, options = {}) {
       updateSelectionMenu();
       requestDraw();
     } else if (editor.interaction && editor.interaction.kind !== "view" && editor.interaction.kind !== "pan_frame") {
+      let compositeChanged = false;
+      if (editor.interaction.kind === "move_raster_object") {
+        compositeChanged = true;
+      }
+      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.rasterSnapshots) && editor.interaction.rasterSnapshots.length) {
+        compositeChanged = true;
+      }
+      if (compositeChanged) {
+        bumpPaintingCompositeRevision();
+      }
       pushHistory();
       commitState();
       if (editor.interaction.kind === "move_stroke_group") syncPaintingLayerAsync();
       if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.strokeSnapshots) && editor.interaction.strokeSnapshots.length) {
+        syncPaintingLayerAsync();
+      }
+      if (editor.interaction.kind === "move_raster_object") syncPaintingLayerAsync();
+      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.rasterSnapshots) && editor.interaction.rasterSnapshots.length) {
         syncPaintingLayerAsync();
       }
       node.setDirtyCanvas(true, true);
@@ -7401,6 +8572,7 @@ function showEditor(node, type, options = {}) {
       requestDraw();
     }
     editor.interaction = null;
+    invalidateLivePaintPreviewCaches();
     if (ended && ended.kind === "view") {
       viewController.endDrag(performance.now());
     }
@@ -7415,10 +8587,12 @@ function showEditor(node, type, options = {}) {
       viewController.endDrag(performance.now());
     }
     if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
+      invalidateLivePaintPreviewCaches();
       const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
       if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
     }
     editor.interaction = null;
+    invalidateLivePaintPreviewCaches();
     syncViewToggleState();
     updateCursor(editor.pointerPos);
     requestDraw({ localOnly: true });
@@ -7516,17 +8690,27 @@ function showEditor(node, type, options = {}) {
     };
   });
 
+  function syncUndoRedoButtons() {
+    const { canUndo, canRedo } = getHistoryCapabilities();
+    root.querySelectorAll("[data-action='undo'], [data-tool-ui-action='undo']").forEach((btn) => {
+      btn.disabled = !canUndo;
+    });
+    root.querySelectorAll("[data-action='redo'], [data-tool-ui-action='redo']").forEach((btn) => {
+      btn.disabled = !canRedo;
+    });
+  }
+
   const undoBtn = root.querySelector("[data-action='undo']");
   if (undoBtn) {
     undoBtn.onclick = () => {
-      if (readOnly) return;
+      if (readOnly || undoBtn.disabled) return;
       restoreHistory(-1);
     };
   }
   const redoBtn = root.querySelector("[data-action='redo']");
   if (redoBtn) {
     redoBtn.onclick = () => {
-      if (readOnly) return;
+      if (readOnly || redoBtn.disabled) return;
       restoreHistory(1);
     };
   }
@@ -7576,7 +8760,7 @@ function showEditor(node, type, options = {}) {
         if (readOnly) return;
         const newTool = String(btn.getAttribute("data-tool-mode") || "cursor");
         editor.primaryTool = newTool;
-        if (newTool === "paint" || newTool === "mask") {
+        if (newTool === "mask") {
           clearSelection({ preservePanelValues: true });
         }
         syncPaintUi();
@@ -7589,6 +8773,7 @@ function showEditor(node, type, options = {}) {
       btn.onclick = () => {
         if (readOnly) return;
         const action = String(btn.getAttribute("data-tool-ui-action") || "");
+        if ((action === "undo" || action === "redo") && btn.disabled) return;
         if (action === "undo") restoreHistory(-1);
         else if (action === "redo") restoreHistory(1);
         else if (action === "clear") clearAll();
@@ -7615,37 +8800,38 @@ function showEditor(node, type, options = {}) {
       };
     });
   }
-  if (paintFooter) {
-    paintFooter.querySelectorAll("[data-paint-tool]").forEach((btn) => {
-      btn.onclick = () => {
-        editor.primaryTool = "paint";
-        const tool = String(btn.getAttribute("data-paint-tool") || "pen");
-        editor.paintTool = tool;
+  root.querySelectorAll("[data-paint-tool]").forEach((btn) => {
+    btn.onclick = () => {
+      editor.primaryTool = "paint";
+      const tool = String(btn.getAttribute("data-paint-tool") || "pen");
+      editor.paintTool = tool;
+      if (tool !== "eraser") {
         clearSelection({ preservePanelValues: true });
-        if (BRUSH_PRESETS[tool]) editor.activeBrushPresetId = tool;
-        syncPaintUi();
-        updateSidePanel();
-        updateSelectionMenu();
-        requestDraw();
-      };
-    });
-    paintFooter.querySelectorAll("[data-mask-tool]").forEach((btn) => {
-      btn.onclick = () => {
-        editor.primaryTool = "mask";
-        editor.maskTool = String(btn.getAttribute("data-mask-tool") || "pen");
-        clearSelection({ preservePanelValues: true });
-        syncPaintUi();
-        updateSidePanel();
-        updateSelectionMenu();
-        requestDraw();
-      };
-    });
-    if (paintLayerClearCurrentBtn) {
-      paintLayerClearCurrentBtn.onclick = () => {
-        clearPaintingLayer(editor.primaryTool === "mask" ? "mask" : "paint");
-      };
-    }
-  }
+      }
+      if (BRUSH_PRESETS[tool]) editor.activeBrushPresetId = tool;
+      syncPaintUi();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+    };
+  });
+  root.querySelectorAll("[data-mask-tool]").forEach((btn) => {
+    btn.onclick = () => {
+      editor.primaryTool = "mask";
+      editor.maskTool = String(btn.getAttribute("data-mask-tool") || "pen");
+      clearSelection({ preservePanelValues: true });
+      syncPaintUi();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+    };
+  });
+  paintLayerClearCurrentBtns.forEach((btn) => {
+    btn.onclick = () => {
+      const layerKind = String(btn.getAttribute("data-paint-layer-clear-current") || "paint") === "mask" ? "mask" : "paint";
+      clearPaintingLayer(layerKind);
+    };
+  });
   if (paintSizeSlider) {
     paintSizeSlider.oninput = () => {
       const v = Math.max(1, Math.min(120, Math.round(Number(paintSizeSlider.value))));
@@ -7983,6 +9169,8 @@ function showEditor(node, type, options = {}) {
     const t = ev.target;
     const tag = (t?.tagName || "").toUpperCase();
     if (tag === "INPUT" || tag === "TEXTAREA" || t?.isContentEditable) return;
+    const { canUndo, canRedo } = getHistoryCapabilities();
+    if ((ev.shiftKey && !canRedo) || (!ev.shiftKey && !canUndo)) return;
     restoreHistory(ev.shiftKey ? 1 : -1);
     ev.preventDefault();
     ev.stopPropagation();
@@ -8003,7 +9191,13 @@ function showEditor(node, type, options = {}) {
   }
   void migrateLegacyEmbeddedAssets();
   pushHistory();
+  syncUndoRedoButtons();
   syncPaintUi();
+  if (paintDock) {
+    requestAnimationFrame(() => {
+      paintDock.classList.add("is-ready");
+    });
+  }
   updateSidePanel();
   syncLookAtFrameButtonState();
   syncCanvasSize();

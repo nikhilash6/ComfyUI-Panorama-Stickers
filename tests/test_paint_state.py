@@ -99,3 +99,19 @@ def test_normalize_painting_state_rejects_unknown_target_space_and_bad_coords():
 
     assert state["paint"]["strokes"] == []
     assert state["mask"]["strokes"] == []
+
+
+def test_normalize_painting_state_preserves_raster_object_fractional_z_index():
+    state = normalize_painting_state({
+        "raster_objects": [{
+            "id": "rast_1",
+            "type": "raster_frozen",
+            "layerKind": "paint",
+            "z_index": 4.125,
+            "bbox": {"u0": 0.1, "v0": 0.2, "u1": 0.3, "v1": 0.4},
+            "rasterDataUrl": "data:image/png;base64,AAAA",
+            "transform": {"du": 0.0, "dv": 0.0, "rot_deg": 0.0, "scale": 1.0},
+        }],
+    })
+
+    assert state["raster_objects"][0]["z_index"] == 4.125
