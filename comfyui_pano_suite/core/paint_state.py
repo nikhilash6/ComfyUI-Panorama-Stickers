@@ -43,22 +43,46 @@ def _normalize_target_space(raw):
     kind = str(raw.get("kind") or "").strip()
     if kind == "ERP_GLOBAL":
         return {"kind": "ERP_GLOBAL"}
+    if kind == "FRAME_LOCAL":
+        frame_id_raw = raw.get("frameId")
+        if isinstance(frame_id_raw, (str, int)):
+            frame_id = str(frame_id_raw).strip()
+            if frame_id:
+                return {"kind": "FRAME_LOCAL", "frameId": frame_id}
     return None
 
 
-def _normalize_target_point(raw, _target_space):
+def _normalize_target_point(raw, target_space):
     if not isinstance(raw, dict):
         return None
+    target_kind = str((target_space or {}).get("kind") or raw.get("targetKind") or "").strip()
+    if target_kind not in {"ERP_GLOBAL", "FRAME_LOCAL"}:
+        return None
+    frame_id = None
+    if target_kind == "FRAME_LOCAL":
+        frame_id_raw = (target_space or {}).get("frameId")
+        if frame_id_raw is None:
+            frame_id_raw = raw.get("frameId")
+        if isinstance(frame_id_raw, (str, int)):
+            frame_id = str(frame_id_raw).strip()
+        if not frame_id:
+            return None
     t = _finite_float(raw.get("t", 0.0))
     u = _finite_float(raw.get("u"))
     v = _finite_float(raw.get("v"))
     if t is None or u is None or v is None:
         return None
-    u = float(u % 1.0)
-    if abs(u - 1.0) < 1e-9:
-        u = 0.0
-    v = max(0.0, min(1.0, float(v)))
-    out = {"targetKind": "ERP_GLOBAL", "u": u, "v": v, "t": float(t)}
+    if target_kind == "ERP_GLOBAL":
+        u = float(u % 1.0)
+        if abs(u - 1.0) < 1e-9:
+            u = 0.0
+        v = max(0.0, min(1.0, float(v)))
+    else:
+        u = float(u)
+        v = float(v)
+    out = {"targetKind": target_kind, "u": u, "v": v, "t": float(t)}
+    if frame_id is not None:
+        out["frameId"] = frame_id
     width_scale = _finite_float(raw.get("widthScale"))
     pressure_like = _finite_float(raw.get("pressureLike"))
     if width_scale is not None:
