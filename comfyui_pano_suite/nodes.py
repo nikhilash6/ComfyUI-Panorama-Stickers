@@ -43,6 +43,21 @@ def _save_input_preview(images, key="pano_input_images"):
     return {}
 
 
+def _push_ui_warning(ui_ret: dict, key: str, message: str):
+    if not isinstance(ui_ret, dict):
+        return
+    text = str(message or "").strip()
+    if not text:
+        return
+    bucket = ui_ret.get(key)
+    if not isinstance(bucket, list):
+        bucket = []
+        ui_ret[key] = bucket
+    if text not in bucket:
+        bucket.append(text)
+    logging.getLogger(__name__).warning(text)
+
+
 def _iter_external_sticker_payloads(sticker_image=None, sticker_state=None):
     if sticker_image is None:
         return []
@@ -480,6 +495,7 @@ class PanoramaStickersNode(io.ComfyNode):
 
         render_state = dict(state)
         render_state["stickers"] = render_stickers
+        ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
 
         painting_payload = resolve_painting_layer_payload(
             state.get("painting_layer"),
@@ -493,26 +509,39 @@ class PanoramaStickersNode(io.ComfyNode):
             base_dir=Path.cwd(),
             quality="export",
         )
+        painting_state = state.get("painting")
         if not used_group_layers:
             paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
             if paint_rgba is None:
+                if painting_state_has_renderables(painting_state):
+                    _push_ui_warning(
+                        ui_ret,
+                        "pano_sticker_warnings",
+                        "Paint export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
+                    )
                 paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
             out = alpha_composite_over_rgb(out, paint_rgba)
         mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
         if mask_bw is None:
+            if painting_state_has_renderables(painting_state):
+                _push_ui_warning(
+                    ui_ret,
+                    "pano_sticker_warnings",
+                    "Mask export fell back to backend stroke rendering because uploaded mask layers were unavailable.",
+                )
             _paint_rgba, mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
         if mask_bw is None:
             mask_bw = np.zeros((out_h, out_w), dtype=np.float32)
 
         out_t = torch.from_numpy(out)[None, ...]
         mask_t = torch.from_numpy(np.clip(mask_bw.astype(np.float32), 0.0, 1.0))[None, ...]
-        ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
         if sticker_image is not None:
             ui_ret.update(_save_input_preview(_first_image_tensor(sticker_image), key="pano_sticker_input_images"))
         if external_pose_ui is not None:
             ui_ret["pano_sticker_input_pose"] = [external_pose_ui]
         if warnings:
-            ui_ret["pano_sticker_warnings"] = [str(w) for w in warnings]
+            for warning in warnings:
+                _push_ui_warning(ui_ret, "pano_sticker_warnings", str(warning))
         return io.NodeOutput(out_t, mask_t, ui=ui_ret)
 
 
@@ -632,6 +661,14 @@ class PanoramaCutoutNode(io.ComfyNode):
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
             painting_state = state.get("painting")
+            if painting_state_has_renderables(painting_state):
+                payload_has_revision = isinstance(painting_payload, dict) and bool(str(painting_payload.get("revision") or "").strip())
+                if not payload_has_revision:
+                    _push_ui_warning(
+                        ui_ret,
+                        "pano_cutout_warnings",
+                        "Cutout export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
+                    )
             if painting_state_has_renderables(painting_state):
                 paint_rgba, mask_bw = render_painting_to_cutout(
                     state.get("painting"),

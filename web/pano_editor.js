@@ -3462,6 +3462,18 @@ function showEditor(node, type, options = {}) {
   let _paintLayerSyncRevision = null;
   let _paintLayerSyncPending = false;
 
+  function needsPaintingLayerSync() {
+    const counts = paintingCompositeCount(state.painting);
+    if (counts.totalPaintCount <= 0 && counts.totalMaskCount <= 0) return false;
+    const layer = state.painting_layer;
+    const currentRevision = getPaintingCompositeRevisionKey();
+    if (!layer || typeof layer !== "object") return true;
+    if (String(layer.revision || "") !== currentRevision) return true;
+    if (counts.totalPaintCount > 0 && !layer.paint) return true;
+    if (counts.totalMaskCount > 0 && !layer.mask) return true;
+    return false;
+  }
+
   function syncPaintingLayerAsync() {
     const nodeId = String(node.id ?? "0");
     const currentPending = _paintLayerUploadRegistry.get(nodeId);
@@ -3501,8 +3513,24 @@ function showEditor(node, type, options = {}) {
         if (!uploadPaintCanvas && !uploadMaskCanvas) return;
         let paintRef = null;
         let maskRef = null;
+        const groupRefs = [];
         if (counts.totalPaintCount > 0) {
           paintRef = await uploadCanvasAsPaintLayer(uploadPaintCanvas, `pano_paint_${nodeId}.png`);
+          for (const actionGroupId of orderedGroupIds) {
+            const gid = String(actionGroupId || "").trim();
+            if (!gid) continue;
+            const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(gid) || null;
+            if (!groupCanvas) continue;
+            const safeGid = gid.replace(/[^a-zA-Z0-9_-]+/g, "_");
+            const groupRef = await uploadCanvasAsPaintLayer(groupCanvas, `pano_group_${nodeId}_${safeGid}.png`);
+            if (groupRef) {
+              groupRefs.push({
+                id: gid,
+                actionGroupId: gid,
+                image: groupRef,
+              });
+            }
+          }
         }
         if (counts.totalMaskCount > 0) {
           maskRef = await uploadCanvasAsPaintLayer(uploadMaskCanvas, `pano_mask_${nodeId}.png`);
@@ -3511,7 +3539,7 @@ function showEditor(node, type, options = {}) {
           state.painting_layer = {
             paint: paintRef,
             mask: maskRef,
-            groups: [],
+            groups: groupRefs,
             revision: rev,
           };
           _paintLayerSyncRevision = rev;
@@ -9544,6 +9572,9 @@ function showEditor(node, type, options = {}) {
   }
   if (!readOnly) {
     _paintLayerSyncRegistry.set(String(node.id ?? "0"), () => syncPaintingLayerAsync());
+    if (needsPaintingLayerSync()) {
+      syncPaintingLayerAsync();
+    }
   }
 
   const closeEditor = () => {
