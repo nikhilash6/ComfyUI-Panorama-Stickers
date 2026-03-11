@@ -266,16 +266,24 @@ def _render_group_layer_from_state(painting: dict | None, action_group_id: str, 
     gid = str(action_group_id or "").strip()
     if not gid or not isinstance(painting, dict):
         return None
-    strokes = [
-        stroke for stroke in ((painting.get("paint") or {}).get("strokes") or [])
-        if isinstance(stroke, dict) and str(stroke.get("actionGroupId") or "").strip() == gid
-    ]
+    paint_layer = painting.get("paint") if isinstance(painting.get("paint"), dict) else {}
+    all_paint_strokes = paint_layer.get("strokes") if isinstance(paint_layer.get("strokes"), list) else []
+    strokes = []
+    for stroke in all_paint_strokes:
+        if not isinstance(stroke, dict):
+            continue
+        stroke_gid = str(stroke.get("actionGroupId") or "").strip()
+        tool_kind = str(stroke.get("toolKind") or stroke.get("tool") or stroke.get("mode") or "").strip().lower()
+        eraser_flag = stroke.get("eraser") is True or tool_kind in {"eraser", "erase"}
+        if stroke_gid == gid or (eraser_flag and not stroke_gid):
+            strokes.append(stroke)
     if not strokes:
         return None
+    groups = painting.get("groups") if isinstance(painting.get("groups"), list) else []
     layer, _mask = render_painting_to_erp({
         "paint": {"strokes": strokes},
         "mask": {"strokes": []},
-        "groups": [],
+        "groups": groups,
         "raster_objects": [],
     }, width, height)
     return layer
@@ -567,8 +575,8 @@ class PanoramaCutoutNode(io.ComfyNode):
             ],
             outputs=[
                 io.Image.Output("rect_image", display_name="rect_image"),
-                io.Mask.Output("mask", display_name="mask"),
                 io.String.Output("sticker_state_json", display_name="sticker_state"),
+                io.Mask.Output("mask", display_name="mask"),
             ],
             hidden=[io.Hidden.unique_id],
             is_output_node=True,

@@ -66,14 +66,14 @@ function normalizePoint(raw, targetSpace) {
     return out;
   }
   if (targetSpace.kind === "FRAME_LOCAL") {
-    const x = finiteNumber(raw.x, null);
-    const y = finiteNumber(raw.y, null);
-    if (x == null || y == null) return null;
+    const u = finiteNumber(raw.u, null);
+    const v = finiteNumber(raw.v, null);
+    if (u == null || v == null) return null;
     const out = {
       targetKind: "FRAME_LOCAL",
       frameId: targetSpace.frameId,
-      x: Math.max(0, Math.min(1, x)),
-      y: Math.max(0, Math.min(1, y)),
+      u,
+      v,
       t,
     };
     if (widthScale != null) out.widthScale = Math.max(0, widthScale);

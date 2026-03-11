@@ -2091,9 +2091,21 @@ function getNodePreviewPaintEngine(node, state) {
   return node.__panoPreviewPaintEngine;
 }
 
+function getPreviewOrderedGroupIds(state) {
+  const groups = Array.isArray(state?.painting?.groups) ? state.painting.groups : [];
+  return groups
+    .filter((group) => group && typeof group === "object")
+    .slice()
+    .sort((a, b) => Number(a?.z_index || 0) - Number(b?.z_index || 0))
+    .map((group) => String(group?.actionGroupId || group?.id || "").trim())
+    .filter(Boolean);
+}
+
 function getNodePreviewPaintCanvas(node, state) {
   const engine = getNodePreviewPaintEngine(node, state);
-  return engine ? engine.getErpTarget().displayPaint.canvas : null;
+  if (!engine) return null;
+  const orderedGroupIds = getPreviewOrderedGroupIds(state);
+  return engine.getErpTarget(orderedGroupIds).displayPaint.canvas;
 }
 
 function getPaintingLayerPaintImage(node, state, onLoad = null) {
@@ -2125,6 +2137,16 @@ function getNodePreviewPaintSurface(node, state) {
       source: livePaint.source,
       revision: String(livePaint.revision || ""),
     };
+  }
+  const hasRasterObjects = Array.isArray(state?.painting?.raster_objects) && state.painting.raster_objects.length > 0;
+  if (hasRasterObjects) {
+    const uploadedPaint = getPaintingLayerPaintImage(node, state, () => node.__panoDomPreview?.requestDraw?.());
+    if (uploadedPaint && (uploadedPaint.complete || uploadedPaint.naturalWidth || uploadedPaint.width)) {
+      return {
+        source: uploadedPaint,
+        revision: String(state?.painting_layer?.revision || uploadedPaint.currentSrc || uploadedPaint.src || ""),
+      };
+    }
   }
   const paintCanvas = getNodePreviewPaintCanvas(node, state);
   if (paintCanvas) {

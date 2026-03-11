@@ -402,11 +402,14 @@ def _composite_raster_band(paint: np.ndarray, mask: np.ndarray, src: np.ndarray,
 def _place_raster_object(paint: np.ndarray, mask: np.ndarray, src: np.ndarray,
                          layer_kind: str, x0: int, y0: int, x1: int, y1: int,
                          dst_w: int, width: int, height: int) -> None:
-    src_alpha = src[..., 3:4]
     y0c = max(0, min(height, y0))
     y1c = max(0, min(height, y1))
     if y1c <= y0c:
         return
+    sy0 = max(0, y0c - y0)
+    sy1 = sy0 + (y1c - y0c)
+    src = src[sy0:sy1, ...]
+    src_alpha = src[..., 3:4]
     if x1 > x0:
         # No horizontal wrap.
         _composite_raster_band(paint, mask, src, src_alpha, layer_kind,
@@ -524,7 +527,7 @@ def _ordered_erp_composite_items(normalized: dict) -> list[dict]:
             continue
         group_order[action_group_id] = (float(group.get("z_index") or 0.0), idx)
 
-    items = []
+    strokes = []
     seq = 0
     for stroke in list(normalized.get("paint", {}).get("strokes") or []) + list(normalized.get("mask", {}).get("strokes") or []):
         if not isinstance(stroke, dict):
@@ -533,7 +536,7 @@ def _ordered_erp_composite_items(normalized: dict) -> list[dict]:
             continue
         action_group_id = str(stroke.get("actionGroupId") or "").strip()
         z_index, group_seq = group_order.get(action_group_id, (float(seq), seq))
-        items.append({
+        strokes.append({
             "kind": "stroke",
             "z_index": z_index,
             "group_seq": group_seq,
@@ -542,10 +545,11 @@ def _ordered_erp_composite_items(normalized: dict) -> list[dict]:
         })
         seq += 1
 
+    rasters = []
     for obj in normalized.get("raster_objects") or []:
         if not isinstance(obj, dict):
             continue
-        items.append({
+        rasters.append({
             "kind": "raster",
             "z_index": float(obj.get("z_index") or 0.0),
             "group_seq": seq,
@@ -554,7 +558,19 @@ def _ordered_erp_composite_items(normalized: dict) -> list[dict]:
         })
         seq += 1
 
-    return sorted(items, key=lambda entry: (entry["z_index"], entry["group_seq"], entry["seq"]))
+    rasters.sort(key=lambda entry: (entry["z_index"], entry["seq"]))
+
+    ordered = []
+    raster_idx = 0
+    for stroke_entry in strokes:
+        while raster_idx < len(rasters) and rasters[raster_idx]["z_index"] < stroke_entry["z_index"]:
+            ordered.append(rasters[raster_idx])
+            raster_idx += 1
+        ordered.append(stroke_entry)
+    while raster_idx < len(rasters):
+        ordered.append(rasters[raster_idx])
+        raster_idx += 1
+    return ordered
 
 
 def painting_state_has_renderables(painting_state: dict | None) -> bool:
