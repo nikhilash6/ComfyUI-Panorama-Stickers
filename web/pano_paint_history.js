@@ -13,7 +13,13 @@ export function createHistoryController(limit = 80, initialState = null, seriali
     });
     if (!entries.length) return;
     const nextIndex = Number(raw.index);
-    index = Number.isInteger(nextIndex) ? Math.max(0, Math.min(entries.length - 1, nextIndex)) : (entries.length - 1);
+    if (!Number.isInteger(nextIndex)) {
+      index = entries.length - 1;
+    } else if (nextIndex === -1) {
+      index = -1;
+    } else {
+      index = Math.max(0, Math.min(entries.length - 1, nextIndex));
+    }
   }
 
   function pushSnapshot(snapshot) {

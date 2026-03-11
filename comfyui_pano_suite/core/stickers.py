@@ -163,7 +163,16 @@ def compose_stickers_to_erp(
 
     stickers = stickers_override if isinstance(stickers_override, list) else state.get("stickers", [])
     assets = assets_override if isinstance(assets_override, dict) else state.get("assets", {})
-    stickers_sorted = sorted(stickers, key=lambda s: float(s.get("z_index", 0)))
+    def _safe_sticker_z_index(item) -> float:
+        try:
+            return float(item.get("z_index", 0))
+        except Exception:
+            return 0.0
+
+    stickers_sorted = sorted(
+        [item for item in stickers if isinstance(item, dict)],
+        key=_safe_sticker_z_index,
+    )
 
     for st in stickers_sorted:
         if st.get("visible", True) is False:

@@ -38,6 +38,11 @@ function normalizeTargetSpace(raw) {
   if (!raw || typeof raw !== "object") return null;
   const kind = String(raw.kind || "").trim();
   if (kind === "ERP_GLOBAL") return { kind: "ERP_GLOBAL" };
+  if (kind === "FRAME_LOCAL") {
+    const frameId = String(raw.frameId ?? "").trim();
+    if (!frameId) return null;
+    return { kind: "FRAME_LOCAL", frameId };
+  }
   return null;
 }
 
@@ -54,6 +59,21 @@ function normalizePoint(raw, targetSpace) {
       targetKind: "ERP_GLOBAL",
       u: ((u % 1) + 1) % 1,
       v: Math.max(0, Math.min(1, v)),
+      t,
+    };
+    if (widthScale != null) out.widthScale = Math.max(0, widthScale);
+    if (pressureLike != null) out.pressureLike = Math.max(0, pressureLike);
+    return out;
+  }
+  if (targetSpace.kind === "FRAME_LOCAL") {
+    const x = finiteNumber(raw.x, null);
+    const y = finiteNumber(raw.y, null);
+    if (x == null || y == null) return null;
+    const out = {
+      targetKind: "FRAME_LOCAL",
+      frameId: targetSpace.frameId,
+      x: Math.max(0, Math.min(1, x)),
+      y: Math.max(0, Math.min(1, y)),
       t,
     };
     if (widthScale != null) out.widthScale = Math.max(0, widthScale);
@@ -189,7 +209,7 @@ function normalizeRasterObject(item, fallbackZIndex) {
     id,
     type: "raster_frozen",
     layerKind,
-    z_index: Math.max(0, Math.round(finiteNumber(item.z_index ?? item.zIndex, fallbackZIndex) ?? fallbackZIndex)),
+    z_index: Math.max(0, finiteNumber(item.z_index ?? item.zIndex, fallbackZIndex) ?? fallbackZIndex),
     locked: item.locked === true,
     bbox,
     rasterDataUrl,

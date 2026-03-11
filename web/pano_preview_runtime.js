@@ -2054,17 +2054,37 @@ function attachLegacyStickersPreview(node) {
 // Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
 function getNodePreviewPaintEngine(node, state) {
   const strokes = state?.painting?.paint?.strokes;
-  if (!Array.isArray(strokes) || strokes.length === 0) return null;
+  const maskStrokes = state?.painting?.mask?.strokes;
+  const hasPaint = Array.isArray(strokes) && strokes.length > 0;
+  const hasMask = Array.isArray(maskStrokes) && maskStrokes.length > 0;
+  if (!hasPaint && !hasMask) return null;
 
   if (!node.__panoPreviewPaintEngine) {
     node.__panoPreviewPaintEngine = createPaintEngineManager();
     node.__panoPreviewPaintRevision = null;
+    node.__panoPreviewPaintRevisionKey = "";
   }
 
-  // Use array reference identity: parseState() returns a new object on any JSON change,
-  // so any stroke edit (including undo/redo) produces a new strokes reference.
-  if (node.__panoPreviewPaintRevision !== strokes) {
-    node.__panoPreviewPaintRevision = strokes;
+  const revision = {
+    paint: strokes || null,
+    mask: maskStrokes || null,
+    groups: state?.painting?.groups || null,
+    rasterObjects: state?.painting?.raster_objects || null,
+  };
+
+  if (
+    node.__panoPreviewPaintRevision?.paint !== revision.paint
+    || node.__panoPreviewPaintRevision?.mask !== revision.mask
+    || node.__panoPreviewPaintRevision?.groups !== revision.groups
+    || node.__panoPreviewPaintRevision?.rasterObjects !== revision.rasterObjects
+  ) {
+    node.__panoPreviewPaintRevision = revision;
+    node.__panoPreviewPaintRevisionKey = [
+      hasPaint ? "p1" : "p0",
+      hasMask ? "m1" : "m0",
+      String(Array.isArray(state?.painting?.groups) ? state.painting.groups.length : 0),
+      String(Array.isArray(state?.painting?.raster_objects) ? state.painting.raster_objects.length : 0),
+    ].join(":");
     node.__panoPreviewPaintEngine.rebuildCommitted(state);
   }
 
@@ -2110,7 +2130,7 @@ function getNodePreviewPaintSurface(node, state) {
   if (paintCanvas) {
     return {
       source: paintCanvas,
-      revision: String(node.__panoPreviewPaintRevision || ""),
+      revision: String(node.__panoPreviewPaintRevisionKey || ""),
     };
   }
   return null;
@@ -2333,7 +2353,13 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
 }
 
 export function drawErpBackground(node, ctx, rect, viewBasis, tanHalfY, img, mesh = STANDALONE_MESH_BALANCED) {
-  if (!img || !img.complete || !(img.naturalWidth || img.width)) return;
+  const isCanvasLike = !!img && (
+    (typeof HTMLCanvasElement !== "undefined" && img instanceof HTMLCanvasElement)
+    || (typeof OffscreenCanvas !== "undefined" && img instanceof OffscreenCanvas)
+    || (typeof ImageBitmap !== "undefined" && img instanceof ImageBitmap)
+  );
+  const ready = isCanvasLike || (!!img && img.complete && (img.naturalWidth || img.width));
+  if (!ready) return;
   const view = node?.__panoPreviewView || { yaw: 0, pitch: 0, fov: 100 };
   if (renderErpViewToContext2D({
     owner: node,

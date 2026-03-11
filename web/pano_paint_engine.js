@@ -907,6 +907,7 @@ export function createPaintEngineManager() {
   // Active stroke tracking.
   let activeGroupId = null;   // null when mask is active or idle
   let activeLayerKind = "";   // "paint" | "mask" | ""
+  let previousOrderedGroupIds = null;
 
   // ─── Group Target Helpers ──────────────────────────────────────────────────
 
@@ -948,7 +949,10 @@ export function createPaintEngineManager() {
   // Composes directly from each group's committedPaint into globalDisplay —
   // no per-group displayPaint intermediate canvas needed.
   function composeAllLayers(orderedGroupIds) {
-    let anyDirty = maskTarget.displayDirty;
+    const orderChanged = !previousOrderedGroupIds
+      || previousOrderedGroupIds.length !== orderedGroupIds.length
+      || orderedGroupIds.some((gid, index) => gid !== previousOrderedGroupIds[index]);
+    let anyDirty = maskTarget.displayDirty || paintScratchTarget.displayDirty || orderChanged;
     for (const gid of orderedGroupIds) {
       const group = groupTargets.get(gid);
       if (group?.displayDirty) { anyDirty = true; break; }
@@ -957,10 +961,12 @@ export function createPaintEngineManager() {
 
     // Reset dirty flags before drawing.
     maskTarget.displayDirty = false;
+    paintScratchTarget.displayDirty = false;
     for (const gid of orderedGroupIds) {
       const group = groupTargets.get(gid);
       if (group) group.displayDirty = false;
     }
+    previousOrderedGroupIds = [...orderedGroupIds];
 
     const gCtx = globalDisplay.ctx;
     clearSurface(globalDisplay);
@@ -1031,6 +1037,8 @@ export function createPaintEngineManager() {
     clearSurface(maskTarget.currentStroke);
     maskTarget.activeStroke = null;
     maskTarget.displayDirty = true;
+    paintScratchTarget.displayDirty = true;
+    previousOrderedGroupIds = null;
 
     const allStrokes = [
       ...(Array.isArray(state?.painting?.paint?.strokes) ? state.painting.paint.strokes : []),

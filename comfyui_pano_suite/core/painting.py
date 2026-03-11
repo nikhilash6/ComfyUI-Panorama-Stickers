@@ -4,7 +4,6 @@ import io
 import json
 import math
 from collections import OrderedDict
-from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -626,71 +625,6 @@ def _warp_erp_layer_to_cutout(erp_layer: np.ndarray, shot: dict, width: int, hei
     return _empty_rgba(width, height) if erp_layer.ndim == 3 else _empty_mask(width, height)
 
 
-def _resolve_comfy_image_path(asset: dict) -> Path | None:
-    """Resolve a comfy_image asset reference to a filesystem path."""
-    try:
-        import folder_paths
-    except ImportError:
-        return None
-    if not isinstance(asset, dict) or str(asset.get("type") or "").strip().lower() != "comfy_image":
-        return None
-    filename = str(asset.get("filename") or "").strip()
-    if not filename:
-        return None
-    subfolder = str(asset.get("subfolder") or "").strip().strip("/\\")
-    storage = str(asset.get("storage") or "input").strip().lower()
-    if storage == "output":
-        base = Path(folder_paths.get_output_directory())
-    elif storage == "temp":
-        base = Path(folder_paths.get_temp_directory())
-    else:
-        base = Path(folder_paths.get_input_directory())
-    p = (base / subfolder / filename).resolve() if subfolder else (base / filename).resolve()
-    try:
-        p.relative_to(base.resolve())
-    except Exception:
-        return None
-    return p if p.exists() and p.is_file() else None
-
-
-def _load_painting_layer_erp(painting_layer: dict) -> tuple[np.ndarray, np.ndarray] | None:
-    """Load ERP paint+mask from a painting_layer comfy_image reference pair.
-
-    Returns (paint_rgba, mask_float32) or None if unavailable.
-    paint_rgba: float32 RGBA [0,1], shape (H, W, 4)
-    mask_float32: float32 [0,1], shape (H, W)  — taken from alpha channel of mask canvas
-    """
-    if not isinstance(painting_layer, dict):
-        return None
-    paint_asset = painting_layer.get("paint")
-    mask_asset = painting_layer.get("mask")
-
-    paint_erp = None
-    mask_erp = None
-
-    if isinstance(paint_asset, dict):
-        p = _resolve_comfy_image_path(paint_asset)
-        if p is not None:
-            try:
-                paint_erp = np.asarray(Image.open(p).convert("RGBA"), dtype=np.float32) / 255.0
-            except Exception:
-                paint_erp = None
-
-    if isinstance(mask_asset, dict):
-        p = _resolve_comfy_image_path(mask_asset)
-        if p is not None:
-            try:
-                # Mask canvas: white stamps drawn with opacity → alpha channel = mask strength
-                arr = np.asarray(Image.open(p).convert("RGBA"), dtype=np.float32) / 255.0
-                mask_erp = arr[..., 3]
-            except Exception:
-                mask_erp = None
-
-    if paint_erp is None and mask_erp is None:
-        return None
-    return paint_erp, mask_erp
-
-
 def _resize_rgba_layer(layer: np.ndarray | None, width: int, height: int) -> np.ndarray | None:
     if layer is None:
         return None
@@ -734,35 +668,22 @@ def load_painting_layer_payload(
     revision = str(painting_layer.get("revision") or "").strip()
     target_w = int(erp_width) if erp_width is not None else None
     target_h = int(erp_height) if erp_height is not None else None
-    pair = _load_painting_layer_erp(painting_layer)
-    paint_erp = None
-    mask_erp = None
-    if pair is not None:
-        paint_erp, mask_erp = pair
+    paint_erp = painting_layer.get("paint") if isinstance(painting_layer.get("paint"), np.ndarray) else None
+    mask_erp = painting_layer.get("mask") if isinstance(painting_layer.get("mask"), np.ndarray) else None
     if target_w is not None and target_h is not None:
         paint_erp = _resize_rgba_layer(paint_erp, target_w, target_h)
         mask_erp = _resize_mask_layer(mask_erp, target_w, target_h)
 
     groups = {}
     raw_groups = painting_layer.get("groups")
-    if isinstance(raw_groups, list):
-        for item in raw_groups:
-            if not isinstance(item, dict):
+    if isinstance(raw_groups, dict):
+        for action_group_id, layer in raw_groups.items():
+            key = str(action_group_id or "").strip()
+            if not key or not isinstance(layer, np.ndarray):
                 continue
-            action_group_id = str(item.get("actionGroupId") or item.get("id") or "").strip()
-            image_asset = item.get("image")
-            if not action_group_id or not isinstance(image_asset, dict):
-                continue
-            path = _resolve_comfy_image_path(image_asset)
-            if path is None:
-                continue
-            try:
-                layer = np.asarray(Image.open(path).convert("RGBA"), dtype=np.float32) / 255.0
-            except Exception:
-                continue
-            if target_w is not None and target_h is not None:
-                layer = _resize_rgba_layer(layer, target_w, target_h)
-            groups[action_group_id] = layer
+            resized = _resize_rgba_layer(layer, target_w, target_h) if target_w is not None and target_h is not None else _resize_rgba_layer(layer, layer.shape[1], layer.shape[0])
+            if resized is not None:
+                groups[key] = resized
 
     if paint_erp is None and mask_erp is None and not groups:
         return None
@@ -782,10 +703,10 @@ def render_painting_to_cutout(
     *,
     erp_width: int = 2048,
     erp_height: int = 1024,
-    painting_layer: dict | None = None,
+    painting_layer_payload: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     payload = load_painting_layer_payload(
-        painting_layer,
+        painting_layer_payload,
         erp_width=erp_width,
         erp_height=erp_height,
     )

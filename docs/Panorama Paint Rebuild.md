@@ -113,12 +113,14 @@ paint:
 * `marker`
 * `brush`
 * `eraser`
+* `rect_fill`
 * `lasso_fill`
 
 mask:
 
 * `pen`
 * `eraser`
+* `rect_fill`
 
 ### 2-5. Transaction / Action Group
 
@@ -168,7 +170,7 @@ Undo/Redo の最小単位。
 2. マーカー
 3. ブラシ
 4. 消しゴム
-5. ドラッグ範囲塗りつぶし
+5. `rect_fill`（ドラッグ範囲塗りつぶし）
 6. 投げ縄塗りつぶし
 7. ペンサイズスライダー
 8. 色選択
@@ -188,7 +190,7 @@ Undo/Redo の最小単位。
 
 1. ペン
 2. 消しゴム
-3. ドラッグ範囲塗りつぶし
+3. `rect_fill`（ドラッグ範囲塗りつぶし）
 4. ペンサイズスライダー
 
 ## 3-3. サイズ記憶
@@ -479,7 +481,7 @@ type StrokeRecord = {
     frameId: string
   }
   layerKind: "paint" | "mask"
-  toolKind: "pen" | "marker" | "brush" | "eraser" | "lasso_fill"
+  toolKind: "pen" | "marker" | "brush" | "eraser" | "rect_fill" | "lasso_fill"
   brushPresetId: string | null
   color: { r:number, g:number, b:number, a:number } | null
   size: number
@@ -735,7 +737,7 @@ paint 専用。
 注意:
 
 * 「点列をそのまま太く塗る」だけでは商用品質に届かない
-* `freehand line` / `rect fill` / `lasso fill` を同じ描画経路に無理やり押し込まない
+* `freehand line` / `rect_fill` / `lasso_fill` を同じ描画経路に無理やり押し込まない
 
 ## 9-4. image_add
 
@@ -766,7 +768,7 @@ paint 専用。
 
 * 1本の筆描き
 * 1回の消しゴムストローク
-* 1回の矩形塗り
+* 1回の `rect_fill`
 * 1回の lasso fill
 * 1回の image add
 * 1回の frame add
@@ -878,6 +880,7 @@ Codex は次の順で作ること。
 * [ ] paint marker
 * [ ] paint brush
 * [ ] paint eraser
+* [ ] rect_fill
 * [ ] mask pen
 * [ ] mask eraser
 * [ ] lasso_fill（paint のみ）

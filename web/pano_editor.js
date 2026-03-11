@@ -1616,13 +1616,14 @@ function showEditor(node, type, options = {}) {
   const initialSelectedId = type === "stickers"
     ? state.active.selected_sticker_id
     : (type === "cutout" ? state.active.selected_sticker_id : state.active.selected_shot_id);
+  const initialHistorySnapshot = JSON.stringify(cloneStateForHistorySnapshot(state));
   const editor = {
     mode: "pano",
     selectedId: initialSelectedId,
     viewYaw: 0,
     viewPitch: 0,
     viewFov: 100,
-    historyController: createHistoryController(80),
+    historyController: createHistoryController(80, { version: 1, entries: [initialHistorySnapshot], index: 0 }),
     primaryTool: "cursor",
     paintTool: "pen",
     maskTool: "pen",

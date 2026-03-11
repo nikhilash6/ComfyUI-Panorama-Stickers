@@ -69,15 +69,23 @@ export function renderSceneToContext2D(options = {}) {
   if (!entry?.renderer) return false;
   const renderer = entry.renderer;
   const dpr = Math.max(1, Number(options.dpr || window.devicePixelRatio || 1));
-  const backgroundRevision = options.backgroundRevision ?? imageRevisionKey(backgroundSource);
+  const hasExplicitBackgroundRevision = options.backgroundRevision != null;
+  const isLiveBackgroundSource = (
+    (typeof HTMLVideoElement !== "undefined" && backgroundSource instanceof HTMLVideoElement)
+    || (typeof HTMLCanvasElement !== "undefined" && backgroundSource instanceof HTMLCanvasElement)
+  );
+  const backgroundRevision = hasExplicitBackgroundRevision
+    ? String(options.backgroundRevision)
+    : (isLiveBackgroundSource ? "" : imageRevisionKey(backgroundSource));
   const backgroundOpacity = Number(options.backgroundOpacity ?? 1);
 
   // Result cache: only applies when scene has no stickers and no textures (e.g. cutout/ERP
   // background-only renders). Sticker scenes are not cached because scene/texture state is not
   // included in the key and would produce stale hits when stickers change.
   const sceneIsEmpty = scene.stickers.length === 0 && textures.length === 0;
+  const allowEmptySceneCache = sceneIsEmpty && (!!hasExplicitBackgroundRevision || !isLiveBackgroundSource);
   const renderKey = `${Math.round(rect.w)}x${Math.round(rect.h)}|${dpr}|${viewRevisionKey(view)}|${backgroundRevision}|${backgroundOpacity.toFixed(3)}`;
-  if (sceneIsEmpty && entry.lastRenderKey === renderKey && entry.cachedCanvas) {
+  if (allowEmptySceneCache && entry.lastRenderKey === renderKey && entry.cachedCanvas) {
     ctx.drawImage(entry.cachedCanvas, rect.x, rect.y, rect.w, rect.h);
     return true;
   }
@@ -99,7 +107,7 @@ export function renderSceneToContext2D(options = {}) {
   // avoid the GPU pipeline. Must clearRect before drawImage: the WebGL surface has transparent
   // pixels where gl.clear() left rgba(0,0,0,0), and source-over drawImage would let stale pixels
   // from the previous render bleed through those transparent areas, accumulating across frames.
-  if (sceneIsEmpty) {
+  if (allowEmptySceneCache) {
     const sw = surface.width;
     const sh = surface.height;
     if (!entry.cachedCanvas || entry.cachedCanvas.width !== sw || entry.cachedCanvas.height !== sh) {
@@ -111,6 +119,8 @@ export function renderSceneToContext2D(options = {}) {
     cacheCtx.clearRect(0, 0, sw, sh);
     cacheCtx.drawImage(surface, 0, 0);
     entry.lastRenderKey = renderKey;
+  } else {
+    entry.lastRenderKey = null;
   }
 
   ctx.drawImage(surface, rect.x, rect.y, rect.w, rect.h);

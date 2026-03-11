@@ -13,6 +13,7 @@ try:
 except ImportError:
     nodes = None
 
+from .comfy_image_resolver import resolve_painting_layer_payload
 from .core.cutout import cutout_from_erp
 from .core.math import (
     calculate_dimensions_from_megapixels,
@@ -22,7 +23,6 @@ from .core.math import (
 )
 from .core.painting import (
     alpha_composite_over_rgb,
-    load_painting_layer_payload,
     painting_state_has_renderables,
     render_painting_to_cutout,
     render_painting_to_erp,
@@ -481,7 +481,7 @@ class PanoramaStickersNode(io.ComfyNode):
         render_state = dict(state)
         render_state["stickers"] = render_stickers
 
-        painting_payload = load_painting_layer_payload(
+        painting_payload = resolve_painting_layer_payload(
             state.get("painting_layer"),
             erp_width=out_w,
             erp_height=out_h,
@@ -616,7 +616,7 @@ class PanoramaCutoutNode(io.ComfyNode):
         empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
 
         try:
-            painting_payload = load_painting_layer_payload(
+            painting_payload = resolve_painting_layer_payload(
                 state.get("painting_layer"),
                 erp_width=int(src.shape[1]),
                 erp_height=int(src.shape[0]),
@@ -640,7 +640,7 @@ class PanoramaCutoutNode(io.ComfyNode):
                     oh,
                     erp_width=src.shape[1],
                     erp_height=src.shape[0],
-                    painting_layer=state.get("painting_layer"),
+                    painting_layer_payload=painting_payload,
                 )
             else:
                 paint_rgba = np.zeros((oh, ow, 4), dtype=np.float32)
