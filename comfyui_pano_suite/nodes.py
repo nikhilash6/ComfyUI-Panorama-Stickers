@@ -596,27 +596,6 @@ class PanoramaCutoutNode(io.ComfyNode):
         output_megapixels = max(0.01, finite_float(output_megapixels, 1.0))
         state = merge_state(state_in=None, internal_state=state_json)
         shots = state.get("shots", []) if isinstance(state, dict) else []
-        if not shots:
-            raise ValueError("Panorama Cutout requires at least one frame.")
-        shot = shots[0]
-
-        yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
-        pitch = finite_float(shot.get("pitch_deg", 0.0), 0.0)
-        hfov = float(np.clip(finite_float(shot.get("hFOV_deg", 90.0), 90.0), 1.0, 179.0))
-        vfov = float(np.clip(finite_float(shot.get("vFOV_deg", 60.0), 60.0), 1.0, 179.0))
-        roll = finite_float(shot.get("roll_deg", 0.0), 0.0)
-        ow_raw = finite_int(shot.get("out_w", 1024), 1024)
-        oh_raw = finite_int(shot.get("out_h", 1024), 1024)
-
-        use_megapixels = ow_raw <= 0 or oh_raw <= 0 or (ow_raw == 1024 and oh_raw == 1024)
-        if use_megapixels:
-            ow, oh = calculate_dimensions_from_megapixels(
-                output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE
-            )
-        else:
-            ow = int(np.clip(ow_raw, 8, cls.MAX_OUTPUT_SIDE))
-            oh = int(np.clip(oh_raw, 8, cls.MAX_OUTPUT_SIDE))
-
         src = None
         try:
             if erp_image is not None and hasattr(erp_image, "detach"):
@@ -643,6 +622,36 @@ class PanoramaCutoutNode(io.ComfyNode):
                 src = src[..., :3]
 
         ui_ret = _save_input_preview(erp_image) if erp_image is not None else {}
+        if not shots:
+            oh = int(src.shape[0])
+            ow = int(src.shape[1])
+            empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
+            _push_ui_warning(
+                ui_ret,
+                "pano_cutout_warnings",
+                "Panorama Cutout has no frame, so the ERP image was returned unchanged.",
+            )
+            out_t = torch.from_numpy(src.astype(np.float32, copy=False))[None, ...]
+            return io.NodeOutput(out_t, "", empty_mask, ui=ui_ret)
+
+        shot = shots[0]
+        yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
+        pitch = finite_float(shot.get("pitch_deg", 0.0), 0.0)
+        hfov = float(np.clip(finite_float(shot.get("hFOV_deg", 90.0), 90.0), 1.0, 179.0))
+        vfov = float(np.clip(finite_float(shot.get("vFOV_deg", 60.0), 60.0), 1.0, 179.0))
+        roll = finite_float(shot.get("roll_deg", 0.0), 0.0)
+        ow_raw = finite_int(shot.get("out_w", 1024), 1024)
+        oh_raw = finite_int(shot.get("out_h", 1024), 1024)
+
+        use_megapixels = ow_raw <= 0 or oh_raw <= 0 or (ow_raw == 1024 and oh_raw == 1024)
+        if use_megapixels:
+            ow, oh = calculate_dimensions_from_megapixels(
+                output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE
+            )
+        else:
+            ow = int(np.clip(ow_raw, 8, cls.MAX_OUTPUT_SIDE))
+            oh = int(np.clip(oh_raw, 8, cls.MAX_OUTPUT_SIDE))
+
         sticker_state_json = _build_sticker_state_json(shot, ow, oh)
         empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
 
