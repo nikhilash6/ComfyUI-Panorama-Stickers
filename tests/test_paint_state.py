@@ -139,3 +139,19 @@ def test_normalize_painting_state_preserves_raster_object_fractional_z_index():
     })
 
     assert state["raster_objects"][0]["z_index"] == 4.125
+
+
+def test_normalize_painting_state_rejects_raster_bbox_that_collapses_after_clamp():
+    state = normalize_painting_state({
+        "raster_objects": [{
+            "id": "rast_bad_bbox",
+            "type": "raster_frozen",
+            "layerKind": "paint",
+            "z_index": 1,
+            "bbox": {"u0": 1.1, "v0": 0.2, "u1": 1.2, "v1": 0.6},
+            "rasterDataUrl": "data:image/png;base64,AAAA",
+            "transform": {"du": 0.0, "dv": 0.0, "rot_deg": 0.0, "scale": 1.0},
+        }],
+    })
+
+    assert state["raster_objects"] == []

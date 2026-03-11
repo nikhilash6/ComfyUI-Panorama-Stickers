@@ -268,10 +268,16 @@ def _normalize_raster_bbox(raw):
     v1 = _finite_float(raw.get("v1"))
     if None in (u0, v0, u1, v1):
         return None
+    clamp = lambda v: max(0.0, min(1.0, float(v)))
+    u0 = clamp(u0)
+    v0 = clamp(v0)
+    u1 = clamp(u1)
+    v1 = clamp(v1)
+    if None in (u0, v0, u1, v1):
+        return None
     if u1 <= u0 or v1 <= v0:
         return None
-    clamp = lambda v: max(0.0, min(1.0, float(v)))
-    return {"u0": clamp(u0), "v0": clamp(v0), "u1": clamp(u1), "v1": clamp(v1)}
+    return {"u0": u0, "v0": v0, "u1": u1, "v1": v1}
 
 
 def _normalize_raster_transform(raw):

@@ -429,9 +429,11 @@ def _uv_bbox_to_pixels(bbox: dict, tf: dict, width: int, height: int) -> tuple[i
     v0 = max(0.0, min(1.0, float(bbox.get("v0", 0.0)) + dv))
     u1 = ((float(bbox.get("u1", 1.0)) + du) % 1.0 + 1.0) % 1.0
     v1 = max(0.0, min(1.0, float(bbox.get("v1", 1.0)) + dv))
+    wraps = u1 <= u0
     x0, y0 = int(round(u0 * width)), int(round(v0 * height))
     x1, y1 = int(round(u1 * width)), int(round(v1 * height))
-    dst_w = max(1, x1 - x0) if x1 > x0 else max(1, width - x0 + x1)
+    dst_w = (width - x0 + x1) if wraps else max(1, x1 - x0)
+    dst_w = max(1, dst_w)
     dst_h = max(1, y1 - y0)
     return x0, y0, x1, y1, dst_w, dst_h
 
@@ -457,8 +459,103 @@ def _composite_raster_objects(
     paint: np.ndarray, mask: np.ndarray, raster_objects: list, width: int, height: int
 ) -> None:
     """Composite raster_frozen objects onto paint/mask ERP arrays in-place."""
-    for obj in raster_objects:
+    ordered = sorted(
+        [obj for obj in raster_objects if isinstance(obj, dict)],
+        key=lambda obj: float(obj.get("z_index") or 0.0),
+    )
+    for obj in ordered:
         _composite_one_raster_object(paint, mask, obj, width, height)
+
+
+def _composite_one_erp_stroke(paint: np.ndarray, mask: np.ndarray, stroke: dict, width: int, height: int) -> None:
+    if (stroke.get("targetSpace") or {}).get("kind") != "ERP_GLOBAL":
+        return
+    geometry_kind = str((stroke.get("geometry") or {}).get("geometryKind") or "")
+    tool_kind = str(stroke.get("toolKind") or "")
+    layer_kind = str(stroke.get("layerKind") or "paint")
+    if layer_kind == "mask":
+        if geometry_kind == "lasso_fill":
+            segments = _stroke_segments_for_erp_geometry(stroke, width, height)
+            alpha = _polygon_alpha_mask(segments, width, height)
+            if tool_kind == "eraser":
+                _erase_from_mask(mask, alpha)
+            else:
+                _composite_mask_layer(mask, alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
+            return
+        stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
+        if tool_kind == "eraser":
+            _erase_from_mask(mask, stroke_alpha)
+        else:
+            _composite_mask_layer(mask, stroke_alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
+        return
+
+    if geometry_kind == "lasso_fill":
+        segments = _stroke_segments_for_erp_geometry(stroke, width, height)
+        alpha = _polygon_alpha_mask(segments, width, height)
+        color = stroke.get("color") or {}
+        color_rgb = np.array([
+            max(0.0, min(1.0, float(color.get("r", 0.0)))),
+            max(0.0, min(1.0, float(color.get("g", 0.0)))),
+            max(0.0, min(1.0, float(color.get("b", 0.0)))),
+        ], dtype=np.float32)
+        color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
+        _composite_color_layer(paint, alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
+        return
+    stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
+    if tool_kind == "eraser":
+        _erase_from_rgba(paint, stroke_alpha)
+        return
+    color = stroke.get("color") or {}
+    color_rgb = np.array([
+        max(0.0, min(1.0, float(color.get("r", 0.0)))),
+        max(0.0, min(1.0, float(color.get("g", 0.0)))),
+        max(0.0, min(1.0, float(color.get("b", 0.0)))),
+    ], dtype=np.float32)
+    color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
+    _composite_color_layer(paint, stroke_alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
+
+
+def _ordered_erp_composite_items(normalized: dict) -> list[dict]:
+    group_order = {}
+    for idx, group in enumerate(normalized.get("groups") or []):
+        if not isinstance(group, dict):
+            continue
+        action_group_id = str(group.get("actionGroupId") or group.get("id") or "").strip()
+        if not action_group_id:
+            continue
+        group_order[action_group_id] = (float(group.get("z_index") or 0.0), idx)
+
+    items = []
+    seq = 0
+    for stroke in list(normalized.get("paint", {}).get("strokes") or []) + list(normalized.get("mask", {}).get("strokes") or []):
+        if not isinstance(stroke, dict):
+            continue
+        if (stroke.get("targetSpace") or {}).get("kind") != "ERP_GLOBAL":
+            continue
+        action_group_id = str(stroke.get("actionGroupId") or "").strip()
+        z_index, group_seq = group_order.get(action_group_id, (float(seq), seq))
+        items.append({
+            "kind": "stroke",
+            "z_index": z_index,
+            "group_seq": group_seq,
+            "seq": seq,
+            "item": stroke,
+        })
+        seq += 1
+
+    for obj in normalized.get("raster_objects") or []:
+        if not isinstance(obj, dict):
+            continue
+        items.append({
+            "kind": "raster",
+            "z_index": float(obj.get("z_index") or 0.0),
+            "group_seq": seq,
+            "seq": seq,
+            "item": obj,
+        })
+        seq += 1
+
+    return sorted(items, key=lambda entry: (entry["z_index"], entry["group_seq"], entry["seq"]))
 
 
 def painting_state_has_renderables(painting_state: dict | None) -> bool:
@@ -491,57 +588,11 @@ def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tup
         return cached
     paint = _empty_rgba(width, height)
     mask = _empty_mask(width, height)
-
-    for stroke in normalized["paint"]["strokes"]:
-        if (stroke.get("targetSpace") or {}).get("kind") != "ERP_GLOBAL":
-            continue
-        geometry_kind = str((stroke.get("geometry") or {}).get("geometryKind") or "")
-        tool_kind = str(stroke.get("toolKind") or "")
-        if geometry_kind == "lasso_fill":
-            segments = _stroke_segments_for_erp_geometry(stroke, width, height)
-            alpha = _polygon_alpha_mask(segments, width, height)
-            color = stroke.get("color") or {}
-            color_rgb = np.array([
-                max(0.0, min(1.0, float(color.get("r", 0.0)))),
-                max(0.0, min(1.0, float(color.get("g", 0.0)))),
-                max(0.0, min(1.0, float(color.get("b", 0.0)))),
-            ], dtype=np.float32)
-            color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
-            _composite_color_layer(paint, alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
-            continue
-        stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
-        if tool_kind == "eraser":
-            _erase_from_rgba(paint, stroke_alpha)
-            continue
-        color = stroke.get("color") or {}
-        color_rgb = np.array([
-            max(0.0, min(1.0, float(color.get("r", 0.0)))),
-            max(0.0, min(1.0, float(color.get("g", 0.0)))),
-            max(0.0, min(1.0, float(color.get("b", 0.0)))),
-        ], dtype=np.float32)
-        color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
-        _composite_color_layer(paint, stroke_alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
-
-    for stroke in normalized["mask"]["strokes"]:
-        if (stroke.get("targetSpace") or {}).get("kind") != "ERP_GLOBAL":
-            continue
-        geometry_kind = str((stroke.get("geometry") or {}).get("geometryKind") or "")
-        tool_kind = str(stroke.get("toolKind") or "")
-        if geometry_kind == "lasso_fill":
-            segments = _stroke_segments_for_erp_geometry(stroke, width, height)
-            alpha = _polygon_alpha_mask(segments, width, height)
-            if tool_kind == "eraser":
-                _erase_from_mask(mask, alpha)
-            else:
-                _composite_mask_layer(mask, alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
-            continue
-        stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
-        if tool_kind == "eraser":
-            _erase_from_mask(mask, stroke_alpha)
+    for entry in _ordered_erp_composite_items(normalized):
+        if entry["kind"] == "raster":
+            _composite_one_raster_object(paint, mask, entry["item"], width, height)
         else:
-            _composite_mask_layer(mask, stroke_alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
-
-    _composite_raster_objects(paint, mask, normalized.get("raster_objects") or [], width, height)
+            _composite_one_erp_stroke(paint, mask, entry["item"], width, height)
     result = (
         np.clip(paint, 0.0, 1.0).astype(np.float32),
         np.clip(mask, 0.0, 1.0).astype(np.float32),

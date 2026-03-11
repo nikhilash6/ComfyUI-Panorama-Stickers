@@ -107,3 +107,55 @@ def test_render_painting_to_erp_composites_raster_objects():
     assert 10 <= min_y <= 22
     assert 40 <= max_x <= 68
     assert 18 <= max_y <= 38
+
+
+def test_render_painting_to_erp_respects_mixed_stroke_and_raster_z_order():
+    rgba = np.zeros((16, 16, 4), dtype=np.uint8)
+    rgba[..., 1] = 255
+    rgba[..., 3] = 255
+    painting = {
+        "version": 1,
+        "groups": [{
+            "id": "group_1",
+            "type": "strokeGroup",
+            "actionGroupId": "ag_top",
+            "z_index": 2,
+        }],
+        "paint": {
+            "strokes": [{
+                "id": "paint_top",
+                "actionGroupId": "ag_top",
+                "targetSpace": {"kind": "ERP_GLOBAL"},
+                "layerKind": "paint",
+                "toolKind": "pen",
+                "brushPresetId": None,
+                "color": {"r": 1.0, "g": 0.0, "b": 0.0, "a": 1.0},
+                "size": 32,
+                "opacity": 1.0,
+                "hardness": None,
+                "flow": None,
+                "spacing": None,
+                "createdAt": 0,
+                "geometry": {
+                    "geometryKind": "freehand_open",
+                    "points": [{"u": 0.3, "v": 0.35, "t": 0}, {"u": 0.45, "v": 0.35, "t": 1}],
+                },
+            }],
+        },
+        "mask": {"strokes": []},
+        "raster_objects": [{
+            "id": "rast_bottom",
+            "type": "raster_frozen",
+            "layerKind": "paint",
+            "z_index": 1,
+            "bbox": {"u0": 0.25, "v0": 0.25, "u1": 0.5, "v1": 0.5},
+            "rasterDataUrl": _png_data_url(rgba),
+            "transform": {"du": 0.0, "dv": 0.0, "rot_deg": 0.0, "scale": 1.0},
+        }],
+    }
+
+    paint_rgba, _ = render_painting_to_erp(painting, 128, 64)
+
+    sample = paint_rgba[22, 48]
+    assert sample[3] > 0.5
+    assert sample[0] > sample[1]

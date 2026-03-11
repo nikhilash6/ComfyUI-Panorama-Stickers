@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 
 from comfyui_pano_suite.core.painting import (
+    _uv_bbox_to_pixels,
     painting_state_has_renderables,
     render_painting_to_cutout,
 )
@@ -122,6 +123,19 @@ def test_render_painting_to_cutout_projects_raster_objects_into_frame():
     center_y, center_x = alpha_nonzero.mean(axis=0)
     assert 48 <= center_x <= 80
     assert 40 <= center_y <= 88
+
+
+def test_uv_bbox_to_pixels_keeps_thin_non_wrapping_bbox_non_wrapped():
+    x0, y0, x1, y1, dst_w, dst_h = _uv_bbox_to_pixels(
+        {"u0": 0.1001, "v0": 0.2, "u1": 0.1002, "v1": 0.4},
+        {"du": 0.0, "dv": 0.0},
+        8,
+        8,
+    )
+
+    assert x0 == x1
+    assert dst_w == 1
+    assert dst_h >= 1
 
 
 def test_render_painting_to_cutout_ignores_stale_painting_layer_payload():
