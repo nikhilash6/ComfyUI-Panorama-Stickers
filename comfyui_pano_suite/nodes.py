@@ -632,7 +632,7 @@ class PanoramaCutoutNode(io.ComfyNode):
                 "Panorama Cutout has no frame, so the ERP image was returned unchanged.",
             )
             out_t = torch.from_numpy(src.astype(np.float32, copy=False))[None, ...]
-            return io.NodeOutput(out_t, "", empty_mask, ui=ui_ret)
+            return io.NodeOutput(out_t, '{"stickers":[],"version":1}', empty_mask, ui=ui_ret)
 
         shot = shots[0]
         yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
@@ -640,10 +640,10 @@ class PanoramaCutoutNode(io.ComfyNode):
         hfov = float(np.clip(finite_float(shot.get("hFOV_deg", 90.0), 90.0), 1.0, 179.0))
         vfov = float(np.clip(finite_float(shot.get("vFOV_deg", 60.0), 60.0), 1.0, 179.0))
         roll = finite_float(shot.get("roll_deg", 0.0), 0.0)
-        ow_raw = finite_int(shot.get("out_w", 1024), 1024)
-        oh_raw = finite_int(shot.get("out_h", 1024), 1024)
+        ow_raw = finite_int(shot.get("out_w"), 0)
+        oh_raw = finite_int(shot.get("out_h"), 0)
 
-        use_megapixels = ow_raw <= 0 or oh_raw <= 0 or (ow_raw == 1024 and oh_raw == 1024)
+        use_megapixels = "out_w" not in shot or "out_h" not in shot or ow_raw <= 0 or oh_raw <= 0
         if use_megapixels:
             ow, oh = calculate_dimensions_from_megapixels(
                 output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE

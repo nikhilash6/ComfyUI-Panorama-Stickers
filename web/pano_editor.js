@@ -1140,12 +1140,16 @@ function orderedLinkedOutputImageCandidates(outputEntry, preferredSlot = -1) {
   return ordered;
 }
 
-function findFirstResolvedImageSource(candidates) {
+function resolveImageSourceCandidates(candidates) {
+  const out = [];
+  const seen = new Set();
   for (const cand of candidates || []) {
     const src = imageSourceFromCandidate(cand);
-    if (src) return src;
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    out.push(src);
   }
-  return "";
+  return out;
 }
 
 function getFirstNodeUiImage(node, key, imageCache, onLoad = null) {
@@ -1202,17 +1206,17 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       const ordered = [];
       if (resolvedOriginSlot >= 0 && resolvedOriginSlot < appNodeImageUrls.length) ordered.push(appNodeImageUrls[resolvedOriginSlot]);
       ordered.push(...appNodeImageUrls);
-      const src = findFirstResolvedImageSource(ordered);
-      if (src) {
-        return { src, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
+      const srcCandidates = resolveImageSourceCandidates(ordered);
+      if (srcCandidates.length) {
+        return { src: srcCandidates[0], srcCandidates, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
       }
     }
 
     const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
     const outputCandidates = orderedLinkedOutputImageCandidates(outputs, resolvedOriginSlot);
-    const outputSrc = findFirstResolvedImageSource(outputCandidates);
-    if (outputSrc) {
-      return { src: outputSrc, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
+    const outputSrcCandidates = resolveImageSourceCandidates(outputCandidates);
+    if (outputSrcCandidates.length) {
+      return { src: outputSrcCandidates[0], srcCandidates: outputSrcCandidates, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
     }
 
     const nodeImgs = Array.isArray(originNode?.imgs) ? originNode.imgs : [];
@@ -1220,9 +1224,9 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       const ordered = [];
       if (resolvedOriginSlot >= 0 && resolvedOriginSlot < nodeImgs.length) ordered.push(nodeImgs[resolvedOriginSlot]);
       ordered.push(...nodeImgs);
-      const src = findFirstResolvedImageSource(ordered);
-      if (src) {
-        return { src, sourceType: "nodeImgs", inputName: String(input?.name || "") };
+      const srcCandidates = resolveImageSourceCandidates(ordered);
+      if (srcCandidates.length) {
+        return { src: srcCandidates[0], srcCandidates, sourceType: "nodeImgs", inputName: String(input?.name || "") };
       }
     }
 
@@ -1284,22 +1288,22 @@ function findExactLinkedInputImageSource(node, inputName) {
     const ordered = [];
     if (resolvedOriginSlot >= 0 && resolvedOriginSlot < appNodeImageUrls.length) ordered.push(appNodeImageUrls[resolvedOriginSlot]);
     ordered.push(...appNodeImageUrls);
-    const src = findFirstResolvedImageSource(ordered);
-    if (src) return { src, sourceType: "appNodeImageUrls", inputName: wanted };
+    const srcCandidates = resolveImageSourceCandidates(ordered);
+    if (srcCandidates.length) return { src: srcCandidates[0], srcCandidates, sourceType: "appNodeImageUrls", inputName: wanted };
   }
 
   const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
   const outputCandidates = orderedLinkedOutputImageCandidates(outputs, resolvedOriginSlot);
-  const outputSrc = findFirstResolvedImageSource(outputCandidates);
-  if (outputSrc) return { src: outputSrc, sourceType: "nodeOutputs", inputName: wanted };
+  const outputSrcCandidates = resolveImageSourceCandidates(outputCandidates);
+  if (outputSrcCandidates.length) return { src: outputSrcCandidates[0], srcCandidates: outputSrcCandidates, sourceType: "nodeOutputs", inputName: wanted };
 
   const nodeImgs = Array.isArray(originNode?.imgs) ? originNode.imgs : [];
   if (nodeImgs.length) {
     const ordered = [];
     if (resolvedOriginSlot >= 0 && resolvedOriginSlot < nodeImgs.length) ordered.push(nodeImgs[resolvedOriginSlot]);
     ordered.push(...nodeImgs);
-    const src = findFirstResolvedImageSource(ordered);
-    if (src) return { src, sourceType: "nodeImgs", inputName: wanted };
+    const srcCandidates = resolveImageSourceCandidates(ordered);
+    if (srcCandidates.length) return { src: srcCandidates[0], srcCandidates, sourceType: "nodeImgs", inputName: wanted };
   }
 
   const imageWidget = originNode?.widgets?.find((w) => String(w?.name || "").toLowerCase() === "image");
@@ -1354,11 +1358,66 @@ function loadLinkedInputImageFromSource(node, cacheKey, srcRaw, onLoad = null) {
   return img;
 }
 
+function loadLinkedInputImageFromCandidates(node, cacheKey, srcCandidates, onLoad = null) {
+  const rawCandidates = Array.isArray(srcCandidates)
+    ? srcCandidates.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+  if (!rawCandidates.length) return null;
+  if (!node.__panoLinkedInputImageCache) node.__panoLinkedInputImageCache = new Map();
+  const key = String(cacheKey || "image");
+  const cacheKeyText = rawCandidates.join("\n");
+  const cached = node.__panoLinkedInputImageCache.get(key);
+  if (cached && cached.srcRaw === cacheKeyText && cached.img) return cached.img;
+
+  const candidates = [];
+  const seen = new Set();
+  rawCandidates.forEach((raw) => {
+    buildImageSrcCandidates(raw).forEach((candidate) => {
+      const s = String(candidate || "").trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      candidates.push(s);
+    });
+  });
+  if (!candidates.length) return null;
+
+  const img = new Image();
+  const cacheEntry = { srcRaw: cacheKeyText, resolvedSrc: "", img };
+  node.__panoLinkedInputImageCache.set(key, cacheEntry);
+  let attempt = -1;
+  const tryLoadNext = () => {
+    attempt += 1;
+    if (attempt >= candidates.length) {
+      try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
+      return;
+    }
+    const nextSrc = candidates[attempt];
+    cacheEntry.resolvedSrc = nextSrc;
+    img.src = nextSrc;
+  };
+
+  img.onload = () => {
+    onLoad?.();
+    node.setDirtyCanvas?.(true, true);
+  };
+  img.onerror = () => {
+    if (attempt + 1 < candidates.length) {
+      tryLoadNext();
+      return;
+    }
+    try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
+  };
+  tryLoadNext();
+  return img;
+}
+
 function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
   const resolved = findLinkedInputImageSource(node, preferredInputNames);
+  const srcCandidates = Array.isArray(resolved?.srcCandidates) ? resolved.srcCandidates : [];
+  const key = preferredInputNames.join("|") || "image";
+  if (srcCandidates.length) return loadLinkedInputImageFromCandidates(node, key, srcCandidates, onLoad);
   const srcRaw = String(resolved?.src || "").trim();
   if (!srcRaw) return null;
-  const key = preferredInputNames.join("|") || "image";
   return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
 }
 
@@ -1374,9 +1433,11 @@ function findPreferredExactLinkedImageSource(node, inputNames = []) {
 function getPreferredExactLinkedInputImage(node, inputNames = [], onLoad = null, cacheKey = "") {
   const orderedNames = Array.isArray(inputNames) ? inputNames : [inputNames];
   const resolved = findPreferredExactLinkedImageSource(node, orderedNames);
+  const key = String(cacheKey || orderedNames.join("|") || "image_exact");
+  const srcCandidates = Array.isArray(resolved?.srcCandidates) ? resolved.srcCandidates : [];
+  if (srcCandidates.length) return loadLinkedInputImageFromCandidates(node, key, srcCandidates, onLoad);
   const srcRaw = String(resolved?.src || "").trim();
   if (!srcRaw) return null;
-  const key = String(cacheKey || orderedNames.join("|") || "image_exact");
   return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
 }
 
