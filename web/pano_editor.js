@@ -6,7 +6,7 @@ import {
   attachStickersNodePreview,
 } from "./pano_node_preview.js";
 import { isPanoramaPreviewNodeName } from "./pano_preview_identity.js";
-import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
+import { renderSharedCutoutPreview } from "./pano_cutout_preview_shared.js";
 import { renderCutoutViewToContext2D, renderErpViewToContext2D, renderSceneToContext2D } from "./pano_gl_viewport.js";
 import { createPanoInteractionController } from "./pano_interaction_controller.js";
 import { clamp, wrapYaw, shortestYawDelta } from "./pano_math.js";
@@ -39,6 +39,7 @@ const RAD2DEG = 180 / Math.PI;
 // Global registry: nodeId → Promise for in-flight paint layer uploads.
 // beforeQueuePrompt waits for all pending promises before sending the graph.
 const _paintLayerUploadRegistry = new Map();
+const _paintLayerSyncRegistry = new Map();
 const ICON = {
   // Source: @geist-ui/icons globe.js (v1.0.2)
   globe: "<svg viewBox='0 0 24 24' aria-hidden='true' fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' shape-rendering='geometricPrecision'><circle cx='12' cy='12' r='10'/><path d='M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z'/></svg>",
@@ -1561,6 +1562,10 @@ function showEditor(node, type, options = {}) {
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
     paintCompositeRevision: 0,
+    livePaintInteractionRevision: 0,
+    cutoutPreviewSurfaceRaf: 0,
+    cutoutPreviewSurfaceTimer: 0,
+    cutoutPreviewSurfaceLastTs: 0,
     selectedIds: [],
     _sortedItemsCache: null,
     _strokeGeomCache: new Map(),
@@ -1881,14 +1886,33 @@ function showEditor(node, type, options = {}) {
       .filter(Boolean);
   }
 
+  function isPaintCompositeInteraction(interaction = editor.interaction) {
+    const kind = String(interaction?.kind || "");
+    if (kind === "paint_stroke" || kind === "paint_lasso_fill") return true;
+    if (kind === "move_stroke_group" || kind === "scale_stroke_group" || kind === "rotate_stroke_group") return true;
+    if (kind === "move_raster_object") return true;
+    if (kind === "move_multi") {
+      const hasStrokeSnapshots = Array.isArray(interaction?.strokeSnapshots) && interaction.strokeSnapshots.length > 0;
+      const hasRasterSnapshots = Array.isArray(interaction?.rasterSnapshots) && interaction.rasterSnapshots.length > 0;
+      return hasStrokeSnapshots || hasRasterSnapshots;
+    }
+    return false;
+  }
+
   function getLivePaintRevisionSuffix() {
-    const interactionKind = String(editor.interaction?.kind || "");
-    const geometry = editor.interaction?.stroke?.geometry || null;
-    if (interactionKind !== "paint_stroke" && interactionKind !== "paint_lasso_fill") return "";
-    const layerKind = String(editor.interaction?.stroke?.layerKind || "");
-    const pointCount = geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0;
-    const stamp = String(editor.interaction?._livePreviewToken || "");
-    return `_${layerKind || "paint"}_live${stamp}_${pointCount}`;
+    const interaction = editor.interaction;
+    const interactionKind = String(interaction?.kind || "");
+    if (!isPaintCompositeInteraction(interaction)) return "";
+    if (interactionKind === "paint_stroke" || interactionKind === "paint_lasso_fill") {
+      const geometry = interaction?.stroke?.geometry || null;
+      const layerKind = String(interaction?.stroke?.layerKind || "");
+      const pointCount = geometry?.rawPoints?.length ?? geometry?.points?.length ?? 0;
+      const stamp = String(interaction?._livePreviewToken || "");
+      return `_${layerKind || "paint"}_${interactionKind}_live${stamp}_${pointCount}_${editor.livePaintInteractionRevision}`;
+    }
+    const groupId = String(interaction?.item?.actionGroupId || "");
+    const rasterId = String(interaction?.item?.rasterObjectId || interaction?.item?.id || "");
+    return `_${interactionKind}_${groupId || rasterId || "active"}_${editor.livePaintInteractionRevision}`;
   }
   function getCutoutSelectableItems() {
     return [
@@ -3296,7 +3320,7 @@ function showEditor(node, type, options = {}) {
     const blob = await new Promise((r) => canvas.toBlob(r, "image/png"));
     const body = new FormData();
     body.append("image", blob, filename);
-    body.append("type", "input");
+    body.append("type", "temp");
     body.append("subfolder", "panorama_stickers");
     body.append("overwrite", "1");
     const resp = await api.fetchApi("/upload/image", { method: "POST", body });
@@ -3317,6 +3341,8 @@ function showEditor(node, type, options = {}) {
 
   function syncPaintingLayerAsync() {
     const nodeId = String(node.id ?? "0");
+    const currentPending = _paintLayerUploadRegistry.get(nodeId);
+    if (_paintLayerSyncPending && currentPending) return currentPending;
     const promise = (async () => {
       const rev = getPaintingCompositeRevisionKey();
       const counts = paintingCompositeCount(state.painting);
@@ -3352,22 +3378,8 @@ function showEditor(node, type, options = {}) {
         if (!uploadPaintCanvas && !uploadMaskCanvas) return;
         let paintRef = null;
         let maskRef = null;
-        const groupRefs = [];
         if (counts.totalPaintCount > 0) {
           paintRef = await uploadCanvasAsPaintLayer(uploadPaintCanvas, `pano_paint_${nodeId}.png`);
-          for (const entry of getDisplayListObjects().filter((item) => item.type === "strokeGroup")) {
-            const actionGroupId = String(entry.actionGroupId || "");
-            const groupCanvas = editor.paintEngine?.getGroupDisplayCanvas?.(actionGroupId) || null;
-            if (!groupCanvas) continue;
-            const safeGroupId = String(actionGroupId || "").replace(/[^a-zA-Z0-9_-]/g, "_");
-            const ref = await uploadCanvasAsPaintLayer(groupCanvas, `pano_paint_${nodeId}_${safeGroupId}.png`);
-            if (!ref) continue;
-            groupRefs.push({
-              id: String(actionGroupId || ""),
-              actionGroupId: String(actionGroupId || ""),
-              image: ref,
-            });
-          }
         }
         if (counts.totalMaskCount > 0) {
           maskRef = await uploadCanvasAsPaintLayer(uploadMaskCanvas, `pano_mask_${nodeId}.png`);
@@ -3376,7 +3388,8 @@ function showEditor(node, type, options = {}) {
           state.painting_layer = {
             paint: paintRef,
             mask: maskRef,
-            groups: groupRefs,
+            groups: [],
+            revision: rev,
           };
           _paintLayerSyncRevision = rev;
           commitState();
@@ -3393,6 +3406,7 @@ function showEditor(node, type, options = {}) {
         _paintLayerUploadRegistry.delete(nodeId);
       }
     });
+    return promise;
   }
 
   function getConnectedErpImage() {
@@ -4420,6 +4434,85 @@ function showEditor(node, type, options = {}) {
     }
   }
 
+  function getCutoutPreviewSurfaceSize(shot) {
+    const view = buildCutoutViewParamsFromShot(shot);
+    const aspect = clamp(Number(view?.aspect || 1), 0.05, 20.0);
+    const longSide = 320;
+    return aspect >= 1
+      ? { width: longSide, height: Math.max(1, Math.round(longSide / aspect)) }
+      : { width: Math.max(1, Math.round(longSide * aspect)), height: longSide };
+  }
+
+  function getCutoutPreviewSurfaceRevision(shot, options = {}) {
+    if (!shot) return "";
+    const bgImage = getConnectedErpImage();
+    const bgKey = bgImage && (bgImage.complete || bgImage.naturalWidth || bgImage.width)
+      ? [
+        String(bgImage.currentSrc || bgImage.src || ""),
+        Number(bgImage.naturalWidth || bgImage.width || 0),
+        Number(bgImage.naturalHeight || bgImage.height || 0),
+      ].join("|")
+      : "no_bg";
+    const size = getCutoutPreviewSurfaceSize(shot);
+    return [
+      String(shot?.id || ""),
+      JSON.stringify(shot || null),
+      getPaintingCompositeRevisionKey(),
+      getLivePaintRevisionSuffix(),
+      bgKey,
+      editor.showPanorama ? "panorama:1" : "panorama:0",
+      editor.showObjects ? "objects:1" : "objects:0",
+      editor.showMask ? "mask:1" : "mask:0",
+      `${size.width}x${size.height}`,
+      String(options.quality || "balanced"),
+    ].join("|");
+  }
+
+  function ensureNodeCutoutPreviewSurface(options = {}) {
+    if (type !== "cutout") return null;
+    const shot = options.shot || getActiveCutoutShot();
+    if (!shot) {
+      node.__panoCutoutPreviewSurface = null;
+      return null;
+    }
+    const size = getCutoutPreviewSurfaceSize(shot);
+    if (!node.__panoCutoutPreviewCanvas
+      || Number(node.__panoCutoutPreviewCanvas.width || 0) !== size.width
+      || Number(node.__panoCutoutPreviewCanvas.height || 0) !== size.height) {
+      node.__panoCutoutPreviewCanvas = document.createElement("canvas");
+      node.__panoCutoutPreviewCanvas.width = size.width;
+      node.__panoCutoutPreviewCanvas.height = size.height;
+    }
+    const revision = getCutoutPreviewSurfaceRevision(shot, options);
+    if (node.__panoCutoutPreviewSurface?.source === node.__panoCutoutPreviewCanvas
+      && node.__panoCutoutPreviewSurface?.revision === revision) {
+      return node.__panoCutoutPreviewSurface;
+    }
+    const previewCanvas = node.__panoCutoutPreviewCanvas;
+    const previewCtx = previewCanvas.getContext("2d");
+    if (!previewCtx) {
+      node.__panoCutoutPreviewSurface = null;
+      return null;
+    }
+    const drawn = renderCutoutPreviewToContext(
+      previewCtx,
+      { x: 0, y: 0, w: size.width, h: size.height },
+      shot,
+      {
+        cachePrefix: "shared_cutout_preview_surface",
+        quality: String(options.quality || "balanced"),
+      },
+    );
+    if (!drawn) {
+      return node.__panoCutoutPreviewSurface || null;
+    }
+    node.__panoCutoutPreviewSurface = {
+      source: previewCanvas,
+      revision,
+    };
+    return node.__panoCutoutPreviewSurface;
+  }
+
   function drawCutoutOutputPreview() {
     if (type !== "cutout") return;
     const shot = getActiveCutoutShot();
@@ -4487,59 +4580,80 @@ function showEditor(node, type, options = {}) {
     roundedRect(px, py, pw, ph, radius);
     ctx.clip();
 
-    const img = getConnectedErpImage();
-    const previewRect = { x: px, y: py, w: pw, h: ph };
-    const erpPreviewRaster = getComposedPaintErpCanvas(getOrderedPaintGroupIds());
-    const renderPreviewPaint = () => {
-      if (!erpPreviewRaster) return;
-      renderCutoutViewToContext2D({
-        owner: node,
-        cacheKey: "modal_cutout_output_preview_paint",
-        ctx,
-        rect: previewRect,
-        img: erpPreviewRaster,
-        view: cutoutView,
-        backgroundRevision: getPaintingCompositeRevisionKey() + getLivePaintRevisionSuffix(),
-        backgroundOpacity: 1,
-      });
-    };
-    if (!img || !img.complete || !(img.naturalWidth || img.width)) {
+    const previewSurface = node.__panoCutoutPreviewSurface;
+    const previewCanvas = previewSurface?.source || null;
+    const previewReady = !!(previewCanvas
+      && Number(previewCanvas.width || 0) > 1
+      && Number(previewCanvas.height || 0) > 1);
+    const expectedRevision = getCutoutPreviewSurfaceRevision(shot, { quality: "balanced" });
+    if (previewSurface?.revision !== expectedRevision) {
+      scheduleNodeCutoutPreviewSurfaceUpdate();
+    }
+    if (!previewReady) {
       ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
       ctx.fillRect(px, py, pw, ph);
       ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
       ctx.lineWidth = 1;
       ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
-      renderPreviewPaint();
+      scheduleNodeCutoutPreviewSurfaceUpdate();
       ctx.restore();
       placeOutputPreviewToggle();
       return;
     }
 
-    if (Number(img.naturalWidth || img.width || 0) <= 1 || Number(img.naturalHeight || img.height || 0) <= 1) {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.06)";
-      ctx.fillRect(px, py, pw, ph);
-      ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(px + 0.5, py + 0.5, pw - 1, ph - 1);
-      renderPreviewPaint();
-      ctx.restore();
-      placeOutputPreviewToggle();
-      return;
-    }
-
-    const glDrawn = drawOrderedDisplayListInView(ctx, previewRect, cutoutView, img, "modal_cutout_output_preview");
-    const fallbackDrawn = !glDrawn && drawCutoutProjectionPreview(
-      ctx,
-      node,
-      img,
-      previewRect,
-      shot,
-      mix > 0.65 ? "high" : "balanced",
-    );
-    void fallbackDrawn;
-    renderPreviewPaint();
+    ctx.drawImage(previewCanvas, px, py, pw, ph);
     ctx.restore();
     placeOutputPreviewToggle();
+  }
+
+  function renderCutoutPreviewToContext(targetCtx, rect, shot, options = {}) {
+    const img = getConnectedErpImage();
+    const erpPreviewRaster = getComposedPaintErpCanvas(getOrderedPaintGroupIds());
+    return renderSharedCutoutPreview({
+      owner: node,
+      ctx: targetCtx,
+      rect,
+      shot,
+      bgImage: img,
+      cachePrefix: String(options.cachePrefix || "modal_cutout_output_preview"),
+      quality: String(options.quality || "balanced"),
+      paintCanvas: erpPreviewRaster,
+      paintRevision: getPaintingCompositeRevisionKey() + getLivePaintRevisionSuffix(),
+      drawDisplayList: drawOrderedDisplayListInView,
+    });
+  }
+
+  function syncNodeCutoutPreviewSurface() {
+    ensureNodeCutoutPreviewSurface();
+  }
+
+  function scheduleNodeCutoutPreviewSurfaceUpdate() {
+    if (type !== "cutout") return;
+    const now = performance.now();
+    const interactionActive = !!editor.interaction;
+    const minDelay = interactionActive ? 120 : 0;
+    const elapsed = now - Number(editor.cutoutPreviewSurfaceLastTs || 0);
+    if (editor.cutoutPreviewSurfaceRaf || editor.cutoutPreviewSurfaceTimer) return;
+    const queue = () => {
+      editor.cutoutPreviewSurfaceRaf = requestAnimationFrame(() => {
+        editor.cutoutPreviewSurfaceRaf = 0;
+        editor.cutoutPreviewSurfaceLastTs = performance.now();
+        syncNodeCutoutPreviewSurface();
+        runtime.dirty = true;
+        node.__panoDomPreview?.requestDraw?.();
+        node.setDirtyCanvas?.(true, false);
+        node.graph?.setDirtyCanvas?.(true, true);
+        app?.canvas?.setDirty?.(true, true);
+      });
+    };
+    if (elapsed >= minDelay) {
+      queue();
+      return;
+    }
+    editor.cutoutPreviewSurfaceTimer = window.setTimeout(() => {
+      editor.cutoutPreviewSurfaceTimer = 0;
+      if (!editor.cutoutPreviewSurfaceRaf) queue();
+    }, Math.max(0, Math.ceil(minDelay - elapsed)));
   }
 
   function projectErpStrokeToCurrentView(stroke) {
@@ -5318,18 +5432,64 @@ function showEditor(node, type, options = {}) {
     return kind === "move" || kind === "scale" || kind === "scale_x" || kind === "scale_y" || kind === "rotate";
   }
 
+  function syncNodeLivePreviewSources(options = {}) {
+    const updateCutoutPreview = options.updateCutoutPreview !== false;
+    node.__panoLiveStateOverride = state;
+    if (type === "cutout") {
+      node.__panoLivePaintSurface = null;
+      if (updateCutoutPreview) scheduleNodeCutoutPreviewSurfaceUpdate();
+      return;
+    }
+    let livePaint = null;
+    try {
+      const orderedGroupIds = getOrderedPaintGroupIds(false);
+      const interactionCompositeActive = isPaintCompositeInteraction();
+      const displayPaint = editor.paintEngine?.getErpTarget?.(orderedGroupIds)?.displayPaint?.canvas || null;
+      const composed = interactionCompositeActive ? null : getComposedPaintErpCanvas(orderedGroupIds);
+      const source = interactionCompositeActive ? (displayPaint || composed) : (composed || displayPaint);
+      if (source) {
+        livePaint = {
+          source,
+          revision: `${getPaintingCompositeRevisionKey()}:${getLivePaintRevisionSuffix()}`,
+        };
+      }
+    } catch {
+      livePaint = null;
+    }
+    node.__panoLivePaintSurface = livePaint;
+  }
+
   function requestDraw(options = {}) {
     const localOnly = !!options.localOnly;
-    syncLookAtFrameButtonState();
-    syncViewToggleState();
+    const cause = String(options.cause || "");
+    if (localOnly && isPaintCompositeInteraction()) {
+      editor.livePaintInteractionRevision += 1;
+    }
+    const shouldSyncUi = !localOnly
+      || cause === "selection"
+      || cause === "mode"
+      || cause === "cutout_frame";
+    if (shouldSyncUi) {
+      syncLookAtFrameButtonState();
+      syncViewToggleState();
+    }
+    const shouldUpdateCutoutPreview = type === "cutout" && (
+      !localOnly
+      || cause === "paint"
+      || cause === "cutout_frame"
+      || cause === "frame_transform"
+      || cause === "frame_view"
+      || isPaintCompositeInteraction()
+      || isCutoutTransformInteractionActive()
+    );
+    syncNodeLivePreviewSources({ updateCutoutPreview: shouldUpdateCutoutPreview });
+    if (shouldUpdateCutoutPreview || !localOnly || type !== "cutout") {
+      node.__panoDomPreview?.requestDraw?.();
+      node.setDirtyCanvas?.(true, false);
+    }
     if (!localOnly) {
-      node.__panoLiveStateOverride = JSON.stringify(state);
-      if (!isCutoutTransformInteractionActive()) {
-        node.__panoDomPreview?.requestDraw?.();
-        node.setDirtyCanvas?.(true, false);
-        node.graph?.setDirtyCanvas?.(true, true);
-        app?.canvas?.setDirty?.(true, true);
-      }
+      node.graph?.setDirtyCanvas?.(true, true);
+      app?.canvas?.setDirty?.(true, true);
     }
     runtime.dirty = true;
   }
@@ -5434,8 +5594,7 @@ function showEditor(node, type, options = {}) {
     syncPaintUi();
     updateSidePanel();
     commitState();
-    requestDraw();
-    syncPaintingLayerAsync();
+    requestDraw({ cause: "cutout_frame" });
   }
 
   function getHistoryCapabilities() {
@@ -6273,7 +6432,7 @@ function showEditor(node, type, options = {}) {
     pushHistory();
     commitAndRefreshNode();
     updateSidePanel();
-    requestDraw();
+    requestDraw({ cause: "cutout_frame" });
   }
 
   function clearCutoutFrame() {
@@ -8524,7 +8683,6 @@ function showEditor(node, type, options = {}) {
         updateSelectionMenu();
         node.setDirtyCanvas(true, true);
         requestDraw();
-        syncPaintingLayerAsync();
       } else {
         const targetDescriptor = getActivePaintTargetDescriptor(editor.interaction);
         if (targetDescriptor) editor.paintEngine.cancelActiveStroke(targetDescriptor);
@@ -8546,7 +8704,15 @@ function showEditor(node, type, options = {}) {
       requestDraw();
     } else if (editor.interaction && editor.interaction.kind !== "view" && editor.interaction.kind !== "pan_frame") {
       let compositeChanged = false;
+      if (editor.interaction.kind === "move_stroke_group"
+        || editor.interaction.kind === "scale_stroke_group"
+        || editor.interaction.kind === "rotate_stroke_group") {
+        compositeChanged = true;
+      }
       if (editor.interaction.kind === "move_raster_object") {
+        compositeChanged = true;
+      }
+      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.strokeSnapshots) && editor.interaction.strokeSnapshots.length) {
         compositeChanged = true;
       }
       if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.rasterSnapshots) && editor.interaction.rasterSnapshots.length) {
@@ -8557,14 +8723,6 @@ function showEditor(node, type, options = {}) {
       }
       pushHistory();
       commitState();
-      if (editor.interaction.kind === "move_stroke_group") syncPaintingLayerAsync();
-      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.strokeSnapshots) && editor.interaction.strokeSnapshots.length) {
-        syncPaintingLayerAsync();
-      }
-      if (editor.interaction.kind === "move_raster_object") syncPaintingLayerAsync();
-      if (editor.interaction.kind === "move_multi" && Array.isArray(editor.interaction.rasterSnapshots) && editor.interaction.rasterSnapshots.length) {
-        syncPaintingLayerAsync();
-      }
       node.setDirtyCanvas(true, true);
       syncSidePanelControls();
       editor.hqFrames = 1;
@@ -9097,13 +9255,29 @@ function showEditor(node, type, options = {}) {
     };
     node.onConnectionsChange = modalOnConnectionsChange;
   }
+  if (!readOnly) {
+    _paintLayerSyncRegistry.set(String(node.id ?? "0"), () => syncPaintingLayerAsync());
+  }
 
   const closeEditor = () => {
+    if (editor.cutoutPreviewSurfaceRaf) {
+      cancelAnimationFrame(editor.cutoutPreviewSurfaceRaf);
+      editor.cutoutPreviewSurfaceRaf = 0;
+    }
+    if (editor.cutoutPreviewSurfaceTimer) {
+      clearTimeout(editor.cutoutPreviewSurfaceTimer);
+      editor.cutoutPreviewSurfaceTimer = 0;
+    }
+    _paintLayerSyncRegistry.delete(String(node.id ?? "0"));
+    if (!readOnly) {
+      syncPaintingLayerAsync();
+    }
     if (document.fullscreenElement === overlay) {
       document.exitFullscreen?.().catch(() => { });
     }
     document.removeEventListener("fullscreenchange", onFullscreenChange);
     node.__panoLiveStateOverride = null;
+    node.__panoLivePaintSurface = null;
     node.__panoDomPreview?.requestDraw?.();
     node.graph?.setDirtyCanvas?.(true, true);
     app?.canvas?.setDirty?.(true, true);
@@ -9342,6 +9516,18 @@ function installStandalonePreviewInstance(node) {
 app.registerExtension({
   name: "ComfyUI.PanoramaSuite.Editor",
   async beforeQueuePrompt() {
+    const requested = [..._paintLayerSyncRegistry.values()]
+      .map((fn) => {
+        try {
+          return typeof fn === "function" ? fn() : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+    if (requested.length > 0) {
+      await Promise.allSettled(requested);
+    }
     // Wait for all in-flight paint layer uploads before sending the prompt.
     const pending = [..._paintLayerUploadRegistry.values()];
     if (pending.length > 0) {

@@ -35,7 +35,12 @@ function comfyImageEntryToUrl(entry) {
   if (!filename) return "";
   const params = new URLSearchParams();
   params.set("filename", filename);
-  params.set("type", String(entry.type || "output"));
+  const viewType = String(
+    entry.storage
+    || (String(entry.type || "").trim().toLowerCase() === "comfy_image" ? "output" : entry.type)
+    || "output"
+  );
+  params.set("type", viewType);
   if (entry.subfolder) params.set("subfolder", String(entry.subfolder));
   const q = `/view?${params.toString()}`;
   return typeof api?.apiURL === "function" ? api.apiURL(q) : q;
