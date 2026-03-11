@@ -1,5 +1,4 @@
 import { drawCutoutProjectionPreview } from "./pano_cutout_projection.js";
-import { renderCutoutViewToContext2D } from "./pano_gl_viewport.js";
 import { buildCutoutViewParamsFromShot } from "./pano_gl_scene.js";
 
 export function renderSharedCutoutPreview(options = {}) {
@@ -11,8 +10,6 @@ export function renderSharedCutoutPreview(options = {}) {
     bgImage = null,
     cachePrefix = "cutout_preview",
     quality = "balanced",
-    paintCanvas = null,
-    paintRevision = "",
     drawDisplayList = null,
   } = options;
 
@@ -32,18 +29,5 @@ export function renderSharedCutoutPreview(options = {}) {
       String(quality || "balanced"),
     );
 
-  if (paintCanvas) {
-    renderCutoutViewToContext2D({
-      owner,
-      cacheKey: `${String(cachePrefix || "cutout_preview")}_paint`,
-      ctx,
-      rect,
-      img: paintCanvas,
-      view: cutoutView,
-      backgroundRevision: String(paintRevision || ""),
-      backgroundOpacity: 1,
-    });
-  }
-
-  return !!glDrawn || !!fallbackDrawn || !!paintCanvas;
+  return !!glDrawn || !!fallbackDrawn;
 }

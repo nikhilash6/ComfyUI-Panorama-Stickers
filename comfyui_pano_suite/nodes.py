@@ -23,6 +23,7 @@ from .core.math import (
 from .core.painting import (
     alpha_composite_over_rgb,
     load_painting_layer_payload,
+    painting_state_has_renderables,
     render_painting_to_cutout,
     render_painting_to_erp,
 )
@@ -70,6 +71,19 @@ def _safe_int(value, default: int = 0) -> int:
         return int(value)
     except Exception:
         return int(default)
+
+
+def _hex_color_to_rgb01(value: str) -> np.ndarray:
+    text = str(value or "").strip()
+    if text.startswith("#"):
+        text = text[1:]
+    if len(text) != 6:
+        text = "00ff00"
+    try:
+        rgb = [int(text[idx:idx + 2], 16) / 255.0 for idx in (0, 2, 4)]
+    except ValueError:
+        rgb = [0.0, 1.0, 0.0]
+    return np.asarray(rgb, dtype=np.float32)
 
 
 def _single_image_to_numpy(image, warnings: list[str]) -> np.ndarray | None:
@@ -219,7 +233,49 @@ def _get_display_list_entries(state: dict) -> list[dict]:
             "z_index": _safe_int(item.get("z_index", 0), 0),
             "actionGroupId": str(item.get("actionGroupId") or item.get("id") or "").strip(),
         })
-    return sorted(stickers + groups, key=lambda entry: float(entry.get("z_index", 0)))
+    raster_objects = []
+    for item in painting.get("raster_objects", []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("layerKind") or "paint") != "paint":
+            continue
+        raster_objects.append({
+            "type": "rasterObject",
+            "z_index": _safe_int(item.get("z_index", 0), 0),
+            "item": item,
+        })
+    return sorted(stickers + groups + raster_objects, key=lambda entry: float(entry.get("z_index", 0)))
+
+
+def _render_group_layer_from_state(painting: dict | None, action_group_id: str, width: int, height: int):
+    gid = str(action_group_id or "").strip()
+    if not gid or not isinstance(painting, dict):
+        return None
+    strokes = [
+        stroke for stroke in ((painting.get("paint") or {}).get("strokes") or [])
+        if isinstance(stroke, dict) and str(stroke.get("actionGroupId") or "").strip() == gid
+    ]
+    if not strokes:
+        return None
+    layer, _mask = render_painting_to_erp({
+        "paint": {"strokes": strokes},
+        "mask": {"strokes": []},
+        "groups": [],
+        "raster_objects": [],
+    }, width, height)
+    return layer
+
+
+def _render_raster_layer_from_state(item: dict | None, width: int, height: int):
+    if not isinstance(item, dict):
+        return None
+    layer, _mask = render_painting_to_erp({
+        "paint": {"strokes": []},
+        "mask": {"strokes": []},
+        "groups": [],
+        "raster_objects": [item],
+    }, width, height)
+    return layer
 
 
 def _compose_display_list_to_erp(
@@ -233,9 +289,11 @@ def _compose_display_list_to_erp(
     canvas = np.clip(base_rgb.astype(np.float32), 0.0, 1.0)
     payload = painting_payload if isinstance(painting_payload, dict) else None
     group_layers = payload.get("groups", {}) if payload else {}
-    used_group = False
+    painting = state.get("painting") if isinstance(state.get("painting"), dict) else {}
+    used_paint_entries = False
     for entry in _get_display_list_entries(state):
-        if entry.get("type") == "sticker":
+        entry_type = str(entry.get("type") or "")
+        if entry_type == "sticker":
             canvas = compose_stickers_to_erp(
                 state=state,
                 output_w=int(canvas.shape[1]),
@@ -246,13 +304,34 @@ def _compose_display_list_to_erp(
                 stickers_override=[entry.get("item")],
             )
             continue
-        action_group_id = str(entry.get("actionGroupId") or "").strip()
-        layer = group_layers.get(action_group_id)
+        layer = None
+        if entry_type == "strokeGroup":
+            action_group_id = str(entry.get("actionGroupId") or "").strip()
+            layer = group_layers.get(action_group_id)
+            if layer is None:
+                layer = _render_group_layer_from_state(painting, action_group_id, int(canvas.shape[1]), int(canvas.shape[0]))
+        elif entry_type == "rasterObject":
+            layer = _render_raster_layer_from_state(entry.get("item"), int(canvas.shape[1]), int(canvas.shape[0]))
         if layer is None:
             continue
         canvas = alpha_composite_over_rgb(canvas, layer)
-        used_group = True
-    return canvas, used_group
+        used_paint_entries = True
+    return canvas, used_paint_entries
+
+
+def _should_use_uploaded_group_layers(state: dict, painting_payload: dict | None) -> bool:
+    if not isinstance(painting_payload, dict):
+        return False
+    groups = painting_payload.get("groups")
+    if not isinstance(groups, dict) or not groups:
+        return False
+    painting = state.get("painting") if isinstance(state.get("painting"), dict) else {}
+    raster_objects = painting.get("raster_objects")
+    if isinstance(raster_objects, list) and raster_objects:
+        return False
+    state_groups = painting.get("groups")
+    expected = len(state_groups) if isinstance(state_groups, list) else 0
+    return expected > 0 and len(groups) >= expected
 
 
 class PanoramaStickersNode(io.ComfyNode):
@@ -288,7 +367,10 @@ class PanoramaStickersNode(io.ComfyNode):
                     force_input=True,
                 ),
             ],
-            outputs=[io.Image.Output("cond_erp", display_name="cond_erp")],
+            outputs=[
+                io.Image.Output("cond_erp", display_name="cond_erp"),
+                io.Mask.Output("mask", display_name="mask"),
+            ],
             hidden=[io.Hidden.unique_id],
             is_output_node=True,
         )
@@ -320,6 +402,7 @@ class PanoramaStickersNode(io.ComfyNode):
     @classmethod
     def execute(cls, output_preset, bg_color, state_json, bg_erp=None, sticker_image=None, sticker_state=""):
         out_w = cls._parse_output_preset(output_preset, max_val=cls.MAX_OUTPUT_SIDE)
+        out_h = max(1, out_w // 2)
         bg_hex = cls._normalize_hex_color(bg_color)
         state = merge_state(state_in=None, internal_state=state_json, fallback_preset=out_w, fallback_bg=bg_hex)
         state["output_preset"] = out_w
@@ -329,6 +412,8 @@ class PanoramaStickersNode(io.ComfyNode):
         bg_np = None
         if bg_erp is not None:
             bg_np = bg_erp[0].detach().cpu().numpy().astype(np.float32)
+        if bg_np is None:
+            bg_np = np.broadcast_to(_hex_color_to_rgb01(bg_hex), (out_h, out_w, 3)).copy()
 
         render_stickers = []
         for sticker in state.get("stickers", []):
@@ -399,7 +484,7 @@ class PanoramaStickersNode(io.ComfyNode):
         painting_payload = load_painting_layer_payload(
             state.get("painting_layer"),
             erp_width=out_w,
-            erp_height=out_w // 2,
+            erp_height=out_h,
         )
         out, used_group_layers = _compose_display_list_to_erp(
             render_state,
@@ -411,10 +496,16 @@ class PanoramaStickersNode(io.ComfyNode):
         if not used_group_layers:
             paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
             if paint_rgba is None:
-                paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_w // 2)
+                paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
             out = alpha_composite_over_rgb(out, paint_rgba)
+        mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
+        if mask_bw is None:
+            _paint_rgba, mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
+        if mask_bw is None:
+            mask_bw = np.zeros((out_h, out_w), dtype=np.float32)
 
         out_t = torch.from_numpy(out)[None, ...]
+        mask_t = torch.from_numpy(np.clip(mask_bw.astype(np.float32), 0.0, 1.0))[None, ...]
         ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
         if sticker_image is not None:
             ui_ret.update(_save_input_preview(_first_image_tensor(sticker_image), key="pano_sticker_input_images"))
@@ -422,7 +513,7 @@ class PanoramaStickersNode(io.ComfyNode):
             ui_ret["pano_sticker_input_pose"] = [external_pose_ui]
         if warnings:
             ui_ret["pano_sticker_warnings"] = [str(w) for w in warnings]
-        return io.NodeOutput(out_t, ui=ui_ret)
+        return io.NodeOutput(out_t, mask_t, ui=ui_ret)
 
 
 class PanoramaCutoutNode(io.ComfyNode):
@@ -540,7 +631,8 @@ class PanoramaCutoutNode(io.ComfyNode):
             out = cutout_from_erp(src, yaw, pitch, hfov, vfov, roll, ow, oh)
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
-            if not used_group_layers:
+            painting_state = state.get("painting")
+            if painting_state_has_renderables(painting_state):
                 paint_rgba, mask_bw = render_painting_to_cutout(
                     state.get("painting"),
                     shot,
@@ -550,17 +642,11 @@ class PanoramaCutoutNode(io.ComfyNode):
                     erp_height=src.shape[0],
                     painting_layer=state.get("painting_layer"),
                 )
-                out = alpha_composite_over_rgb(out, paint_rgba)
             else:
-                _, mask_bw = render_painting_to_cutout(
-                    state.get("painting"),
-                    shot,
-                    ow,
-                    oh,
-                    erp_width=src.shape[1],
-                    erp_height=src.shape[0],
-                    painting_layer=state.get("painting_layer"),
-                )
+                paint_rgba = np.zeros((oh, ow, 4), dtype=np.float32)
+                mask_bw = np.zeros((oh, ow), dtype=np.float32)
+            if not used_group_layers:
+                out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
             mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]
             return io.NodeOutput(out_t, mask_t, sticker_state_json, ui=ui_ret)

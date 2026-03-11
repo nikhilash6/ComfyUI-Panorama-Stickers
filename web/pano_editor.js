@@ -1391,7 +1391,7 @@ function showEditor(node, type, options = {}) {
         </div>
       </div>
       <div class="pano-floating-right">
-        <span class="pano-fov-value" data-fov-value aria-label="Field of view">100.0</span>
+        <span class="pano-fov-value" data-fov-value aria-label="Field of view">100°</span>
         <button class="pano-btn pano-btn-icon" data-action="reset-view" aria-label="Reset View" data-tip="Reset view">${ICON.reset}</button>
         <button class="pano-btn pano-btn-icon" data-action="toggle-grid" aria-label="Hide Grid" data-tip="Hide grid" aria-pressed="true">${ICON.eye}</button>
         ${fullscreenBtnHtml}
@@ -1562,6 +1562,7 @@ function showEditor(node, type, options = {}) {
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
     paintCompositeRevision: 0,
+    objectVisualRevision: 0,
     livePaintInteractionRevision: 0,
     cutoutPreviewSurfaceRaf: 0,
     cutoutPreviewSurfaceTimer: 0,
@@ -1897,6 +1898,27 @@ function showEditor(node, type, options = {}) {
       return hasStrokeSnapshots || hasRasterSnapshots;
     }
     return false;
+  }
+
+  function isCutoutPreviewInteraction(interaction = editor.interaction) {
+    if (type !== "cutout") return false;
+    const kind = String(interaction?.kind || "");
+    if (isPaintCompositeInteraction(interaction)) return true;
+    if (kind === "move" || kind === "scale" || kind === "scale_x" || kind === "scale_y" || kind === "rotate") {
+      return true;
+    }
+    if (kind === "move_multi") {
+      const hasStickerSnapshots = Array.isArray(interaction?.stickerSnapshots) && interaction.stickerSnapshots.length > 0;
+      return hasStickerSnapshots;
+    }
+    return false;
+  }
+
+  function getCutoutPreviewUpdateMinDelay(interaction = editor.interaction) {
+    if (!isCutoutPreviewInteraction(interaction)) return 0;
+    const kind = String(interaction?.kind || "");
+    if (kind === "paint_stroke" || kind === "paint_lasso_fill") return 120;
+    return 33;
   }
 
   function getLivePaintRevisionSuffix() {
@@ -3715,6 +3737,30 @@ function showEditor(node, type, options = {}) {
     return `${base}:view:${Math.round(Number(editor.viewYaw || 0) * 100)}:${Math.round(Number(editor.viewPitch || 0) * 100)}:${Math.round(Number(editor.viewFov || 0) * 100)}:${Math.round(Number(canvas?.width || 0))}:${Math.round(Number(canvas?.height || 0))}`;
   }
 
+  function getSceneItemGeomCacheKey(item) {
+    const itemId = String(item?.id || "");
+    const kind = isShotItem(item) ? "frame" : (isStickerItem(item) ? "sticker" : "item");
+    const base = [
+      kind,
+      itemId,
+      editor.mode,
+      Number(item?.yaw_deg || 0).toFixed(4),
+      Number(item?.pitch_deg || 0).toFixed(4),
+      Number(item?.hFOV_deg || 0).toFixed(4),
+      Number(item?.vFOV_deg || 0).toFixed(4),
+      Number(item?.rot_deg || 0).toFixed(4),
+      Number(item?.roll_deg || 0).toFixed(4),
+      Number(item?.out_w || 0),
+      Number(item?.out_h || 0),
+    ].join(":");
+    if (editor.mode === "frame") {
+      const shot = getActiveCutoutShot();
+      const rect = shot ? getFrameViewRect(shot) : null;
+      return `${base}:frame:${String(shot?.id || "")}:${Math.round(Number(rect?.x || 0))}:${Math.round(Number(rect?.y || 0))}:${Math.round(Number(rect?.w || 0))}:${Math.round(Number(rect?.h || 0))}`;
+    }
+    return `${base}:view:${Math.round(Number(editor.viewYaw || 0) * 100)}:${Math.round(Number(editor.viewPitch || 0) * 100)}:${Math.round(Number(editor.viewFov || 0) * 100)}:${Math.round(Number(canvas?.width || 0))}:${Math.round(Number(canvas?.height || 0))}`;
+  }
+
   function getMeshDivisions() {
     const q = String(state.ui_settings?.preview_quality || "balanced");
     if (q === "draft") {
@@ -3870,187 +3916,164 @@ function showEditor(node, type, options = {}) {
     }
   }
 
-  function objectGeom(item) {
-    if (isStrokeGroupItem(item)) {
-      const actionGroupId = String(item.actionGroupId || item.id || "").trim();
-      const cacheKey = getStrokeGeomCacheKey(actionGroupId, item.layerKind);
-      const cached = editor._strokeGeomCache.get(cacheKey);
-      if (cached) return cached;
-      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
-      const strokes = getStrokeGroupStrokes(actionGroupId, item.layerKind);
-      const strokePaths = [];
-      const projected = [];
-      const sourcePoints = [];
-      const projectPoints = (points) => {
-        if (editor.mode === "frame") {
-          const shot = getActiveCutoutShot();
-          if (!shot) return [];
-          const rect = getFrameViewRect(shot);
-          return projectErpPointsToFrameRect(points, shot, rect);
-        }
-        return projectErpPointsToCurrentView(points);
-      };
-      for (const stroke of strokes) {
-        const geometry = stroke?.geometry || null;
-        const srcPoints = geometry?.geometryKind === "lasso_fill"
-          ? geometry?.points
-          : (geometry?.processedPoints || geometry?.rawPoints || geometry?.points || []);
-        if (Array.isArray(srcPoints)) sourcePoints.push(...srcPoints);
-        const pts = projectPoints(srcPoints).filter((pt) => Number.isFinite(pt?.x) && Number.isFinite(pt?.y));
-        if (!pts.length) continue;
-        projected.push(...pts);
-        const presetId = getBrushPresetIdForTool(String(stroke?.toolKind || "pen"));
-        const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
-        const width = Math.max(10, Number(stroke?.size || 10) * Math.max(0.1, Number(preset?.sizeScale ?? 1)) + 10);
-        strokePaths.push({
-          points: pts,
-          closed: String(geometry?.geometryKind || "") === "lasso_fill",
-          lineWidth: width,
-          layerKind: String(stroke?.layerKind || item.layerKind || "paint"),
-        });
-      }
-      const finite = projected.filter((pt) => Number.isFinite(pt?.x) && Number.isFinite(pt?.y));
-      if (!finite.length) {
-        const hidden = { visible: false, kind: "strokeGroup" };
-        editor._strokeGeomCache.set(cacheKey, hidden);
-        return hidden;
-      }
-      let minX = Infinity;
-      let minY = Infinity;
-      let maxX = -Infinity;
-      let maxY = -Infinity;
-      for (const path of strokePaths) {
-        const pad = 2;
-        for (const pt of (Array.isArray(path?.points) ? path.points : [])) {
-          const x = Number(pt?.x || 0);
-          const y = Number(pt?.y || 0);
-          minX = Math.min(minX, x - pad);
-          minY = Math.min(minY, y - pad);
-          maxX = Math.max(maxX, x + pad);
-          maxY = Math.max(maxY, y + pad);
-        }
-      }
-      if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
-        const hidden = { visible: false, kind: "strokeGroup" };
-        editor._strokeGeomCache.set(cacheKey, hidden);
-        return hidden;
-      }
-      const corners = [
-        { x: minX, y: minY },
-        { x: maxX, y: minY },
-        { x: maxX, y: maxY },
-        { x: minX, y: maxY },
-      ];
-      const center = { x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5 };
-      const topMid = { x: center.x, y: minY };
-      const rightMid = { x: maxX, y: center.y };
-      const bottomMid = { x: center.x, y: maxY };
-      const leftMid = { x: minX, y: center.y };
-      const geom = {
-        kind: "strokeGroup",
-        center,
-        corners,
-        edgeMidpoints: [
-          { edge: "top",    x: topMid.x,    y: topMid.y,    a: corners[0], b: corners[1] },
-          { edge: "right",  x: rightMid.x,  y: rightMid.y,  a: corners[1], b: corners[2] },
-          { edge: "bottom", x: bottomMid.x, y: bottomMid.y, a: corners[2], b: corners[3] },
-          { edge: "left",   x: leftMid.x,   y: leftMid.y,   a: corners[3], b: corners[0] },
-        ],
-        rotateStemBase: topMid,
-        rotateHandle: {
-          x: topMid.x,
-          y: topMid.y - 30,
-        },
-        strokePaths,
-        visible: true,
-      };
-      editor._strokeGeomCache.set(cacheKey, geom);
-      return geom;
+  function projectEditorPoints(points, frameShot = null, frameRect = null) {
+    if (editor.mode === "frame") {
+      const shot = frameShot || getActiveCutoutShot();
+      if (!shot) return [];
+      const rect = frameRect || getFrameViewRect(shot);
+      return projectErpPointsToFrameRect(points, shot, rect);
     }
-    if (isRasterObjectItem(item)) {
-      const cacheKey = getRasterObjectGeomCacheKey(item);
-      const cached = editor._strokeGeomCache.get(cacheKey);
-      if (cached) return cached;
-      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
-      const erpPoints = getRasterObjectTransformedErpPoints(item);
-      const projected = editor.mode === "frame"
-        ? (() => {
-          const shot = getActiveCutoutShot();
-          const rect = getFrameViewRect(shot);
-          return projectErpPointsToFrameRect(erpPoints, shot, rect);
-        })()
-        : projectErpPointsToCurrentView(erpPoints);
-      if (!Array.isArray(projected) || projected.length < 4) {
-        const hidden = { visible: false, kind: "rasterObject" };
-        editor._strokeGeomCache.set(cacheKey, hidden);
-        return hidden;
-      }
-      const corners = projected.slice(0, 4).map((pt) => ({ x: Number(pt?.x || 0), y: Number(pt?.y || 0) }));
-      const center = {
-        x: corners.reduce((sum, pt) => sum + Number(pt.x || 0), 0) / corners.length,
-        y: corners.reduce((sum, pt) => sum + Number(pt.y || 0), 0) / corners.length,
-      };
-      const geom = {
-        kind: "rasterObject",
-        center,
-        corners,
-        visible: true,
-      };
-      editor._strokeGeomCache.set(cacheKey, geom);
-      return geom;
+    return projectErpPointsToCurrentView(points);
+  }
+
+  function buildStrokeGroupGeom(item, cacheKey) {
+    const actionGroupId = String(item.actionGroupId || item.id || "").trim();
+    const strokes = getStrokeGroupStrokes(actionGroupId, item.layerKind);
+    const strokePaths = [];
+    const projected = [];
+    const frameShot = editor.mode === "frame" ? getActiveCutoutShot() : null;
+    const frameRect = frameShot ? getFrameViewRect(frameShot) : null;
+    for (const stroke of strokes) {
+      const geometry = stroke?.geometry || null;
+      const srcPoints = geometry?.geometryKind === "lasso_fill"
+        ? geometry?.points
+        : (geometry?.processedPoints || geometry?.rawPoints || geometry?.points || []);
+      const pts = projectEditorPoints(srcPoints, frameShot, frameRect).filter((pt) => Number.isFinite(pt?.x) && Number.isFinite(pt?.y));
+      if (!pts.length) continue;
+      projected.push(...pts);
+      const presetId = getBrushPresetIdForTool(String(stroke?.toolKind || "pen"));
+      const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
+      strokePaths.push({
+        points: pts,
+        closed: String(geometry?.geometryKind || "") === "lasso_fill",
+        lineWidth: Math.max(10, Number(stroke?.size || 10) * Math.max(0.1, Number(preset?.sizeScale ?? 1)) + 10),
+        layerKind: String(stroke?.layerKind || item.layerKind || "paint"),
+      });
     }
+    if (!projected.length) {
+      const hidden = { visible: false, kind: "strokeGroup" };
+      editor._strokeGeomCache.set(cacheKey, hidden);
+      return hidden;
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const path of strokePaths) {
+      const pad = 2;
+      for (const pt of (Array.isArray(path?.points) ? path.points : [])) {
+        const x = Number(pt?.x || 0);
+        const y = Number(pt?.y || 0);
+        minX = Math.min(minX, x - pad);
+        minY = Math.min(minY, y - pad);
+        maxX = Math.max(maxX, x + pad);
+        maxY = Math.max(maxY, y + pad);
+      }
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      const hidden = { visible: false, kind: "strokeGroup" };
+      editor._strokeGeomCache.set(cacheKey, hidden);
+      return hidden;
+    }
+    const corners = [
+      { x: minX, y: minY },
+      { x: maxX, y: minY },
+      { x: maxX, y: maxY },
+      { x: minX, y: maxY },
+    ];
+    const center = { x: (minX + maxX) * 0.5, y: (minY + maxY) * 0.5 };
+    const topMid = { x: center.x, y: minY };
+    const rightMid = { x: maxX, y: center.y };
+    const bottomMid = { x: center.x, y: maxY };
+    const leftMid = { x: minX, y: center.y };
+    const geom = {
+      kind: "strokeGroup",
+      center,
+      corners,
+      edgeMidpoints: [
+        { edge: "top", x: topMid.x, y: topMid.y, a: corners[0], b: corners[1] },
+        { edge: "right", x: rightMid.x, y: rightMid.y, a: corners[1], b: corners[2] },
+        { edge: "bottom", x: bottomMid.x, y: bottomMid.y, a: corners[2], b: corners[3] },
+        { edge: "left", x: leftMid.x, y: leftMid.y, a: corners[3], b: corners[0] },
+      ],
+      rotateStemBase: topMid,
+      rotateHandle: { x: topMid.x, y: topMid.y - 30 },
+      strokePaths,
+      visible: true,
+    };
+    editor._strokeGeomCache.set(cacheKey, geom);
+    return geom;
+  }
+
+  function buildRasterObjectGeom(item, cacheKey) {
+    const erpPoints = getRasterObjectTransformedErpPoints(item);
+    const projected = projectEditorPoints(erpPoints);
+    if (!Array.isArray(projected) || projected.length < 4) {
+      const hidden = { visible: false, kind: "rasterObject" };
+      editor._strokeGeomCache.set(cacheKey, hidden);
+      return hidden;
+    }
+    const corners = projected.slice(0, 4).map((pt) => ({ x: Number(pt?.x || 0), y: Number(pt?.y || 0) }));
+    const center = {
+      x: corners.reduce((sum, pt) => sum + Number(pt.x || 0), 0) / corners.length,
+      y: corners.reduce((sum, pt) => sum + Number(pt.y || 0), 0) / corners.length,
+    };
+    const geom = {
+      kind: "rasterObject",
+      center,
+      corners,
+      visible: true,
+    };
+    editor._strokeGeomCache.set(cacheKey, geom);
+    return geom;
+  }
+
+  function projectSceneItemDir(dir, refX = null, frameShot = null, frameRect = null) {
+    if (editor.mode === "frame") {
+      const shot = frameShot || getActiveCutoutShot();
+      const rect = frameRect || getFrameViewRect(shot);
+      const local = shot ? worldDirToFrameLocalPoint(shot, dir) : null;
+      return local ? {
+        x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
+        y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
+        z: 1,
+      } : null;
+    }
+    if (editor.mode === "unwrap") return projectDirUnwrap(dir, refX);
+    const { right, up, fwd } = cameraBasis();
+    const cx = dot(dir, right);
+    const cy = dot(dir, up);
+    const cz = dot(dir, fwd);
+    const w = canvas.width;
+    const h = canvas.height;
+    const hfov = editor.viewFov * DEG2RAD;
+    const vfov = 2 * Math.atan(Math.tan(hfov / 2) * (h / Math.max(w, 1)));
+    const sx = (w / 2) / Math.tan(hfov / 2);
+    const sy = (h / 2) / Math.tan(vfov / 2);
+    const z = Math.max(cz, 1e-4);
+    const guard = Math.max(w, h) * 2.0;
+    return {
+      x: clamp(w / 2 + (cx / z) * sx, -guard, w + guard),
+      y: clamp(h / 2 - (cy / z) * sy, -guard, h + guard),
+      z,
+    };
+  }
+
+  function buildSceneItemGeom(item) {
     const centerDir = yawPitchToDir(Number(item.yaw_deg || 0), Number(item.pitch_deg || 0));
+    const frameShot = editor.mode === "frame" ? getActiveCutoutShot() : null;
+    const frameRect = frameShot ? getFrameViewRect(frameShot) : null;
     const center = (() => {
-      if (editor.mode === "frame") {
-        const shot = getActiveCutoutShot();
-        const rect = getFrameViewRect(shot);
-        const local = shot ? worldDirToFrameLocalPoint(shot, centerDir) : null;
-        return local ? {
-          x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
-          y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
-          z: 1,
-        } : null;
-      }
-      return editor.mode === "unwrap" ? projectDirUnwrap(centerDir) : projectDir(centerDir);
+      return projectSceneItemDir(centerDir, null, frameShot, frameRect);
     })();
     if (!center) return { visible: false };
-    const projectDirForShape = (d, refX = null) => {
-      if (editor.mode === "frame") {
-        const shot = getActiveCutoutShot();
-        const rect = getFrameViewRect(shot);
-        const local = shot ? worldDirToFrameLocalPoint(shot, d) : null;
-        return local ? {
-          x: Number(rect.x || 0) + (Number(local.x || 0) * Number(rect.w || 0)),
-          y: Number(rect.y || 0) + (Number(local.y || 0) * Number(rect.h || 0)),
-          z: 1,
-        } : null;
-      }
-      if (editor.mode === "unwrap") return projectDirUnwrap(d, refX);
-      const { right, up, fwd } = cameraBasis();
-      const cx = dot(d, right);
-      const cy = dot(d, up);
-      const cz = dot(d, fwd);
-      const w = canvas.width;
-      const h = canvas.height;
-      const hfov = editor.viewFov * DEG2RAD;
-      const vfov = 2 * Math.atan(Math.tan(hfov / 2) * (h / Math.max(w, 1)));
-      const sx = (w / 2) / Math.tan(hfov / 2);
-      const sy = (h / 2) / Math.tan(vfov / 2);
-      const z = Math.max(cz, 1e-4);
-      const guard = Math.max(w, h) * 2.0;
-      return {
-        x: clamp(w / 2 + (cx / z) * sx, -guard, w + guard),
-        y: clamp(h / 2 - (cy / z) * sy, -guard, h + guard),
-        z,
-      };
-    };
     const frame = getStickerFrame(item);
     const cornersDir = stickerCornersDir(item);
-    const corners = cornersDir.map((d) => projectDirForShape(d, center.x));
+    const corners = cornersDir.map((d) => projectSceneItemDir(d, center.x, frameShot, frameRect));
     const rotateStemBaseDir = stickerDirFromFrame(frame, 0, frame.tanY);
     const rotateHandleDir = stickerDirFromFrame(frame, 0, frame.tanY + Math.max(frame.tanY * 0.43, 0.053));
-    const rotateStemBase = projectDirForShape(rotateStemBaseDir, center.x);
-    const rotateHandleHint = projectDirForShape(rotateHandleDir, rotateStemBase?.x ?? center.x);
+    const rotateStemBase = projectSceneItemDir(rotateStemBaseDir, center.x, frameShot, frameRect);
+    const rotateHandleHint = projectSceneItemDir(rotateHandleDir, rotateStemBase?.x ?? center.x, frameShot, frameRect);
     const handleDx = (rotateHandleHint?.x ?? rotateStemBase.x) - rotateStemBase.x;
     const handleDy = (rotateHandleHint?.y ?? rotateStemBase.y) - rotateStemBase.y;
     const handleLen = Math.hypot(handleDx, handleDy) || 1;
@@ -4058,10 +4081,10 @@ function showEditor(node, type, options = {}) {
       x: rotateStemBase.x + (handleDx / handleLen) * 30,
       y: rotateStemBase.y + (handleDy / handleLen) * 30,
     };
-    const topEdgeCenter = projectDirForShape(stickerDirFromFrame(frame, 0, frame.tanY), center.x);
-    const rightEdgeCenter = projectDirForShape(stickerDirFromFrame(frame, frame.tanX, 0), center.x);
-    const bottomEdgeCenter = projectDirForShape(stickerDirFromFrame(frame, 0, -frame.tanY), center.x);
-    const leftEdgeCenter = projectDirForShape(stickerDirFromFrame(frame, -frame.tanX, 0), center.x);
+    const topEdgeCenter = projectSceneItemDir(stickerDirFromFrame(frame, 0, frame.tanY), center.x, frameShot, frameRect);
+    const rightEdgeCenter = projectSceneItemDir(stickerDirFromFrame(frame, frame.tanX, 0), center.x, frameShot, frameRect);
+    const bottomEdgeCenter = projectSceneItemDir(stickerDirFromFrame(frame, 0, -frame.tanY), center.x, frameShot, frameRect);
+    const leftEdgeCenter = projectSceneItemDir(stickerDirFromFrame(frame, -frame.tanX, 0), center.x, frameShot, frameRect);
     const edgeMidpoints = [
       {
         edge: "top",
@@ -4101,6 +4124,31 @@ function showEditor(node, type, options = {}) {
       topEdge: { a: 0, b: 1 },
       visible: true,
     };
+  }
+
+  function objectGeom(item) {
+    if (isStrokeGroupItem(item)) {
+      const actionGroupId = String(item.actionGroupId || item.id || "").trim();
+      const cacheKey = getStrokeGeomCacheKey(actionGroupId, item.layerKind);
+      const cached = editor._strokeGeomCache.get(cacheKey);
+      if (cached) return cached;
+      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
+      return buildStrokeGroupGeom(item, cacheKey);
+    }
+    if (isRasterObjectItem(item)) {
+      const cacheKey = getRasterObjectGeomCacheKey(item);
+      const cached = editor._strokeGeomCache.get(cacheKey);
+      if (cached) return cached;
+      if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
+      return buildRasterObjectGeom(item, cacheKey);
+    }
+    const cacheKey = getSceneItemGeomCacheKey(item);
+    const cached = editor._strokeGeomCache.get(cacheKey);
+    if (cached) return cached;
+    if (editor._strokeGeomCache.size > 256) editor._strokeGeomCache.clear();
+    const geom = buildSceneItemGeom(item);
+    editor._strokeGeomCache.set(cacheKey, geom);
+    return geom;
   }
 
   function drawStickerMeshMapped(item, img, dstRect, srcRect, alpha = 1) {
@@ -4274,6 +4322,80 @@ function showEditor(node, type, options = {}) {
     return [...stickers, ...shots];
   }
 
+  function traceQuad(ctx2d, corners = []) {
+    if (!ctx2d || !Array.isArray(corners) || corners.length < 4) return;
+    ctx2d.beginPath();
+    ctx2d.moveTo(corners[0].x, corners[0].y);
+    for (let i = 1; i < 4; i += 1) ctx2d.lineTo(corners[i].x, corners[i].y);
+    ctx2d.closePath();
+  }
+
+  function drawObjectBody(item, geom, selected, locked) {
+    if (isStickerItem(item)) {
+      const prevAlpha = ctx.globalAlpha;
+      ctx.globalAlpha = getStickerDisplayAlpha(item);
+      if (editor.mode === "frame") {
+        ctx.strokeStyle = selected
+          ? "rgba(250, 250, 250, 0.9)"
+          : (locked ? "rgba(255, 89, 89, 0.72)" : "#71717a");
+        ctx.lineWidth = selected ? 2 : 1;
+        traceQuad(ctx, geom.corners);
+        ctx.stroke();
+      } else {
+        drawStickerBoundary(item, selected);
+      }
+      ctx.globalAlpha = prevAlpha;
+      return;
+    }
+
+    ctx.fillStyle = selected
+      ? "rgba(0, 112, 243, 0.24)"
+      : (locked ? "rgba(255, 89, 89, 0.12)" : "rgba(255, 255, 255, 0.12)");
+    traceQuad(ctx, geom.corners);
+    ctx.fill();
+    ctx.strokeStyle = selected
+      ? "rgba(255, 255, 255, 1)"
+      : (locked ? "rgba(255, 116, 116, 0.88)" : "rgba(255, 255, 255, 0.82)");
+    ctx.lineWidth = selected ? 2.8 : 1.9;
+    traceQuad(ctx, geom.corners);
+    ctx.stroke();
+  }
+
+  function drawSelectedObjectAffordances(item, geom, accent) {
+    ctx.fillStyle = accent;
+    geom.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
+    if (isShotItem(item)) {
+      ctx.strokeStyle = accent;
+      ctx.lineCap = "round";
+      ctx.lineWidth = 4;
+      geom.edgeMidpoints.forEach((midpoint) => {
+        const dx = (midpoint.b?.x ?? midpoint.x) - (midpoint.a?.x ?? midpoint.x);
+        const dy = (midpoint.b?.y ?? midpoint.y) - (midpoint.a?.y ?? midpoint.y);
+        const len = Math.hypot(dx, dy) || 1;
+        const tx = dx / len;
+        const ty = dy / len;
+        const half = 10;
+        ctx.beginPath();
+        ctx.moveTo(midpoint.x - tx * half, midpoint.y - ty * half);
+        ctx.lineTo(midpoint.x + tx * half, midpoint.y + ty * half);
+        ctx.stroke();
+      });
+      ctx.lineCap = "butt";
+    }
+    if (!isStrokeGroupItem(item)) {
+      ctx.strokeStyle = "rgba(250, 250, 250, 0.9)";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(geom.rotateStemBase.x, geom.rotateStemBase.y);
+      ctx.lineTo(geom.rotateHandle.x, geom.rotateHandle.y);
+      ctx.stroke();
+      ctx.fillStyle = accent;
+      ctx.beginPath();
+      ctx.arc(geom.rotateHandle.x, geom.rotateHandle.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   function drawObjects() {
     const [usedNu, usedNv] = getMeshDivisions();
     const selectedItems = getSelectedItems();
@@ -4298,77 +4420,12 @@ function showEditor(node, type, options = {}) {
       }
 
       const itemIsSticker = isStickerItem(item);
-      const itemIsFrame = isShotItem(item);
       const itemLocked = isItemLocked(item);
-      if (itemIsSticker) {
-        const prevAlpha = ctx.globalAlpha;
-        ctx.globalAlpha = getStickerDisplayAlpha(item);
-        if (editor.mode === "frame") {
-          ctx.strokeStyle = selected
-            ? "rgba(250, 250, 250, 0.9)"
-            : (itemLocked ? "rgba(255, 89, 89, 0.72)" : "#71717a");
-          ctx.lineWidth = selected ? 2 : 1;
-          ctx.beginPath();
-          ctx.moveTo(g.corners[0].x, g.corners[0].y);
-          for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
-          ctx.closePath();
-          ctx.stroke();
-        } else {
-          drawStickerBoundary(item, selected);
-        }
-        ctx.globalAlpha = prevAlpha;
-      } else {
-        ctx.fillStyle = selected
-          ? "rgba(0, 112, 243, 0.24)"
-          : (itemLocked ? "rgba(255, 89, 89, 0.12)" : "rgba(255, 255, 255, 0.12)");
-        ctx.beginPath();
-        ctx.moveTo(g.corners[0].x, g.corners[0].y);
-        for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = selected
-          ? "rgba(255, 255, 255, 1)"
-          : (itemLocked ? "rgba(255, 116, 116, 0.88)" : "rgba(255, 255, 255, 0.82)");
-        ctx.lineWidth = selected ? 2.8 : 1.9;
-        ctx.beginPath();
-        ctx.moveTo(g.corners[0].x, g.corners[0].y);
-        for (let i = 1; i < 4; i += 1) ctx.lineTo(g.corners[i].x, g.corners[i].y);
-        ctx.closePath();
-        ctx.stroke();
-      }
+      drawObjectBody(item, g, selected, itemLocked);
 
       if (selected && g.visible) {
         const accent = itemLocked ? "#ff4d4f" : ((itemIsSticker && isExternalSticker(item)) ? "#f59e0b" : "#0070f3");
-        ctx.fillStyle = accent;
-        g.corners.forEach((p) => { ctx.beginPath(); ctx.arc(p.x, p.y, 6.5, 0, Math.PI * 2); ctx.fill(); });
-        if (itemIsFrame) {
-          ctx.strokeStyle = accent;
-          ctx.lineCap = "round";
-          ctx.lineWidth = 4;
-          g.edgeMidpoints.forEach((m) => {
-            const dx = (m.b?.x ?? m.x) - (m.a?.x ?? m.x);
-            const dy = (m.b?.y ?? m.y) - (m.a?.y ?? m.y);
-            const ll2 = Math.hypot(dx, dy) || 1;
-            const tx = dx / ll2;
-            const ty = dy / ll2;
-            const half = 10;
-            ctx.beginPath();
-            ctx.moveTo(m.x - tx * half, m.y - ty * half);
-            ctx.lineTo(m.x + tx * half, m.y + ty * half);
-            ctx.stroke();
-          });
-          ctx.lineCap = "butt";
-        }
-        if (!isStrokeGroupItem(item)) {
-          ctx.strokeStyle = "rgba(250, 250, 250, 0.9)";
-          ctx.lineWidth = 1.8;
-          ctx.beginPath();
-          ctx.moveTo(g.rotateStemBase.x, g.rotateStemBase.y);
-          ctx.lineTo(g.rotateHandle.x, g.rotateHandle.y);
-          ctx.stroke();
-          ctx.fillStyle = accent;
-          ctx.beginPath(); ctx.arc(g.rotateHandle.x, g.rotateHandle.y, 10, 0, Math.PI * 2); ctx.fill();
-        }
+        drawSelectedObjectAffordances(item, g, accent);
       }
     }
 
@@ -4443,6 +4500,38 @@ function showEditor(node, type, options = {}) {
       : { width: Math.max(1, Math.round(longSide * aspect)), height: longSide };
   }
 
+  function getCutoutPreviewObjectRevision() {
+    const stickers = Array.isArray(state.stickers) ? state.stickers : [];
+    const rasters = Array.isArray(state.painting?.raster_objects) ? state.painting.raster_objects : [];
+    return JSON.stringify({
+      stickers: stickers.map((item) => ({
+        id: String(item?.id || ""),
+        asset_id: String(item?.asset_id || item?.assetId || ""),
+        source_kind: String(item?.source_kind || ""),
+        source_link_id: Number(item?.source_link_id ?? -1),
+        source_state_hash: String(item?.source_state_hash || ""),
+        visible: item?.visible !== false,
+        z_index: Number(item?.z_index || 0),
+        yaw_deg: Number(item?.yaw_deg || 0),
+        pitch_deg: Number(item?.pitch_deg || 0),
+        hFOV_deg: Number(item?.hFOV_deg || 0),
+        vFOV_deg: Number(item?.vFOV_deg || 0),
+        rot_deg: Number(item?.rot_deg || 0),
+        roll_deg: Number(item?.roll_deg || 0),
+        crop: item?.crop || null,
+      })),
+      rasters: rasters
+        .filter((item) => String(item?.layerKind || "paint") === "paint")
+        .map((item) => ({
+          id: String(item?.id || ""),
+          visible: item?.visible !== false,
+          z_index: Number(item?.z_index || 0),
+          transform: item?.transform || null,
+          bbox: item?.bbox || null,
+        })),
+    });
+  }
+
   function getCutoutPreviewSurfaceRevision(shot, options = {}) {
     if (!shot) return "";
     const bgImage = getConnectedErpImage();
@@ -4458,6 +4547,7 @@ function showEditor(node, type, options = {}) {
       String(shot?.id || ""),
       JSON.stringify(shot || null),
       getPaintingCompositeRevisionKey(),
+      getCutoutPreviewObjectRevision(),
       getLivePaintRevisionSuffix(),
       bgKey,
       editor.showPanorama ? "panorama:1" : "panorama:0",
@@ -4580,12 +4670,18 @@ function showEditor(node, type, options = {}) {
     roundedRect(px, py, pw, ph, radius);
     ctx.clip();
 
-    const previewSurface = node.__panoCutoutPreviewSurface;
+    const expectedRevision = getCutoutPreviewSurfaceRevision(shot, { quality: "balanced" });
+    let previewSurface = node.__panoCutoutPreviewSurface;
+    if ((!previewSurface || previewSurface.revision !== expectedRevision)
+      && !editor.interaction
+      && !editor.cutoutPreviewSurfaceRaf
+      && !editor.cutoutPreviewSurfaceTimer) {
+      previewSurface = ensureNodeCutoutPreviewSurface({ shot, quality: "balanced" });
+    }
     const previewCanvas = previewSurface?.source || null;
     const previewReady = !!(previewCanvas
       && Number(previewCanvas.width || 0) > 1
       && Number(previewCanvas.height || 0) > 1);
-    const expectedRevision = getCutoutPreviewSurfaceRevision(shot, { quality: "balanced" });
     if (previewSurface?.revision !== expectedRevision) {
       scheduleNodeCutoutPreviewSurfaceUpdate();
     }
@@ -4608,7 +4704,6 @@ function showEditor(node, type, options = {}) {
 
   function renderCutoutPreviewToContext(targetCtx, rect, shot, options = {}) {
     const img = getConnectedErpImage();
-    const erpPreviewRaster = getComposedPaintErpCanvas(getOrderedPaintGroupIds());
     return renderSharedCutoutPreview({
       owner: node,
       ctx: targetCtx,
@@ -4617,8 +4712,6 @@ function showEditor(node, type, options = {}) {
       bgImage: img,
       cachePrefix: String(options.cachePrefix || "modal_cutout_output_preview"),
       quality: String(options.quality || "balanced"),
-      paintCanvas: erpPreviewRaster,
-      paintRevision: getPaintingCompositeRevisionKey() + getLivePaintRevisionSuffix(),
       drawDisplayList: drawOrderedDisplayListInView,
     });
   }
@@ -4630,8 +4723,7 @@ function showEditor(node, type, options = {}) {
   function scheduleNodeCutoutPreviewSurfaceUpdate() {
     if (type !== "cutout") return;
     const now = performance.now();
-    const interactionActive = !!editor.interaction;
-    const minDelay = interactionActive ? 120 : 0;
+    const minDelay = getCutoutPreviewUpdateMinDelay();
     const elapsed = now - Number(editor.cutoutPreviewSurfaceLastTs || 0);
     if (editor.cutoutPreviewSurfaceRaf || editor.cutoutPreviewSurfaceTimer) return;
     const queue = () => {
@@ -4843,6 +4935,35 @@ function showEditor(node, type, options = {}) {
 
   function bumpPaintingCompositeRevision() {
     editor.paintCompositeRevision += 1;
+  }
+
+  function invalidateObjectVisualCaches() {
+    editor._sortedItemsCache = null;
+    editor._strokeGeomCache.clear();
+  }
+
+  function refreshPaintEngineRevisionCache() {
+    editor.paintEngineRevisionKey = null;
+    editor.paintEngine?.rebuildCommitted?.(state);
+    editor.paintEngineRevisionKey = getPaintingRevisionKey();
+  }
+
+  function markObjectVisualsDirty() {
+    editor.objectVisualRevision = Number(editor.objectVisualRevision || 0) + 1;
+    invalidateObjectVisualCaches();
+  }
+
+  function markPaintStrokeVisualsDirty({ rebuildPaintEngine = false } = {}) {
+    bumpPaintingStrokeRevision();
+    markObjectVisualsDirty();
+    if (rebuildPaintEngine) {
+      refreshPaintEngineRevisionCache();
+    }
+  }
+
+  function markPaintCompositeVisualsDirty() {
+    bumpPaintingCompositeRevision();
+    markObjectVisualsDirty();
   }
 
   function rebuildPaintEngineIfNeeded() {
@@ -5418,7 +5539,7 @@ function showEditor(node, type, options = {}) {
     drawObjects();
     if (editor.mode !== "frame") drawCutoutOutputPreview();
     drawLassoOutlineOverlay();
-    if (fovValueEl) fovValueEl.textContent = `${editor.viewFov.toFixed(1)}°`;
+    if (fovValueEl) fovValueEl.textContent = `${Math.round(editor.viewFov)}°`;
     updateSelectionMenu();
     if (!runtime.hasPresentedFrame) {
       runtime.hasPresentedFrame = true;
@@ -5479,7 +5600,7 @@ function showEditor(node, type, options = {}) {
       || cause === "cutout_frame"
       || cause === "frame_transform"
       || cause === "frame_view"
-      || isPaintCompositeInteraction()
+      || isCutoutPreviewInteraction()
       || isCutoutTransformInteractionActive()
     );
     syncNodeLivePreviewSources({ updateCutoutPreview: shouldUpdateCutoutPreview });
@@ -5590,7 +5711,7 @@ function showEditor(node, type, options = {}) {
       ? state.active.selected_sticker_id
       : (type === "cutout" ? state.active.selected_sticker_id : state.active.selected_shot_id);
     editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
-    bumpPaintingStrokeRevision();
+    markPaintStrokeVisualsDirty();
     syncPaintUi();
     updateSidePanel();
     commitState();
@@ -6491,7 +6612,7 @@ function showEditor(node, type, options = {}) {
     );
     if (!ok) return;
     state.painting = normalizePaintingState(null);
-    bumpPaintingStrokeRevision();
+    markPaintStrokeVisualsDirty();
     if (type === "stickers") {
       state.stickers = [];
       state.assets = {};
@@ -6540,7 +6661,7 @@ function showEditor(node, type, options = {}) {
     if (kind === "paint") {
       getPaintingGroupList().length = 0;
     }
-    bumpPaintingStrokeRevision();
+    markPaintStrokeVisualsDirty();
     pushHistory();
     commitAndRefreshNode();
     updateSidePanel();
@@ -6562,6 +6683,7 @@ function showEditor(node, type, options = {}) {
     state.active.selected_sticker_id = copy.id;
     editor.selectedId = copy.id;
     editor.selectedIds = [copy.id];
+    markObjectVisualsDirty();
     pushHistory();
     commitAndRefreshNode();
     updateSelectionMenu();
@@ -6587,15 +6709,18 @@ function showEditor(node, type, options = {}) {
           .filter((stroke) => !paintStrokeIds.has(String(stroke?.actionGroupId || "")));
         state.painting.groups = getPaintingGroupList()
           .filter((group) => !paintStrokeIds.has(String(group?.actionGroupId || group?.id || "")));
+        markPaintStrokeVisualsDirty();
       }
       if (rasterIds.size > 0) {
         state.painting.raster_objects = getRasterObjectList()
           .filter((item) => !rasterIds.has(String(item?.id || "")));
+        markPaintCompositeVisualsDirty();
       }
       if (stickerIds.size > 0) {
         state.stickers = (Array.isArray(state.stickers) ? state.stickers : [])
           .filter((item) => !stickerIds.has(String(item?.id || "")));
         pruneUnusedAssets();
+        markObjectVisualsDirty();
       }
       editor.selectedId = null;
       editor.selectedIds = [];
@@ -6612,6 +6737,7 @@ function showEditor(node, type, options = {}) {
         .filter((stroke) => String(stroke?.actionGroupId || "").trim() !== gid);
       state.painting.groups = getPaintingGroupList()
         .filter((group) => String(group?.actionGroupId || group?.id || "").trim() !== gid);
+      markPaintStrokeVisualsDirty();
       editor.selectedId = null;
       editor.selectedIds = [];
       pushHistory();
@@ -6625,6 +6751,7 @@ function showEditor(node, type, options = {}) {
       const rid = parseRasterObjectSelectionId(selected.rasterObjectId || selected.id || "");
       state.painting.raster_objects = getRasterObjectList()
         .filter((item) => String(item?.id || "").trim() !== rid);
+      markPaintCompositeVisualsDirty();
       editor.selectedId = null;
       editor.selectedIds = [];
       pushHistory();
@@ -6637,6 +6764,7 @@ function showEditor(node, type, options = {}) {
     if (type === "stickers" || isStickerItem(selected)) {
       if (isExternalSticker(selected)) {
         selected.visible = isStickerHidden(selected);
+        markObjectVisualsDirty();
         pushHistory();
         commitAndRefreshNode();
         updateSidePanel();
@@ -6646,6 +6774,7 @@ function showEditor(node, type, options = {}) {
       }
       state.stickers = state.stickers.filter((s) => s.id !== selected.id);
       pruneUnusedAssets();
+      markObjectVisualsDirty();
       editor.selectedId = type === "cutout" ? (state.active.selected_shot_id || state.stickers[0]?.id || null) : (state.stickers[0]?.id || null);
       editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
       state.active.selected_sticker_id = state.stickers[0]?.id || null;
@@ -6771,7 +6900,7 @@ function showEditor(node, type, options = {}) {
       if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
       if (item.type === "rasterObject" && item.item) item.item.z_index = index;
     });
-    editor._sortedItemsCache = null;
+    markObjectVisualsDirty();
     pushHistory();
     commitAndRefreshNode();
     updateSelectionMenu();
@@ -6808,7 +6937,7 @@ function showEditor(node, type, options = {}) {
       if (item.type === "strokeGroup" && item.item) item.item.z_index = index;
       if (item.type === "rasterObject" && item.item) item.item.z_index = index;
     });
-    editor._sortedItemsCache = null;
+    markObjectVisualsDirty();
     pushHistory();
     commitAndRefreshNode();
     updateSelectionMenu();
@@ -8463,10 +8592,7 @@ function showEditor(node, type, options = {}) {
       const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
       const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
       if (applyStrokeGroupOffset(it.item?.actionGroupId, du, dv, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        bumpPaintingStrokeRevision();
-        editor.paintEngineRevisionKey = null;
-        editor.paintEngine?.rebuildCommitted?.(state);
-        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        markPaintStrokeVisualsDirty({ rebuildPaintEngine: true });
         requestDraw({ localOnly: true });
       }
       return;
@@ -8483,6 +8609,7 @@ function showEditor(node, type, options = {}) {
       const du = Number(currentUv.u || 0) - Number(it.startUv.u || 0);
       const dv = Number(currentUv.v || 0) - Number(it.startUv.v || 0);
       if (applyRasterObjectOffset(it.item?.rasterObjectId || it.item?.id || "", du, dv, it.snapshot)) {
+        markPaintCompositeVisualsDirty();
         requestDraw({ localOnly: true });
       }
       return;
@@ -8574,12 +8701,11 @@ function showEditor(node, type, options = {}) {
       }
       if (changed) {
         if (paintStrokeChanged) {
-          bumpPaintingStrokeRevision();
-          editor.paintEngineRevisionKey = null;
-          editor.paintEngine?.rebuildCommitted?.(state);
-          editor.paintEngineRevisionKey = getPaintingRevisionKey();
+          markPaintStrokeVisualsDirty({ rebuildPaintEngine: true });
         } else if (rasterChanged) {
-          bumpPaintingCompositeRevision();
+          markPaintCompositeVisualsDirty();
+        } else {
+          markObjectVisualsDirty();
         }
         requestDraw({ localOnly: true });
       }
@@ -8590,10 +8716,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / Math.max(1, Number(it.startDist || 1));
       if (applyStrokeGroupTransform(it.item?.actionGroupId, ratio, 0, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        bumpPaintingStrokeRevision();
-        editor.paintEngineRevisionKey = null;
-        editor.paintEngine?.rebuildCommitted?.(state);
-        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        markPaintStrokeVisualsDirty({ rebuildPaintEngine: true });
         requestDraw({ localOnly: true });
       }
       return;
@@ -8603,10 +8726,7 @@ function showEditor(node, type, options = {}) {
       let delta = (Math.atan2(p.y - it.center.y, p.x - it.center.x) - Number(it.startAng || 0)) * RAD2DEG;
       if (e.shiftKey) delta = Math.round(delta / 45) * 45;
       if (applyStrokeGroupTransform(it.item?.actionGroupId, 1, delta, it.snapshot, it.item?.layerKind, it.frameSnapshot)) {
-        bumpPaintingStrokeRevision();
-        editor.paintEngineRevisionKey = null;
-        editor.paintEngine?.rebuildCommitted?.(state);
-        editor.paintEngineRevisionKey = getPaintingRevisionKey();
+        markPaintStrokeVisualsDirty({ rebuildPaintEngine: true });
         requestDraw({ localOnly: true });
       }
       return;
@@ -8660,7 +8780,7 @@ function showEditor(node, type, options = {}) {
     if (editor.interaction?.kind === "paint_stroke" || editor.interaction?.kind === "paint_lasso_fill") {
       invalidateLivePaintPreviewCaches();
       if (commitPaintInteraction(editor.interaction)) {
-        bumpPaintingStrokeRevision();
+        markPaintStrokeVisualsDirty();
         // Invalidate the persistent frame so objectGeom() recomputes bbox on next select.
         const committedGroupId = String(editor.interaction.stroke?.actionGroupId || "").trim();
         if (committedGroupId) {
@@ -8671,8 +8791,7 @@ function showEditor(node, type, options = {}) {
         if (targetDescriptor) {
           if (String(editor.interaction.stroke?.toolKind || "") === "eraser") {
             editor.paintEngine.cancelActiveStroke(targetDescriptor);
-            editor.paintEngineRevisionKey = null;
-            rebuildPaintEngineIfNeeded();
+            refreshPaintEngineRevisionCache();
           } else {
             editor.paintEngine.commitActiveStroke(editor.interaction.stroke, targetDescriptor);
           }
@@ -8719,7 +8838,7 @@ function showEditor(node, type, options = {}) {
         compositeChanged = true;
       }
       if (compositeChanged) {
-        bumpPaintingCompositeRevision();
+        markPaintCompositeVisualsDirty();
       }
       pushHistory();
       commitState();
