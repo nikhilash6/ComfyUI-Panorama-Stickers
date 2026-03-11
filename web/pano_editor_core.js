@@ -1729,6 +1729,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     viewTween: null,
     fullscreen: false,
     fullscreenPrevShowGrid: null,
+    liveStateDirty: false,
   };
   if (type === "stickers") {
     editor.selectedId = null;
@@ -3116,9 +3117,19 @@ function createNodeBackedEditor(node, type, options = {}) {
     return kind === "move" || kind === "scale" || kind === "scale_x" || kind === "scale_y" || kind === "rotate";
   }
 
+  function markLiveStateDirty() {
+    editor.liveStateDirty = true;
+  }
+
+  function syncLiveStateOverrideIfNeeded() {
+    if (!editor.liveStateDirty) return;
+    node.__panoLiveStateOverride = JSON.stringify(state);
+    editor.liveStateDirty = false;
+  }
+
   function requestDraw() {
     syncLookAtFrameButtonState();
-    node.__panoLiveStateOverride = JSON.stringify(state);
+    syncLiveStateOverrideIfNeeded();
     if (!isCutoutTransformInteractionActive()) {
       node.__panoDomPreview?.requestDraw?.();
       node.setDirtyCanvas?.(true, false);
@@ -3240,6 +3251,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       out = clamp(out, min, max);
       if (key === "yaw_deg") out = wrapYaw(out);
       selected[key] = out;
+      markLiveStateDirty();
       rng.value = String(out);
       num.value = formatParamValue(out);
       setRangeFill();
@@ -4192,6 +4204,8 @@ function createNodeBackedEditor(node, type, options = {}) {
       stateWidget.value = text;
       stateWidget.callback?.(text);
     }
+    node.__panoLiveStateOverride = text;
+    editor.liveStateDirty = false;
   }
   function persistUiSettings() {
     state.ui_settings = saveSharedUiSettings(state.ui_settings);
@@ -4600,6 +4614,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         it.item.yaw_deg = yp.yaw;
         it.item.pitch_deg = yp.pitch;
       }
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4610,6 +4625,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4618,6 +4634,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4626,6 +4643,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4637,6 +4655,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       if (e.shiftKey) out = Math.round(out / 45) * 45;
       const key = type === "stickers" ? "rot_deg" : "roll_deg";
       it.item[key] = out;
+      markLiveStateDirty();
       requestDraw();
     }
   };
