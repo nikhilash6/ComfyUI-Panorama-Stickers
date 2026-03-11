@@ -688,7 +688,7 @@ class PanoramaCutoutNode(io.ComfyNode):
                 out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
             mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]
-            return io.NodeOutput(out_t, mask_t, sticker_state_json, ui=ui_ret)
+            return io.NodeOutput(out_t, sticker_state_json, mask_t, ui=ui_ret)
         except Exception as ex:
             print(f"[PanoramaCutout] run failed, fallback passthrough: {ex}")
             try:
@@ -697,10 +697,10 @@ class PanoramaCutoutNode(io.ComfyNode):
                     t = t.permute(0, 3, 1, 2)
                     t = F.interpolate(t, size=(oh, ow), mode="bilinear", align_corners=False)
                     t = t.permute(0, 2, 3, 1).clamp(0.0, 1.0)
-                    return io.NodeOutput(t[:1], empty_mask, sticker_state_json, ui=ui_ret)
+                    return io.NodeOutput(t[:1], sticker_state_json, empty_mask, ui=ui_ret)
             except Exception as ex2:
                 print(f"[PanoramaCutout] fallback resize failed: {ex2}")
-            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), empty_mask, sticker_state_json, ui=ui_ret)
+            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), sticker_state_json, empty_mask, ui=ui_ret)
 
 
 class PanoramaPreviewNode(io.ComfyNode):

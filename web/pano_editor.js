@@ -1679,6 +1679,7 @@ function showEditor(node, type, options = {}) {
   editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
   const imageCache = new Map();
   const rasterImageCache = new Map();
+  const rasterImageAlphaCache = new Map();
   const rasterErpCanvasCache = new Map();
   const runtime = {
     dirty: true,
@@ -3044,6 +3045,94 @@ function showEditor(node, type, options = {}) {
     img.src = dataUrl;
     rasterImageCache.set(dataUrl, img);
     return img;
+  }
+
+  function getRasterObjectAlphaSurface(item) {
+    const dataUrl = String(item?.rasterDataUrl || "").trim();
+    if (!dataUrl) return null;
+    const cached = rasterImageAlphaCache.get(dataUrl);
+    if (cached) return cached.ready ? cached : null;
+    const img = getRasterObjectImage(item, () => {
+      const entry = rasterImageAlphaCache.get(dataUrl);
+      if (entry) entry.ready = false;
+      requestDraw({ localOnly: true });
+    });
+    if (!img || !(img.complete || img.width || img.naturalWidth)) return null;
+    const width = Number(img.naturalWidth || img.width || 0);
+    const height = Number(img.naturalHeight || img.height || 0);
+    if (width < 1 || height < 1) return null;
+    const canvasEl = document.createElement("canvas");
+    canvasEl.width = width;
+    canvasEl.height = height;
+    const ctx2d = canvasEl.getContext("2d", { willReadFrequently: true });
+    if (!ctx2d) return null;
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.drawImage(img, 0, 0, width, height);
+    const alpha = ctx2d.getImageData(0, 0, width, height).data;
+    const entry = { canvas: canvasEl, width, height, alpha, ready: true };
+    rasterImageAlphaCache.set(dataUrl, entry);
+    return entry;
+  }
+
+  function inverseTransformErpPointAround(point, center, scale = 1, rotationDeg = 0) {
+    if (!point || typeof point !== "object") return point;
+    const cu = Number(center?.u || 0);
+    const cv = Number(center?.v || 0);
+    const dx = shortestWrappedDelta(Number(point.u || 0), cu);
+    const dy = Number(point.v || 0) - cv;
+    const s = Math.max(0.02, Number(scale || 1));
+    const rad = Number(rotationDeg || 0) * DEG2RAD;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const sx = dx / s;
+    const sy = dy / s;
+    const rx = sx * cos + sy * sin;
+    const ry = -sx * sin + sy * cos;
+    return {
+      ...point,
+      u: ((cu + rx) % 1 + 1) % 1,
+      v: cv + ry,
+    };
+  }
+
+  function sampleRasterObjectAlphaAt(item, erpPoint) {
+    if (!item || !erpPoint) return null;
+    const bbox = item?.bbox || null;
+    if (!bbox) return null;
+    const tf = item?.transform || {};
+    const center = {
+      u: (Number(bbox.u0 || 0) + Number(bbox.u1 || 0)) * 0.5,
+      v: (Number(bbox.v0 || 0) + Number(bbox.v1 || 0)) * 0.5,
+    };
+    const untranslated = {
+      u: ((Number(erpPoint.u || 0) - Number(tf.du || 0)) % 1 + 1) % 1,
+      v: Number(erpPoint.v || 0) - Number(tf.dv || 0),
+    };
+    const basePoint = inverseTransformErpPointAround(
+      untranslated,
+      center,
+      Number(tf.scale || 1),
+      Number(tf.rot_deg || 0),
+    );
+    const bw = Number(bbox.u1 || 0) - Number(bbox.u0 || 0);
+    const bh = Number(bbox.v1 || 0) - Number(bbox.v0 || 0);
+    if (!(bw > 1e-6) || !(bh > 1e-6)) return null;
+    const localU = shortestWrappedDelta(Number(basePoint.u || 0), Number(bbox.u0 || 0)) / bw;
+    const localV = (Number(basePoint.v || 0) - Number(bbox.v0 || 0)) / bh;
+    if (localU < 0 || localU > 1 || localV < 0 || localV > 1) return 0;
+    const surface = getRasterObjectAlphaSurface(item);
+    if (!surface) return null;
+    const sx = clamp(Math.floor(localU * surface.width), 0, surface.width - 1);
+    const sy = clamp(Math.floor(localV * surface.height), 0, surface.height - 1);
+    return Number(surface.alpha[(sy * surface.width + sx) * 4 + 3] || 0);
+  }
+
+  function hitRasterObjectAt(item, geom, p, erpPoint = null) {
+    if (!geom?.visible || !pointInPoly(p, geom.corners)) return false;
+    const samplePoint = erpPoint || screenPosToErpPoint(p, performance.now());
+    const alpha = sampleRasterObjectAlphaAt(item, samplePoint);
+    if (alpha === null) return true;
+    return alpha > 8;
   }
 
   function getRasterCompositeErpSize() {
@@ -7949,7 +8038,7 @@ function showEditor(node, type, options = {}) {
           const item = getRasterObjectItem(makeRasterObjectSelectionId(entry.item?.id || entry.id || ""));
           if (!item) continue;
           const geom = objectGeom(item);
-          if (geom?.visible && pointInPoly(p, geom.corners)) return { item, geom };
+          if (hitRasterObjectAt(item, geom, p, erpPoint)) return { item, geom };
           continue;
         }
         const item = entry.item;
@@ -8000,7 +8089,7 @@ function showEditor(node, type, options = {}) {
       if (isRasterObjectItem(item)) {
         const geom = objectGeom(item);
         if (!geom?.visible) continue;
-        if (pointInPoly(p, geom.corners)) return { item, geom };
+        if (hitRasterObjectAt(item, geom, p)) return { item, geom };
         continue;
       }
       const g = objectGeom(item);
