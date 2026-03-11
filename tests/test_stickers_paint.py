@@ -1,6 +1,17 @@
+import base64
+import io
+
 import numpy as np
+from PIL import Image
 
 from comfyui_pano_suite.core.painting import alpha_composite_over_rgb, render_painting_to_erp
+
+
+def _png_data_url(rgba: np.ndarray) -> str:
+    image = Image.fromarray(rgba.astype(np.uint8), "RGBA")
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def test_render_painting_to_erp_returns_independent_paint_and_mask():
@@ -62,3 +73,37 @@ def test_render_painting_to_erp_returns_independent_paint_and_mask():
     assert composited.shape == base.shape
     assert float(np.max(composited[..., 0])) > 0.0
     assert float(np.max(composited[..., 1])) < 1e-6
+
+
+def test_render_painting_to_erp_composites_raster_objects():
+    rgba = np.zeros((16, 16, 4), dtype=np.uint8)
+    rgba[..., 1] = 255
+    rgba[..., 3] = 255
+    painting = {
+        "version": 1,
+        "paint": {"strokes": []},
+        "mask": {"strokes": []},
+        "raster_objects": [{
+            "id": "rast_1",
+            "type": "raster_frozen",
+            "layerKind": "paint",
+            "z_index": 0,
+            "bbox": {"u0": 0.25, "v0": 0.25, "u1": 0.5, "v1": 0.5},
+            "rasterDataUrl": _png_data_url(rgba),
+            "transform": {"du": 0.0, "dv": 0.0, "rot_deg": 0.0, "scale": 1.0},
+        }],
+    }
+
+    paint_rgba, mask_bw = render_painting_to_erp(painting, 128, 64)
+
+    assert paint_rgba.shape == (64, 128, 4)
+    assert float(np.max(mask_bw)) == 0.0
+    assert float(np.max(paint_rgba[..., 1])) > 0.9
+    alpha_nonzero = np.argwhere(paint_rgba[..., 3] > 0.5)
+    assert alpha_nonzero.size > 0
+    min_y, min_x = alpha_nonzero.min(axis=0)
+    max_y, max_x = alpha_nonzero.max(axis=0)
+    assert 14 <= min_x <= 36
+    assert 10 <= min_y <= 22
+    assert 40 <= max_x <= 68
+    assert 18 <= max_y <= 38

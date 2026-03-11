@@ -1,4 +1,9 @@
+import base64
+import hashlib
+import io
+import json
 import math
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +11,36 @@ from PIL import Image, ImageDraw
 
 from .cutout import cutout_from_erp
 from .paint_state import normalize_painting_state
+
+
+_ERP_RENDER_CACHE: "OrderedDict[str, tuple[np.ndarray, np.ndarray]]" = OrderedDict()
+_CUTOUT_RENDER_CACHE: "OrderedDict[str, tuple[np.ndarray, np.ndarray]]" = OrderedDict()
+_RENDER_CACHE_LIMIT = 8
+
+
+def _clone_render_pair(pair: tuple[np.ndarray, np.ndarray]) -> tuple[np.ndarray, np.ndarray]:
+    paint, mask = pair
+    return paint.copy(), mask.copy()
+
+
+def _cache_get(cache: "OrderedDict[str, tuple[np.ndarray, np.ndarray]]", key: str) -> tuple[np.ndarray, np.ndarray] | None:
+    pair = cache.get(key)
+    if pair is None:
+        return None
+    cache.move_to_end(key)
+    return _clone_render_pair(pair)
+
+
+def _cache_put(cache: "OrderedDict[str, tuple[np.ndarray, np.ndarray]]", key: str, pair: tuple[np.ndarray, np.ndarray]) -> None:
+    cache[key] = _clone_render_pair(pair)
+    cache.move_to_end(key)
+    while len(cache) > _RENDER_CACHE_LIMIT:
+        cache.popitem(last=False)
+
+
+def _hash_render_payload(payload) -> str:
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()
 
 
 def _empty_rgba(width: int, height: int) -> np.ndarray:
@@ -28,7 +63,7 @@ def _stroke_width_px(stroke: dict, width: int, height: int) -> int:
         except (TypeError, ValueError):
             pass
     # Fallback for strokes that pre-date radiusValue
-    base = max(1.0, float(stroke.get("size", 1.0)))
+    base = max(1.0, float(stroke.get("size") or 1.0))
     scale = max(1.0, min(width, height) / 512.0)
     return max(1, int(round(base * scale)))
 
@@ -217,8 +252,8 @@ def _build_chisel_stamp_alpha(radius_px: float, hardness: float, aspect: float =
 
 def _get_stamp_alpha(stroke: dict, radius_px: float) -> np.ndarray:
     stamp_kind = str(stroke.get("stampKind") or "round")
-    hardness = max(0.0, min(1.0, float(stroke.get("hardness", 0.9))))
-    aspect = max(0.1, float(stroke.get("aspect", 1.0)))
+    hardness = max(0.0, min(1.0, float(stroke.get("hardness") or 0.9)))
+    aspect = max(0.1, float(stroke.get("aspect") or 1.0))
     angle = stroke.get("angle") or {}
     angle_rad = float(angle.get("value", 0.0)) if str(angle.get("kind") or "fixed") == "fixed" else 0.0
     if stamp_kind == "chisel":
@@ -296,7 +331,7 @@ def _stroke_freehand_alpha(stroke: dict, width: int, height: int) -> np.ndarray:
     radius_px = _stroke_radius_px(stroke, width, height)
     spacing_px = _stroke_spacing_px(stroke, radius_px)
     base_alpha = _get_stamp_alpha(stroke, radius_px)
-    stamp_alpha = np.clip(base_alpha * max(0.0, min(1.0, float(stroke.get("flow", 1.0)))), 0.0, 1.0)
+    stamp_alpha = np.clip(base_alpha * max(0.0, min(1.0, float(stroke.get("flow") or 1.0))), 0.0, 1.0)
     stroke_alpha = np.zeros((height, width), dtype=np.float32)
     half_h = stamp_alpha.shape[0] // 2
     half_w = stamp_alpha.shape[1] // 2
@@ -320,8 +355,140 @@ def _polygon_alpha_mask(segments: list[list[tuple[float, float]]], width: int, h
     return np.asarray(img, dtype=np.float32) / 255.0
 
 
+def _decode_raster_data_url(data_url: str) -> np.ndarray | None:
+    """Decode a PNG data URL to a float32 RGBA numpy array, or None on failure."""
+    try:
+        header, encoded = data_url.split(",", 1)
+        if "base64" not in header:
+            return None
+        raw = base64.b64decode(encoded)
+        img = Image.open(io.BytesIO(raw)).convert("RGBA")
+        return np.asarray(img, dtype=np.float32) / 255.0
+    except Exception:
+        return None
+
+
+def _blend_rgba_band(paint: np.ndarray, src: np.ndarray, src_alpha: np.ndarray,
+                     y0: int, y1: int, x0: int, x1: int, sx0: int, sx1: int) -> None:
+    sh, sw = y1 - y0, x1 - x0
+    if sh <= 0 or sw <= 0:
+        return
+    sc = src[:sh, sx0:sx1]
+    sa = src_alpha[:sh, sx0:sx1]
+    dst = paint[y0:y1, x0:x1]
+    da = dst[..., 3:4]
+    out_a = sa + da * (1.0 - sa)
+    safe = np.where(out_a > 0, out_a, 1.0)
+    paint[y0:y1, x0:x1, :3] = (sc[..., :3] * sa + dst[..., :3] * da * (1.0 - sa)) / safe
+    paint[y0:y1, x0:x1, 3:4] = out_a
+
+
+def _blend_mask_band(mask: np.ndarray, src_alpha: np.ndarray,
+                     y0: int, y1: int, x0: int, x1: int, sx0: int, sx1: int) -> None:
+    sh, sw = y1 - y0, x1 - x0
+    if sh <= 0 or sw <= 0:
+        return
+    sa = src_alpha[:sh, sx0:sx1, 0]
+    mask[y0:y1, x0:x1] = np.clip(mask[y0:y1, x0:x1] + sa * (1.0 - mask[y0:y1, x0:x1]), 0.0, 1.0)
+
+
+def _composite_raster_band(paint: np.ndarray, mask: np.ndarray, src: np.ndarray, src_alpha: np.ndarray,
+                            layer_kind: str, y0: int, y1: int, x0: int, x1: int, sx0: int, sx1: int) -> None:
+    if layer_kind == "mask":
+        _blend_mask_band(mask, src_alpha, y0, y1, x0, x1, sx0, sx1)
+    else:
+        _blend_rgba_band(paint, src, src_alpha, y0, y1, x0, x1, sx0, sx1)
+
+
+def _place_raster_object(paint: np.ndarray, mask: np.ndarray, src: np.ndarray,
+                         layer_kind: str, x0: int, y0: int, x1: int, y1: int,
+                         dst_w: int, width: int, height: int) -> None:
+    src_alpha = src[..., 3:4]
+    y0c = max(0, min(height, y0))
+    y1c = max(0, min(height, y1))
+    if y1c <= y0c:
+        return
+    if x1 > x0:
+        # No horizontal wrap.
+        _composite_raster_band(paint, mask, src, src_alpha, layer_kind,
+                                y0c, y1c, max(0, x0), min(width, x1), 0, min(width, x1) - max(0, x0))
+    else:
+        # Horizontal wrap: right band then left band.
+        right_w = width - x0
+        _composite_raster_band(paint, mask, src, src_alpha, layer_kind,
+                                y0c, y1c, x0, width, 0, right_w)
+        _composite_raster_band(paint, mask, src, src_alpha, layer_kind,
+                                y0c, y1c, 0, x1, right_w, dst_w)
+
+
+def _uv_bbox_to_pixels(bbox: dict, tf: dict, width: int, height: int) -> tuple[int, int, int, int, int, int]:
+    """Return (x0, y0, x1, y1, dst_w, dst_h) after applying translation transform."""
+    du = float(tf.get("du") or 0.0)
+    dv = float(tf.get("dv") or 0.0)
+    u0 = ((float(bbox.get("u0", 0.0)) + du) % 1.0 + 1.0) % 1.0
+    v0 = max(0.0, min(1.0, float(bbox.get("v0", 0.0)) + dv))
+    u1 = ((float(bbox.get("u1", 1.0)) + du) % 1.0 + 1.0) % 1.0
+    v1 = max(0.0, min(1.0, float(bbox.get("v1", 1.0)) + dv))
+    x0, y0 = int(round(u0 * width)), int(round(v0 * height))
+    x1, y1 = int(round(u1 * width)), int(round(v1 * height))
+    dst_w = max(1, x1 - x0) if x1 > x0 else max(1, width - x0 + x1)
+    dst_h = max(1, y1 - y0)
+    return x0, y0, x1, y1, dst_w, dst_h
+
+
+def _composite_one_raster_object(
+    paint: np.ndarray, mask: np.ndarray, obj: dict, width: int, height: int
+) -> None:
+    raster = _decode_raster_data_url(obj.get("rasterDataUrl") or "")
+    if raster is None:
+        return
+    x0, y0, x1, y1, dst_w, dst_h = _uv_bbox_to_pixels(
+        obj.get("bbox") or {}, obj.get("transform") or {}, width, height
+    )
+    if dst_h <= 0:
+        return
+    src_img = Image.fromarray((np.clip(raster, 0.0, 1.0) * 255).astype(np.uint8), "RGBA")
+    src = np.asarray(src_img.resize((dst_w, dst_h), Image.LANCZOS), dtype=np.float32) / 255.0
+    _place_raster_object(paint, mask, src, str(obj.get("layerKind") or "paint"),
+                         x0, y0, x1, y1, dst_w, width, height)
+
+
+def _composite_raster_objects(
+    paint: np.ndarray, mask: np.ndarray, raster_objects: list, width: int, height: int
+) -> None:
+    """Composite raster_frozen objects onto paint/mask ERP arrays in-place."""
+    for obj in raster_objects:
+        _composite_one_raster_object(paint, mask, obj, width, height)
+
+
+def painting_state_has_renderables(painting_state: dict | None) -> bool:
+    if not isinstance(painting_state, dict):
+        return False
+    paint = painting_state.get("paint")
+    if isinstance(paint, dict) and isinstance(paint.get("strokes"), list) and paint.get("strokes"):
+        return True
+    mask = painting_state.get("mask")
+    if isinstance(mask, dict) and isinstance(mask.get("strokes"), list) and mask.get("strokes"):
+        return True
+    raster_objects = painting_state.get("raster_objects")
+    if isinstance(raster_objects, list) and raster_objects:
+        return True
+    return False
+
+
 def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tuple[np.ndarray, np.ndarray]:
+    if not painting_state_has_renderables(painting_state):
+        return _empty_rgba(width, height), _empty_mask(width, height)
     normalized = normalize_painting_state(painting_state)
+    cache_key = _hash_render_payload({
+        "kind": "erp",
+        "width": int(width),
+        "height": int(height),
+        "painting": normalized,
+    })
+    cached = _cache_get(_ERP_RENDER_CACHE, cache_key)
+    if cached is not None:
+        return cached
     paint = _empty_rgba(width, height)
     mask = _empty_mask(width, height)
 
@@ -340,7 +507,7 @@ def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tup
                 max(0.0, min(1.0, float(color.get("b", 0.0)))),
             ], dtype=np.float32)
             color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
-            _composite_color_layer(paint, alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))))
+            _composite_color_layer(paint, alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
             continue
         stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
         if tool_kind == "eraser":
@@ -353,7 +520,7 @@ def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tup
             max(0.0, min(1.0, float(color.get("b", 0.0)))),
         ], dtype=np.float32)
         color_alpha = max(0.0, min(1.0, float(color.get("a", 1.0))))
-        _composite_color_layer(paint, stroke_alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))))
+        _composite_color_layer(paint, stroke_alpha * color_alpha, color_rgb, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
 
     for stroke in normalized["mask"]["strokes"]:
         if (stroke.get("targetSpace") or {}).get("kind") != "ERP_GLOBAL":
@@ -366,15 +533,21 @@ def render_painting_to_erp(painting_state: dict, width: int, height: int) -> tup
             if tool_kind == "eraser":
                 _erase_from_mask(mask, alpha)
             else:
-                _composite_mask_layer(mask, alpha, max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))))
+                _composite_mask_layer(mask, alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
             continue
         stroke_alpha = _stroke_freehand_alpha(stroke, width, height)
         if tool_kind == "eraser":
             _erase_from_mask(mask, stroke_alpha)
         else:
-            _composite_mask_layer(mask, stroke_alpha, max(0.0, min(1.0, float(stroke.get("opacity", 1.0)))))
+            _composite_mask_layer(mask, stroke_alpha, max(0.0, min(1.0, float(stroke.get("opacity") or 1.0))))
 
-    return np.clip(paint, 0.0, 1.0).astype(np.float32), np.clip(mask, 0.0, 1.0).astype(np.float32)
+    _composite_raster_objects(paint, mask, normalized.get("raster_objects") or [], width, height)
+    result = (
+        np.clip(paint, 0.0, 1.0).astype(np.float32),
+        np.clip(mask, 0.0, 1.0).astype(np.float32),
+    )
+    _cache_put(_ERP_RENDER_CACHE, cache_key, result)
+    return _clone_render_pair(result)
 
 
 def _warp_erp_layer_to_cutout(erp_layer: np.ndarray, shot: dict, width: int, height: int) -> np.ndarray:
@@ -507,6 +680,7 @@ def load_painting_layer_payload(
 ) -> dict | None:
     if not isinstance(painting_layer, dict):
         return None
+    revision = str(painting_layer.get("revision") or "").strip()
     target_w = int(erp_width) if erp_width is not None else None
     target_h = int(erp_height) if erp_height is not None else None
     pair = _load_painting_layer_erp(painting_layer)
@@ -545,6 +719,7 @@ def load_painting_layer_payload(
         "paint": paint_erp,
         "mask": mask_erp,
         "groups": groups,
+        "revision": revision,
     }
 
 
@@ -558,13 +733,12 @@ def render_painting_to_cutout(
     erp_height: int = 1024,
     painting_layer: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
-    # Prefer the uploaded ERP raster (exact WebGL render) when available.
     payload = load_painting_layer_payload(
         painting_layer,
         erp_width=erp_width,
         erp_height=erp_height,
     )
-    if payload is not None:
+    if payload is not None and str(payload.get("revision") or "").strip():
         paint_erp = payload.get("paint")
         mask_erp = payload.get("mask")
         if paint_erp is None:
@@ -574,13 +748,36 @@ def render_painting_to_cutout(
         paint = _warp_erp_layer_to_cutout(paint_erp, shot, width, height)
         mask = _warp_erp_layer_to_cutout(mask_erp, shot, width, height)
         return paint, mask
-    # Fallback: render from stroke records with 2× supersampling for antialiasing.
+    if not painting_state_has_renderables(painting_state):
+        return _empty_rgba(width, height), _empty_mask(width, height)
+    normalized = normalize_painting_state(painting_state)
+    cache_key = _hash_render_payload({
+        "kind": "cutout",
+        "width": int(width),
+        "height": int(height),
+        "erp_width": int(erp_width),
+        "erp_height": int(erp_height),
+        "shot": {
+            "yaw_deg": float(shot.get("yaw_deg", 0.0)),
+            "pitch_deg": float(shot.get("pitch_deg", 0.0)),
+            "roll_deg": float(shot.get("roll_deg", 0.0)),
+            "hFOV_deg": float(shot.get("hFOV_deg", 90.0)),
+            "vFOV_deg": float(shot.get("vFOV_deg", 60.0)),
+        },
+        "painting": normalized,
+    })
+    cached = _cache_get(_CUTOUT_RENDER_CACHE, cache_key)
+    if cached is not None:
+        return cached
+    # Render from stroke records with 2× supersampling for antialiasing.
     ss_w = min(max(64, int(erp_width)) * 2, 8192)
     ss_h = min(max(32, int(erp_height)) * 2, 4096)
-    paint_erp, mask_erp = render_painting_to_erp(painting_state, ss_w, ss_h)
+    paint_erp, mask_erp = render_painting_to_erp(normalized, ss_w, ss_h)
     paint = _warp_erp_layer_to_cutout(paint_erp, shot, width, height)
     mask = _warp_erp_layer_to_cutout(mask_erp, shot, width, height)
-    return paint, mask
+    result = (paint.astype(np.float32), mask.astype(np.float32))
+    _cache_put(_CUTOUT_RENDER_CACHE, cache_key, result)
+    return _clone_render_pair(result)
 
 
 def alpha_composite_over_rgb(base_rgb: np.ndarray, paint_rgba: np.ndarray) -> np.ndarray:

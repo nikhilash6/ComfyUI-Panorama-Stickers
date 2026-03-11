@@ -9,6 +9,7 @@ function emptyPaintingState() {
     groups: [],
     paint: { strokes: [] },
     mask: { strokes: [] },
+    raster_objects: [],
   };
 }
 
@@ -151,6 +152,64 @@ function normalizeLayer(raw, layerKind) {
   return out;
 }
 
+function normalizeRasterBbox(bbox) {
+  if (!bbox || typeof bbox !== "object") return null;
+  const u0 = finiteNumber(bbox.u0, null);
+  const v0 = finiteNumber(bbox.v0, null);
+  const u1 = finiteNumber(bbox.u1, null);
+  const v1 = finiteNumber(bbox.v1, null);
+  if (u0 == null || v0 == null || u1 == null || v1 == null) return null;
+  if (u1 <= u0 || v1 <= v0) return null;
+  const c = (v) => Math.max(0, Math.min(1, v));
+  return { u0: c(u0), v0: c(v0), u1: c(u1), v1: c(v1) };
+}
+
+function normalizeRasterTransform(raw) {
+  const tf = raw || {};
+  return {
+    du: finiteNumber(tf.du, 0) ?? 0,
+    dv: finiteNumber(tf.dv, 0) ?? 0,
+    rot_deg: finiteNumber(tf.rot_deg, 0) ?? 0,
+    scale: Math.max(0.01, finiteNumber(tf.scale, 1) ?? 1),
+  };
+}
+
+function normalizeRasterObject(item, fallbackZIndex) {
+  if (!item || typeof item !== "object") return null;
+  if (String(item.type || "") !== "raster_frozen") return null;
+  const id = String(item.id || "").trim();
+  if (!id) return null;
+  const layerKind = String(item.layerKind || "paint");
+  if (layerKind !== "paint" && layerKind !== "mask") return null;
+  const rasterDataUrl = String(item.rasterDataUrl || "").trim();
+  if (!rasterDataUrl.startsWith("data:")) return null;
+  const bbox = normalizeRasterBbox(item.bbox);
+  if (!bbox) return null;
+  return {
+    id,
+    type: "raster_frozen",
+    layerKind,
+    z_index: Math.max(0, Math.round(finiteNumber(item.z_index ?? item.zIndex, fallbackZIndex) ?? fallbackZIndex)),
+    locked: item.locked === true,
+    bbox,
+    rasterDataUrl,
+    transform: normalizeRasterTransform(item.transform),
+  };
+}
+
+function normalizeRasterObjects(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const normalized = normalizeRasterObject(item, out.length);
+    if (!normalized || seen.has(normalized.id)) continue;
+    seen.add(normalized.id);
+    out.push(normalized);
+  }
+  return out;
+}
+
 export function normalizePaintingState(raw) {
   const base = emptyPaintingState();
   if (!raw || typeof raw !== "object") return base;
@@ -159,6 +218,7 @@ export function normalizePaintingState(raw) {
     groups: normalizeGroups(raw.groups),
     paint: normalizeLayer(raw.paint, "paint"),
     mask: normalizeLayer(raw.mask, "mask"),
+    raster_objects: normalizeRasterObjects(raw.raster_objects),
   };
 }
 
