@@ -50,7 +50,7 @@ const ICON = {
   add: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M8 3.1v9.8M3.1 8h9.8'/></svg>",
   clear: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.8 4.4h10.4'/><path d='m5.8 4.4.6-1.4h3.2l.6 1.4'/><path d='M4.5 4.4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8'/><path d='M6.7 6.5v4.7M9.3 6.5v4.7'/></svg>",
   duplicate: "<svg viewBox='0 0 16 16' aria-hidden='true'><rect x='5.3' y='5.3' width='7.7' height='7.7' rx='1.4'/><rect x='3' y='3' width='7.7' height='7.7' rx='1.4'/></svg>",
-  replace_image: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.5 3h7a1.5 1.5 0 0 1 1.5 1.5V6'/><path d='M13.5 13h-7A1.5 1.5 0 0 1 5 11.5V10'/><path d='m10.8 3.8 2.7 2.7-2.7 2.7'/><path d='m5.2 12.2-2.7-2.7 2.7-2.7'/></svg>",
+  replace_image: "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='m17 2 4 4-4 4'/><path d='M3 11v-1a4 4 0 0 1 4-4h14'/><path d='m7 22-4-4 4-4'/><path d='M21 13v1a4 4 0 0 1-4 4H3'/></svg>",
   bring_front: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 12V4'/><path d='m4.4 5.6 1.6-1.6 1.6 1.6'/><path d='M9.5 11h3.1M9.5 8h2.2M9.5 5h1.2'/></svg>",
   send_back: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 4v8'/><path d='m4.4 10.4 1.6 1.6 1.6-1.6'/><path d='M9.5 11h1.2M9.5 8h2.2M9.5 5h3.1'/></svg>",
   aspect: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.866 14.7041C13.9131 14.5727 12.9574 14.4687 12 14.3923V12.8876C12.8347 12.9523 13.6683 13.0373 14.4999 13.1426L14.5 9.00003H16L15.9999 14L15.9999 14.8605L15.1475 14.7429L14.866 14.7041ZM16 7.00003L16 2.49996L16 1.6394L15.1475 1.75699L14.866 1.79581C13.9131 1.92725 12.9574 2.03119 12 2.10765V3.61228C12.8347 3.54757 13.6683 3.46256 14.5 3.35727L14.5 7.00003H16ZM9.99998 2.22729V3.72844C8.66715 3.77999 7.33282 3.77999 5.99998 3.72844V2.22729C7.33279 2.28037 8.66718 2.28037 9.99998 2.22729ZM9.99998 14.2726V12.7715C8.66715 12.7199 7.33282 12.7199 5.99998 12.7715V14.2726C7.33279 14.2195 8.66718 14.2195 9.99998 14.2726ZM3.99998 14.3923C3.04258 14.4687 2.08683 14.5727 1.13391 14.7041L0.85242 14.7429L-0.0000610352 14.8605L-0.0000578761 14L-0.0000396322 9.00003H1.49996L1.49995 13.1426C2.33162 13.0373 3.16521 12.9523 3.99998 12.8876V14.3923ZM1.49997 7.00003L1.49998 3.35727C2.33164 3.46256 3.16522 3.54757 3.99998 3.61228V2.10765C3.0426 2.03119 2.08686 1.92725 1.13395 1.79581L0.852462 1.75699L-0.0000127554 1.6394L-0.0000159144 2.49995L-0.0000323345 7.00003H1.49997Z' fill='currentColor'/></svg>",
@@ -6390,6 +6390,7 @@ function showEditor(node, type, options = {}) {
         requestDraw();
       };
     });
+    inspector.appendChild(Object.assign(document.createElement("div"), { className: "pano-divider" }));
     inspector.appendChild(visibilitySection);
 
     if (!readOnly) {
@@ -8153,7 +8154,7 @@ function showEditor(node, type, options = {}) {
       const pad = 14;
       selectionMenu.style.display = "flex";
       let x = (minX + maxX) * 0.5 - menuW * 0.5;
-      let y = maxY + 22;
+      let y = maxY + 18;
       x = clamp(x, pad, canvas.width - menuW - pad);
       if (y + menuH > canvas.height - pad) {
         selectionMenu.style.display = "none";
@@ -8260,7 +8261,7 @@ function showEditor(node, type, options = {}) {
     const pad = 14;
     selectionMenu.style.display = "flex";
     let x = (minX + maxX) * 0.5 - menuW * 0.5;
-    let y = maxY + 22;
+    let y = maxY + 18;
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       selectionMenu.style.display = "none";
       return;

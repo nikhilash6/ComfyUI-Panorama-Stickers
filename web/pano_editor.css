@@ -300,7 +300,7 @@
 .pano-selection-menu {
   position: absolute;
   display: none;
-  gap: var(--pano-float-gap);
+  gap: 4px;
   padding: var(--pano-float-pad);
   border-radius: var(--pano-float-radius);
   border: 0;
@@ -308,6 +308,11 @@
   backdrop-filter: blur(12px);
   box-shadow: 0 2px 4px rgba(0,0,0,0.15);
   z-index: 3;
+}
+.pano-selection-menu .pano-btn-icon {
+  width: 35px;
+  min-width: 35px;
+  height: 35px;
 }
 .pano-floating-left .pano-btn.pano-btn-icon.pano-btn-icon-accent {
   color: var(--pano-emphasis-text);
@@ -838,10 +843,13 @@
 .pano-paint-size-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-right: 8px;
-  padding-left: 4px;
+  gap: 0;
+  margin-right: 3px;
+  margin-left: 3px;
+  padding-left: 3px;
+  padding-right: 7px;
   border-left: 1px solid rgba(255,255,255,0.12);
+  border-right: 1px solid rgba(255,255,255,0.12);
 }
 .pano-paint-size-slider {
   width: 88px;
