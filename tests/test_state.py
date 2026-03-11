@@ -12,6 +12,9 @@ def test_merge_state_handles_none_inputs():
     assert isinstance(state["assets"], dict)
     assert isinstance(state["stickers"], list)
     assert isinstance(state["shots"], list)
+    assert state["painting"]["version"] == 1
+    assert state["painting"]["paint"]["strokes"] == []
+    assert state["painting"]["mask"]["strokes"] == []
     assert isinstance(state["active"], dict)
     assert state["active"]["selected_sticker_id"] is None
     assert state["active"]["selected_shot_id"] is None
@@ -25,6 +28,8 @@ def test_merge_state_handles_empty_dict_inputs_and_fallbacks():
     assert state["assets"] == {}
     assert state["stickers"] == []
     assert state["shots"] == []
+    assert state["painting"]["paint"]["strokes"] == []
+    assert state["painting"]["mask"]["strokes"] == []
     assert state["active"]["selected_sticker_id"] is None
     assert state["active"]["selected_shot_id"] is None
 

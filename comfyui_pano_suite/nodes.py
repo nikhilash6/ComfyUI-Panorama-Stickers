@@ -13,12 +13,19 @@ try:
 except ImportError:
     nodes = None
 
+from .comfy_image_resolver import resolve_painting_layer_payload
 from .core.cutout import cutout_from_erp
 from .core.math import (
     calculate_dimensions_from_megapixels,
     calculate_output_dimensions,
     finite_float,
     finite_int,
+)
+from .core.painting import (
+    alpha_composite_over_rgb,
+    painting_state_has_renderables,
+    render_painting_to_cutout,
+    render_painting_to_erp,
 )
 from .core.state import merge_state, parse_sticker_state
 from .core.stickers import compose_stickers_to_erp
@@ -34,6 +41,21 @@ def _save_input_preview(images, key="pano_input_images"):
     except Exception:
         logging.getLogger(__name__).exception("Failed to save preview image for %s", key)
     return {}
+
+
+def _push_ui_warning(ui_ret: dict, key: str, message: str):
+    if not isinstance(ui_ret, dict):
+        return
+    text = str(message or "").strip()
+    if not text:
+        return
+    bucket = ui_ret.get(key)
+    if not isinstance(bucket, list):
+        bucket = []
+        ui_ret[key] = bucket
+    if text not in bucket:
+        bucket.append(text)
+    logging.getLogger(__name__).warning(text)
 
 
 def _iter_external_sticker_payloads(sticker_image=None, sticker_state=None):
@@ -64,6 +86,19 @@ def _safe_int(value, default: int = 0) -> int:
         return int(value)
     except Exception:
         return int(default)
+
+
+def _hex_color_to_rgb01(value: str) -> np.ndarray:
+    text = str(value or "").strip()
+    if text.startswith("#"):
+        text = text[1:]
+    if len(text) != 6:
+        text = "00ff00"
+    try:
+        rgb = [int(text[idx:idx + 2], 16) / 255.0 for idx in (0, 2, 4)]
+    except ValueError:
+        rgb = [0.0, 1.0, 0.0]
+    return np.asarray(rgb, dtype=np.float32)
 
 
 def _single_image_to_numpy(image, warnings: list[str]) -> np.ndarray | None:
@@ -193,6 +228,135 @@ def _build_sticker_state_json(shot: dict, frame_w: int, frame_h: int) -> str:
     return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
+def _get_display_list_entries(state: dict) -> list[dict]:
+    stickers = []
+    for item in state.get("stickers", []):
+        if not isinstance(item, dict):
+            continue
+        stickers.append({
+            "type": "sticker",
+            "z_index": _safe_int(item.get("z_index", 0), 0),
+            "item": item,
+        })
+    groups = []
+    painting = state.get("painting") if isinstance(state.get("painting"), dict) else {}
+    for item in painting.get("groups", []):
+        if not isinstance(item, dict):
+            continue
+        groups.append({
+            "type": "strokeGroup",
+            "z_index": _safe_int(item.get("z_index", 0), 0),
+            "actionGroupId": str(item.get("actionGroupId") or item.get("id") or "").strip(),
+        })
+    raster_objects = []
+    for item in painting.get("raster_objects", []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("layerKind") or "paint") != "paint":
+            continue
+        raster_objects.append({
+            "type": "rasterObject",
+            "z_index": _safe_int(item.get("z_index", 0), 0),
+            "item": item,
+        })
+    return sorted(stickers + groups + raster_objects, key=lambda entry: float(entry.get("z_index", 0)))
+
+
+def _render_group_layer_from_state(painting: dict | None, action_group_id: str, width: int, height: int):
+    gid = str(action_group_id or "").strip()
+    if not gid or not isinstance(painting, dict):
+        return None
+    paint_layer = painting.get("paint") if isinstance(painting.get("paint"), dict) else {}
+    all_paint_strokes = paint_layer.get("strokes") if isinstance(paint_layer.get("strokes"), list) else []
+    strokes = []
+    for stroke in all_paint_strokes:
+        if not isinstance(stroke, dict):
+            continue
+        stroke_gid = str(stroke.get("actionGroupId") or "").strip()
+        tool_kind = str(stroke.get("toolKind") or stroke.get("tool") or stroke.get("mode") or "").strip().lower()
+        eraser_flag = stroke.get("eraser") is True or tool_kind in {"eraser", "erase"}
+        if stroke_gid == gid or (eraser_flag and not stroke_gid):
+            strokes.append(stroke)
+    if not strokes:
+        return None
+    groups = painting.get("groups") if isinstance(painting.get("groups"), list) else []
+    layer, _mask = render_painting_to_erp({
+        "paint": {"strokes": strokes},
+        "mask": {"strokes": []},
+        "groups": groups,
+        "raster_objects": [],
+    }, width, height)
+    return layer
+
+
+def _render_raster_layer_from_state(item: dict | None, width: int, height: int):
+    if not isinstance(item, dict):
+        return None
+    layer, _mask = render_painting_to_erp({
+        "paint": {"strokes": []},
+        "mask": {"strokes": []},
+        "groups": [],
+        "raster_objects": [item],
+    }, width, height)
+    return layer
+
+
+def _compose_display_list_to_erp(
+    state: dict,
+    base_rgb: np.ndarray,
+    *,
+    painting_payload: dict | None = None,
+    base_dir: Path | None = None,
+    quality: str = "export",
+) -> tuple[np.ndarray, bool]:
+    canvas = np.clip(base_rgb.astype(np.float32), 0.0, 1.0)
+    payload = painting_payload if isinstance(painting_payload, dict) else None
+    group_layers = payload.get("groups", {}) if payload else {}
+    painting = state.get("painting") if isinstance(state.get("painting"), dict) else {}
+    used_paint_entries = False
+    for entry in _get_display_list_entries(state):
+        entry_type = str(entry.get("type") or "")
+        if entry_type == "sticker":
+            canvas = compose_stickers_to_erp(
+                state=state,
+                output_w=int(canvas.shape[1]),
+                output_h=int(canvas.shape[0]),
+                bg_erp=canvas,
+                base_dir=base_dir,
+                quality=quality,
+                stickers_override=[entry.get("item")],
+            )
+            continue
+        layer = None
+        if entry_type == "strokeGroup":
+            action_group_id = str(entry.get("actionGroupId") or "").strip()
+            layer = group_layers.get(action_group_id)
+            if layer is None:
+                layer = _render_group_layer_from_state(painting, action_group_id, int(canvas.shape[1]), int(canvas.shape[0]))
+        elif entry_type == "rasterObject":
+            layer = _render_raster_layer_from_state(entry.get("item"), int(canvas.shape[1]), int(canvas.shape[0]))
+        if layer is None:
+            continue
+        canvas = alpha_composite_over_rgb(canvas, layer)
+        used_paint_entries = True
+    return canvas, used_paint_entries
+
+
+def _should_use_uploaded_group_layers(state: dict, painting_payload: dict | None) -> bool:
+    if not isinstance(painting_payload, dict):
+        return False
+    groups = painting_payload.get("groups")
+    if not isinstance(groups, dict) or not groups:
+        return False
+    painting = state.get("painting") if isinstance(state.get("painting"), dict) else {}
+    raster_objects = painting.get("raster_objects")
+    if isinstance(raster_objects, list) and raster_objects:
+        return False
+    state_groups = painting.get("groups")
+    expected = len(state_groups) if isinstance(state_groups, list) else 0
+    return expected > 0 and len(groups) >= expected
+
+
 class PanoramaStickersNode(io.ComfyNode):
     MAX_OUTPUT_SIDE = 4096
 
@@ -226,7 +390,10 @@ class PanoramaStickersNode(io.ComfyNode):
                     force_input=True,
                 ),
             ],
-            outputs=[io.Image.Output("cond_erp", display_name="cond_erp")],
+            outputs=[
+                io.Image.Output("cond_erp", display_name="cond_erp"),
+                io.Mask.Output("mask", display_name="mask"),
+            ],
             hidden=[io.Hidden.unique_id],
             is_output_node=True,
         )
@@ -258,6 +425,7 @@ class PanoramaStickersNode(io.ComfyNode):
     @classmethod
     def execute(cls, output_preset, bg_color, state_json, bg_erp=None, sticker_image=None, sticker_state=""):
         out_w = cls._parse_output_preset(output_preset, max_val=cls.MAX_OUTPUT_SIDE)
+        out_h = max(1, out_w // 2)
         bg_hex = cls._normalize_hex_color(bg_color)
         state = merge_state(state_in=None, internal_state=state_json, fallback_preset=out_w, fallback_bg=bg_hex)
         state["output_preset"] = out_w
@@ -267,6 +435,8 @@ class PanoramaStickersNode(io.ComfyNode):
         bg_np = None
         if bg_erp is not None:
             bg_np = bg_erp[0].detach().cpu().numpy().astype(np.float32)
+        if bg_np is None:
+            bg_np = np.broadcast_to(_hex_color_to_rgb01(bg_hex), (out_h, out_w, 3)).copy()
 
         render_stickers = []
         for sticker in state.get("stickers", []):
@@ -333,25 +503,54 @@ class PanoramaStickersNode(io.ComfyNode):
 
         render_state = dict(state)
         render_state["stickers"] = render_stickers
+        ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
 
-        out = compose_stickers_to_erp(
-            state=render_state,
-            output_w=out_w,
-            output_h=out_w // 2,
-            bg_erp=bg_np,
+        painting_payload = resolve_painting_layer_payload(
+            state.get("painting_layer"),
+            erp_width=out_w,
+            erp_height=out_h,
+        )
+        out, used_group_layers = _compose_display_list_to_erp(
+            render_state,
+            bg_np,
+            painting_payload=painting_payload,
             base_dir=Path.cwd(),
             quality="export",
         )
+        painting_state = state.get("painting")
+        if not used_group_layers:
+            paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
+            if paint_rgba is None:
+                if painting_state_has_renderables(painting_state):
+                    _push_ui_warning(
+                        ui_ret,
+                        "pano_sticker_warnings",
+                        "Paint export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
+                    )
+                paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
+            out = alpha_composite_over_rgb(out, paint_rgba)
+        mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
+        if mask_bw is None:
+            if painting_state_has_renderables(painting_state):
+                _push_ui_warning(
+                    ui_ret,
+                    "pano_sticker_warnings",
+                    "Mask export fell back to backend stroke rendering because uploaded mask layers were unavailable.",
+                )
+            _paint_rgba, mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
+        if mask_bw is None:
+            mask_bw = np.zeros((out_h, out_w), dtype=np.float32)
 
         out_t = torch.from_numpy(out)[None, ...]
-        ui_ret = _save_input_preview(bg_erp) if bg_erp is not None else {}
+        mask_t = torch.from_numpy(np.clip(mask_bw.astype(np.float32), 0.0, 1.0))[None, ...]
         if sticker_image is not None:
             ui_ret.update(_save_input_preview(_first_image_tensor(sticker_image), key="pano_sticker_input_images"))
         if external_pose_ui is not None:
             ui_ret["pano_sticker_input_pose"] = [external_pose_ui]
         if warnings:
-            ui_ret["pano_sticker_warnings"] = [str(w) for w in warnings]
-        return io.NodeOutput(out_t, ui=ui_ret)
+            for warning in warnings:
+                _push_ui_warning(ui_ret, "pano_sticker_warnings", str(warning))
+        return io.NodeOutput(out_t, mask_t, ui=ui_ret)
 
 
 class PanoramaCutoutNode(io.ComfyNode):
@@ -377,6 +576,7 @@ class PanoramaCutoutNode(io.ComfyNode):
             outputs=[
                 io.Image.Output("rect_image", display_name="rect_image"),
                 io.String.Output("sticker_state_json", display_name="sticker_state"),
+                io.Mask.Output("mask", display_name="mask"),
             ],
             hidden=[io.Hidden.unique_id],
             is_output_node=True,
@@ -396,15 +596,9 @@ class PanoramaCutoutNode(io.ComfyNode):
         output_megapixels = max(0.01, finite_float(output_megapixels, 1.0))
         state = merge_state(state_in=None, internal_state=state_json)
         shots = state.get("shots", []) if isinstance(state, dict) else []
-        shot = shots[0] if shots else {
-            "yaw_deg": 0.0,
-            "pitch_deg": 0.0,
-            "hFOV_deg": 90.0,
-            "vFOV_deg": 60.0,
-            "roll_deg": 0.0,
-            "out_w": 1024,
-            "out_h": 1024,
-        }
+        if not shots:
+            raise ValueError("Panorama Cutout requires at least one frame.")
+        shot = shots[0]
 
         yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
         pitch = finite_float(shot.get("pitch_deg", 0.0), 0.0)
@@ -450,13 +644,51 @@ class PanoramaCutoutNode(io.ComfyNode):
 
         ui_ret = _save_input_preview(erp_image) if erp_image is not None else {}
         sticker_state_json = _build_sticker_state_json(shot, ow, oh)
+        empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
 
         try:
+            painting_payload = resolve_painting_layer_payload(
+                state.get("painting_layer"),
+                erp_width=int(src.shape[1]),
+                erp_height=int(src.shape[0]),
+            )
+            src, used_group_layers = _compose_display_list_to_erp(
+                state,
+                src,
+                painting_payload=painting_payload,
+                base_dir=Path.cwd(),
+                quality="export",
+            )
             out = cutout_from_erp(src, yaw, pitch, hfov, vfov, roll, ow, oh)
             if out.ndim != 3 or out.shape[-1] != 3:
                 out = np.zeros((oh, ow, 3), dtype=np.float32)
+            painting_state = state.get("painting")
+            if painting_state_has_renderables(painting_state):
+                payload_has_revision = isinstance(painting_payload, dict) and bool(str(painting_payload.get("revision") or "").strip())
+                if not payload_has_revision:
+                    _push_ui_warning(
+                        ui_ret,
+                        "pano_cutout_warnings",
+                        "Cutout export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
+                    )
+            if painting_state_has_renderables(painting_state):
+                paint_rgba, mask_bw = render_painting_to_cutout(
+                    state.get("painting"),
+                    shot,
+                    ow,
+                    oh,
+                    erp_width=src.shape[1],
+                    erp_height=src.shape[0],
+                    painting_layer_payload=painting_payload,
+                )
+            else:
+                paint_rgba = np.zeros((oh, ow, 4), dtype=np.float32)
+                mask_bw = np.zeros((oh, ow), dtype=np.float32)
+            if not used_group_layers:
+                out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
-            return io.NodeOutput(out_t, sticker_state_json, ui=ui_ret)
+            mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]
+            return io.NodeOutput(out_t, sticker_state_json, mask_t, ui=ui_ret)
         except Exception as ex:
             print(f"[PanoramaCutout] run failed, fallback passthrough: {ex}")
             try:
@@ -465,10 +697,10 @@ class PanoramaCutoutNode(io.ComfyNode):
                     t = t.permute(0, 3, 1, 2)
                     t = F.interpolate(t, size=(oh, ow), mode="bilinear", align_corners=False)
                     t = t.permute(0, 2, 3, 1).clamp(0.0, 1.0)
-                    return io.NodeOutput(t[:1], sticker_state_json, ui=ui_ret)
+                    return io.NodeOutput(t[:1], sticker_state_json, empty_mask, ui=ui_ret)
             except Exception as ex2:
                 print(f"[PanoramaCutout] fallback resize failed: {ex2}")
-            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), sticker_state_json, ui=ui_ret)
+            return io.NodeOutput(torch.zeros((1, oh, ow, 3), dtype=torch.float32), sticker_state_json, empty_mask, ui=ui_ret)
 
 
 class PanoramaPreviewNode(io.ComfyNode):

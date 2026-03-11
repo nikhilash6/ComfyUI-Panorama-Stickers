@@ -147,6 +147,8 @@ def compose_stickers_to_erp(
     bg_erp: np.ndarray | None = None,
     base_dir: Path | None = None,
     quality: str = "export",
+    stickers_override: list[dict] | None = None,
+    assets_override: dict | None = None,
 ) -> np.ndarray:
     if bg_erp is not None:
         canvas = np.clip(bg_erp.astype(np.float32), 0.0, 1.0)
@@ -159,9 +161,18 @@ def compose_stickers_to_erp(
         bg = _hex_to_rgb01(state.get("bg_color", "#00ff00"))
         canvas = np.ones((output_h, output_w, 3), dtype=np.float32) * bg[None, None, :]
 
-    stickers = state.get("stickers", [])
-    assets = state.get("assets", {})
-    stickers_sorted = sorted(stickers, key=lambda s: float(s.get("z_index", 0)))
+    stickers = stickers_override if isinstance(stickers_override, list) else state.get("stickers", [])
+    assets = assets_override if isinstance(assets_override, dict) else state.get("assets", {})
+    def _safe_sticker_z_index(item) -> float:
+        try:
+            return float(item.get("z_index", 0))
+        except Exception:
+            return 0.0
+
+    stickers_sorted = sorted(
+        [item for item in stickers if isinstance(item, dict)],
+        key=_safe_sticker_z_index,
+    )
 
     for st in stickers_sorted:
         if st.get("visible", True) is False:

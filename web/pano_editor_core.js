@@ -49,6 +49,7 @@ function createPanoInteractionController(options = {}) {
   const state = {
     drag: { active: false, lastX: 0, lastY: 0, lastTs: 0, pointerId: null },
     inertia: { vx: 0, vy: 0, active: false, lastTs: 0 },
+    velHistory: [], // { ts, yaw, pitch } — rolling window for velocity estimation
   };
 
   function log(tag, payload = null) {
@@ -66,6 +67,7 @@ function createPanoInteractionController(options = {}) {
     state.inertia.vx = 0;
     state.inertia.vy = 0;
     state.inertia.lastTs = state.drag.lastTs;
+    state.velHistory = [];
     log("drag", { phase: "start", x: state.drag.lastX, y: state.drag.lastY, pointerId });
     return true;
   }
@@ -106,8 +108,13 @@ function createPanoInteractionController(options = {}) {
     view.pitch = clamp(Number(view.pitch || 0) + dPitch, -89.9, 89.9);
     setView(view);
 
-    state.inertia.vx = state.inertia.vx * PANO_INERTIA_BLEND_OLD + (dYaw / dt) * PANO_INERTIA_BLEND_INST;
-    state.inertia.vy = state.inertia.vy * PANO_INERTIA_BLEND_OLD + (dPitch / dt) * PANO_INERTIA_BLEND_INST;
+    // Record position for windowed velocity estimation; keep last 100ms only.
+    state.velHistory.push({ ts: now, yaw: view.yaw, pitch: view.pitch });
+    const cutoff = now - 100;
+    let lo = 0;
+    while (lo < state.velHistory.length - 1 && state.velHistory[lo].ts < cutoff) lo++;
+    if (lo > 0) state.velHistory.splice(0, lo);
+
     state.inertia.active = false;
     state.inertia.lastTs = now;
     onInteraction();
@@ -118,10 +125,27 @@ function createPanoInteractionController(options = {}) {
   function endDrag(ts = performance.now()) {
     if (!state.drag.active) return false;
     state.drag.active = false;
-    state.drag.lastTs = Number(ts || performance.now());
-    const speed = Math.hypot(state.inertia.vx || 0, state.inertia.vy || 0);
+    const now = Number(ts || performance.now());
+    state.drag.lastTs = now;
+
+    // Compute velocity from position samples within the last 80ms.
+    // If the pointer was stationary (no samples recently), velocity stays 0.
+    const window = state.velHistory.filter((e) => now - e.ts <= 80);
+    if (window.length >= 2) {
+      const oldest = window[0];
+      const newest = window[window.length - 1];
+      const dtSec = Math.max(0.001, (newest.ts - oldest.ts) / 1000);
+      state.inertia.vx = shortestYawDelta(oldest.yaw, newest.yaw) / dtSec;
+      state.inertia.vy = (newest.pitch - oldest.pitch) / dtSec;
+    } else {
+      state.inertia.vx = 0;
+      state.inertia.vy = 0;
+    }
+    state.velHistory = [];
+
+    const speed = Math.hypot(state.inertia.vx, state.inertia.vy);
     state.inertia.active = speed > PANO_INERTIA_START_SPEED;
-    state.inertia.lastTs = state.drag.lastTs;
+    state.inertia.lastTs = now;
     log("drag", { phase: "end", speed, inertiaActive: state.inertia.active });
     return true;
   }
@@ -1705,6 +1729,7 @@ function createNodeBackedEditor(node, type, options = {}) {
     viewTween: null,
     fullscreen: false,
     fullscreenPrevShowGrid: null,
+    liveStateDirty: false,
   };
   if (type === "stickers") {
     editor.selectedId = null;
@@ -3092,9 +3117,19 @@ function createNodeBackedEditor(node, type, options = {}) {
     return kind === "move" || kind === "scale" || kind === "scale_x" || kind === "scale_y" || kind === "rotate";
   }
 
+  function markLiveStateDirty() {
+    editor.liveStateDirty = true;
+  }
+
+  function syncLiveStateOverrideIfNeeded() {
+    if (!editor.liveStateDirty) return;
+    node.__panoLiveStateOverride = JSON.stringify(state);
+    editor.liveStateDirty = false;
+  }
+
   function requestDraw() {
     syncLookAtFrameButtonState();
-    node.__panoLiveStateOverride = JSON.stringify(state);
+    syncLiveStateOverrideIfNeeded();
     if (!isCutoutTransformInteractionActive()) {
       node.__panoDomPreview?.requestDraw?.();
       node.setDirtyCanvas?.(true, false);
@@ -3216,6 +3251,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       out = clamp(out, min, max);
       if (key === "yaw_deg") out = wrapYaw(out);
       selected[key] = out;
+      markLiveStateDirty();
       rng.value = String(out);
       num.value = formatParamValue(out);
       setRangeFill();
@@ -4168,6 +4204,8 @@ function createNodeBackedEditor(node, type, options = {}) {
       stateWidget.value = text;
       stateWidget.callback?.(text);
     }
+    node.__panoLiveStateOverride = text;
+    editor.liveStateDirty = false;
   }
   function persistUiSettings() {
     state.ui_settings = saveSharedUiSettings(state.ui_settings);
@@ -4576,6 +4614,7 @@ function createNodeBackedEditor(node, type, options = {}) {
         it.item.yaw_deg = yp.yaw;
         it.item.pitch_deg = yp.pitch;
       }
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4586,6 +4625,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4594,6 +4634,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4602,6 +4643,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      markLiveStateDirty();
       requestDraw();
       return;
     }
@@ -4613,6 +4655,7 @@ function createNodeBackedEditor(node, type, options = {}) {
       if (e.shiftKey) out = Math.round(out / 45) * 45;
       const key = type === "stickers" ? "rot_deg" : "roll_deg";
       it.item[key] = out;
+      markLiveStateDirty();
       requestDraw();
     }
   };

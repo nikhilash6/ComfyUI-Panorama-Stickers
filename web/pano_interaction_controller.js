@@ -31,6 +31,7 @@ export function createPanoInteractionController(options = {}) {
   const state = {
     drag: { active: false, lastX: 0, lastY: 0, lastTs: 0, pointerId: null },
     inertia: { vx: 0, vy: 0, active: false, lastTs: 0 },
+    velHistory: [], // { ts, yaw, pitch } — rolling window for velocity estimation
   };
 
   function log(tag, payload = null) {
@@ -48,6 +49,7 @@ export function createPanoInteractionController(options = {}) {
     state.inertia.vx = 0;
     state.inertia.vy = 0;
     state.inertia.lastTs = state.drag.lastTs;
+    state.velHistory = [];
     log("drag", { phase: "start", x: state.drag.lastX, y: state.drag.lastY, pointerId });
     return true;
   }
@@ -57,7 +59,6 @@ export function createPanoInteractionController(options = {}) {
     const now = Number(ts || performance.now());
     const px = Number(x);
     const py = Number(y);
-    const dt = Math.max(0.001, (now - (state.drag.lastTs || now)) / 1000);
     const dx = px - state.drag.lastX;
     const dy = py - state.drag.lastY;
     state.drag.lastX = px;
@@ -88,8 +89,12 @@ export function createPanoInteractionController(options = {}) {
     view.pitch = clamp(Number(view.pitch || 0) + dPitch, -89.9, 89.9);
     setView(view);
 
-    state.inertia.vx = state.inertia.vx * PANO_INERTIA_BLEND_OLD + (dYaw / dt) * PANO_INERTIA_BLEND_INST;
-    state.inertia.vy = state.inertia.vy * PANO_INERTIA_BLEND_OLD + (dPitch / dt) * PANO_INERTIA_BLEND_INST;
+    // Record position for windowed velocity estimation; keep last 100ms only.
+    state.velHistory.push({ ts: now, yaw: view.yaw, pitch: view.pitch });
+    let lo = 0;
+    while (lo < state.velHistory.length - 1 && state.velHistory[lo].ts < now - 100) lo++;
+    if (lo > 0) state.velHistory.splice(0, lo);
+
     state.inertia.active = false;
     state.inertia.lastTs = now;
     onInteraction();
@@ -100,10 +105,30 @@ export function createPanoInteractionController(options = {}) {
   function endDrag(ts = performance.now()) {
     if (!state.drag.active) return false;
     state.drag.active = false;
-    state.drag.lastTs = Number(ts || performance.now());
-    const speed = Math.hypot(state.inertia.vx || 0, state.inertia.vy || 0);
+    const now = Number(ts || performance.now());
+    state.drag.lastTs = now;
+
+    // Compute velocity from position samples within the last 80ms.
+    // If the pointer was stationary, the window will be empty → no inertia.
+    const window = state.velHistory.filter((e) => now - e.ts <= 80);
+    if (window.length >= 2) {
+      const oldest = window[0];
+      const newest = window.at(-1);
+      const dtSec = Math.max(0.001, (newest.ts - oldest.ts) / 1000);
+      let dyaw = newest.yaw - oldest.yaw;
+      if (dyaw > 180) dyaw -= 360;
+      if (dyaw < -180) dyaw += 360;
+      state.inertia.vx = dyaw / dtSec;
+      state.inertia.vy = (newest.pitch - oldest.pitch) / dtSec;
+    } else {
+      state.inertia.vx = 0;
+      state.inertia.vy = 0;
+    }
+    state.velHistory = [];
+
+    const speed = Math.hypot(state.inertia.vx, state.inertia.vy);
     state.inertia.active = speed > PANO_INERTIA_START_SPEED;
-    state.inertia.lastTs = state.drag.lastTs;
+    state.inertia.lastTs = now;
     log("drag", { phase: "end", speed, inertiaActive: state.inertia.active });
     return true;
   }
