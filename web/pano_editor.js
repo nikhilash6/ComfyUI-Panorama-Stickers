@@ -50,6 +50,7 @@ const ICON = {
   add: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M8 3.1v9.8M3.1 8h9.8'/></svg>",
   clear: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.8 4.4h10.4'/><path d='m5.8 4.4.6-1.4h3.2l.6 1.4'/><path d='M4.5 4.4v8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-8'/><path d='M6.7 6.5v4.7M9.3 6.5v4.7'/></svg>",
   duplicate: "<svg viewBox='0 0 16 16' aria-hidden='true'><rect x='5.3' y='5.3' width='7.7' height='7.7' rx='1.4'/><rect x='3' y='3' width='7.7' height='7.7' rx='1.4'/></svg>",
+  replace_image: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M2.5 3h7a1.5 1.5 0 0 1 1.5 1.5V6'/><path d='M13.5 13h-7A1.5 1.5 0 0 1 5 11.5V10'/><path d='m10.8 3.8 2.7 2.7-2.7 2.7'/><path d='m5.2 12.2-2.7-2.7 2.7-2.7'/></svg>",
   bring_front: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 12V4'/><path d='m4.4 5.6 1.6-1.6 1.6 1.6'/><path d='M9.5 11h3.1M9.5 8h2.2M9.5 5h1.2'/></svg>",
   send_back: "<svg viewBox='0 0 16 16' aria-hidden='true'><path d='M6 4v8'/><path d='m4.4 10.4 1.6 1.6 1.6-1.6'/><path d='M9.5 11h1.2M9.5 8h2.2M9.5 5h3.1'/></svg>",
   aspect: "<svg viewBox='0 0 16 16' aria-hidden='true'><path fill-rule='evenodd' clip-rule='evenodd' d='M14.866 14.7041C13.9131 14.5727 12.9574 14.4687 12 14.3923V12.8876C12.8347 12.9523 13.6683 13.0373 14.4999 13.1426L14.5 9.00003H16L15.9999 14L15.9999 14.8605L15.1475 14.7429L14.866 14.7041ZM16 7.00003L16 2.49996L16 1.6394L15.1475 1.75699L14.866 1.79581C13.9131 1.92725 12.9574 2.03119 12 2.10765V3.61228C12.8347 3.54757 13.6683 3.46256 14.5 3.35727L14.5 7.00003H16ZM9.99998 2.22729V3.72844C8.66715 3.77999 7.33282 3.77999 5.99998 3.72844V2.22729C7.33279 2.28037 8.66718 2.28037 9.99998 2.22729ZM9.99998 14.2726V12.7715C8.66715 12.7199 7.33282 12.7199 5.99998 12.7715V14.2726C7.33279 14.2195 8.66718 14.2195 9.99998 14.2726ZM3.99998 14.3923C3.04258 14.4687 2.08683 14.5727 1.13391 14.7041L0.85242 14.7429L-0.0000610352 14.8605L-0.0000578761 14L-0.0000396322 9.00003H1.49996L1.49995 13.1426C2.33162 13.0373 3.16521 12.9523 3.99998 12.8876V14.3923ZM1.49997 7.00003L1.49998 3.35727C2.33164 3.46256 3.16522 3.54757 3.99998 3.61228V2.10765C3.0426 2.03119 2.08686 1.92725 1.13395 1.79581L0.852462 1.75699L-0.0000127554 1.6394L-0.0000159144 2.49995L-0.0000323345 7.00003H1.49997Z' fill='currentColor'/></svg>",
@@ -1226,19 +1227,85 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
   return { src: "", sourceType: "", inputName: "" };
 }
 
-function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
-  const resolved = findLinkedInputImageSource(node, preferredInputNames);
-  const srcRaw = String(resolved?.src || "").trim();
-  if (!srcRaw) return null;
-  const candidates = buildImageSrcCandidates(srcRaw);
+function findExactLinkedInputImageSource(node, inputName) {
+  const wanted = String(inputName || "").trim();
+  if (!wanted) return { src: "", sourceType: "", inputName: "" };
+  const inputs = Array.isArray(node?.inputs) ? node.inputs : [];
+  const idx = inputs.findIndex((input) => String(input?.name || "") === wanted);
+  if (idx < 0) return { src: "", sourceType: "", inputName: wanted };
+  const input = inputs[idx];
+  const linkId = input?.link;
+  if (linkId == null) return { src: "", sourceType: "", inputName: wanted };
+  const linkInfo = getGraphLinkById(node.graph, linkId);
+  const { originId, originSlot } = resolveOriginFromLinkInfo(linkInfo);
+  if (originId == null) return { src: "", sourceType: "", inputName: wanted };
+  const originNode = resolveInputOriginNode(node, idx, originId);
+  const resolvedOriginSlot = Number(originSlot || 0);
+  if (!originNode) return { src: "", sourceType: "", inputName: wanted };
+
+  let appNodeImageUrls = [];
+  try {
+    appNodeImageUrls = typeof app?.getNodeImageUrls === "function" ? (app.getNodeImageUrls(originNode) || []) : [];
+  } catch {
+    appNodeImageUrls = [];
+  }
+  if (Array.isArray(appNodeImageUrls) && appNodeImageUrls.length) {
+    const ordered = [];
+    if (resolvedOriginSlot >= 0 && resolvedOriginSlot < appNodeImageUrls.length) ordered.push(appNodeImageUrls[resolvedOriginSlot]);
+    ordered.push(...appNodeImageUrls);
+    for (const cand of ordered) {
+      const src = imageSourceFromCandidate(cand);
+      if (src) return { src, sourceType: "appNodeImageUrls", inputName: wanted };
+    }
+  }
+
+  const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
+  const outImgs = Array.isArray(outputs?.images) ? outputs.images : [];
+  if (outImgs.length) {
+    const ordered = [];
+    if (resolvedOriginSlot >= 0 && resolvedOriginSlot < outImgs.length) ordered.push(outImgs[resolvedOriginSlot]);
+    ordered.push(...outImgs);
+    for (const cand of ordered) {
+      const src = imageSourceFromCandidate(cand);
+      if (src) return { src, sourceType: "nodeOutputs", inputName: wanted };
+    }
+  }
+
+  const nodeImgs = Array.isArray(originNode?.imgs) ? originNode.imgs : [];
+  if (nodeImgs.length) {
+    const ordered = [];
+    if (resolvedOriginSlot >= 0 && resolvedOriginSlot < nodeImgs.length) ordered.push(nodeImgs[resolvedOriginSlot]);
+    ordered.push(...nodeImgs);
+    for (const cand of ordered) {
+      const src = imageSourceFromCandidate(cand);
+      if (src) return { src, sourceType: "nodeImgs", inputName: wanted };
+    }
+  }
+
+  const imageWidget = originNode?.widgets?.find((w) => String(w?.name || "").toLowerCase() === "image");
+  if (imageWidget) {
+    let src = imageSourceFromCandidate(imageWidget.value);
+    if (src && !src.includes("/") && !src.includes(":") && (originNode.comfyClass === "LoadImage" || originNode.type === "LoadImage")) {
+      src = api.apiURL(`/view?filename=${encodeURIComponent(src)}&type=input&subfolder=`);
+    }
+    if (src) return { src, sourceType: "widget", inputName: wanted };
+  }
+
+  return { src: "", sourceType: "", inputName: wanted };
+}
+
+function loadLinkedInputImageFromSource(node, cacheKey, srcRaw, onLoad = null) {
+  const sourceText = String(srcRaw || "").trim();
+  if (!sourceText) return null;
+  const candidates = buildImageSrcCandidates(sourceText);
   if (!candidates.length) return null;
   if (!node.__panoLinkedInputImageCache) node.__panoLinkedInputImageCache = new Map();
-  const key = preferredInputNames.join("|") || "image";
+  const key = String(cacheKey || "image");
   const cached = node.__panoLinkedInputImageCache.get(key);
-  if (cached && cached.srcRaw === srcRaw && cached.img) return cached.img;
+  if (cached && cached.srcRaw === sourceText && cached.img) return cached.img;
 
   const img = new Image();
-  const cacheEntry = { srcRaw, resolvedSrc: "", img };
+  const cacheEntry = { srcRaw: sourceText, resolvedSrc: "", img };
   node.__panoLinkedInputImageCache.set(key, cacheEntry);
   let attempt = -1;
   const tryLoadNext = () => {
@@ -1256,7 +1323,7 @@ function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
     onLoad?.();
     node.setDirtyCanvas?.(true, true);
   };
-  img.onerror = (ev) => {
+  img.onerror = () => {
     if (attempt + 1 < candidates.length) {
       tryLoadNext();
       return;
@@ -1265,6 +1332,32 @@ function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
   };
   tryLoadNext();
   return img;
+}
+
+function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
+  const resolved = findLinkedInputImageSource(node, preferredInputNames);
+  const srcRaw = String(resolved?.src || "").trim();
+  if (!srcRaw) return null;
+  const key = preferredInputNames.join("|") || "image";
+  return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
+}
+
+function findPreferredExactLinkedImageSource(node, inputNames = []) {
+  const orderedNames = Array.isArray(inputNames) ? inputNames : [inputNames];
+  for (const name of orderedNames) {
+    const resolved = findExactLinkedInputImageSource(node, name);
+    if (String(resolved?.src || "").trim()) return resolved;
+  }
+  return { src: "", sourceType: "", inputName: "" };
+}
+
+function getPreferredExactLinkedInputImage(node, inputNames = [], onLoad = null, cacheKey = "") {
+  const orderedNames = Array.isArray(inputNames) ? inputNames : [inputNames];
+  const resolved = findPreferredExactLinkedImageSource(node, orderedNames);
+  const srcRaw = String(resolved?.src || "").trim();
+  if (!srcRaw) return null;
+  const key = String(cacheKey || orderedNames.join("|") || "image_exact");
+  return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
 }
 
 function showEditor(node, type, options = {}) {
@@ -2534,6 +2627,13 @@ function showEditor(node, type, options = {}) {
     imageCache.set(cacheKey, img);
     return img;
   }
+
+  function getExternalStickerPreviewImage(onLoad = null) {
+    const linked = getPreferredExactLinkedInputImage(node, ["sticker_image"], onLoad, "sticker_image_exact");
+    if (linked) return linked;
+    return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, onLoad);
+  }
+
   function hashStringSimple(text) {
     const s = String(text || "");
     let h = 2166136261;
@@ -2705,7 +2805,7 @@ function showEditor(node, type, options = {}) {
       ? node.inputs.find((entry) => String(entry?.name || "") === "sticker_image")
       : null;
     const linkId = input?.link ?? null;
-    const previewImg = getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+    const previewImg = getExternalStickerPreviewImage(() => {
       node.__panoExternalStickerSync?.("image-loaded");
     });
     const inputPose = normalizeInputPoseValue(getNodeUiValue("pano_sticker_input_pose"), null);
@@ -2908,7 +3008,7 @@ function showEditor(node, type, options = {}) {
   function getStickerImage(stickerOrAssetId) {
     if (stickerOrAssetId && typeof stickerOrAssetId === "object"
       && (isExternalSticker(stickerOrAssetId) || stickerOrAssetId.external === true)) {
-      return getStickerUiImage(EXTERNAL_STICKER_PREVIEW_KEY, () => {
+      return getExternalStickerPreviewImage(() => {
         node.__panoExternalStickerSync?.("image-loaded");
       });
     }
@@ -3443,7 +3543,7 @@ function showEditor(node, type, options = {}) {
     } else {
       preferred = type === "stickers" ? ["bg_erp", "erp_image"] : ["erp_image", "bg_erp"];
     }
-    const img = getLinkedInputImage(node, preferred, () => requestDraw());
+    const img = getPreferredExactLinkedInputImage(node, preferred, () => requestDraw(), `background:${preferred.join("|")}`);
     return img;
   }
 
@@ -6247,7 +6347,13 @@ function showEditor(node, type, options = {}) {
     `;
     const paintStrokeCount = Array.isArray(state?.painting?.paint?.strokes) ? state.painting.paint.strokes.length : 0;
     const maskStrokeCount = Array.isArray(state?.painting?.mask?.strokes) ? state.painting.mask.strokes.length : 0;
-    const linkedPanoramaSource = findLinkedInputImageSource(node);
+    const panoramaInputNames = Array.isArray(node?.inputs)
+      ? node.inputs.map((entry) => String(entry?.name || ""))
+      : [];
+    const linkedPanoramaSource = findPreferredExactLinkedImageSource(
+      node,
+      panoramaInputNames.includes("erp_image") ? ["erp_image", "bg_erp"] : ["bg_erp", "erp_image"],
+    );
     const hasPanoramaLayer = !!String(linkedPanoramaSource?.src || "").trim();
     const hasObjectLayer = (Array.isArray(getList()) && getList().length > 0) || paintStrokeCount > 0;
     const hasMaskLayer = maskStrokeCount > 0;
@@ -6484,18 +6590,74 @@ function showEditor(node, type, options = {}) {
     }
   }
 
-  function addImageSticker() {
-    if (readOnly) return;
-    if (type !== "stickers" && type !== "cutout") return;
+  function pickImageFile(onFile) {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = "image/*";
     input.onchange = () => {
       const file = input.files?.[0];
-      if (!file) return;
-      void addImageStickerFromFile(file);
+      if (!file || typeof onFile !== "function") return;
+      onFile(file);
     };
     input.click();
+  }
+
+  function addImageSticker() {
+    if (readOnly) return;
+    if (type !== "stickers" && type !== "cutout") return;
+    pickImageFile((file) => {
+      void addImageStickerFromFile(file);
+    });
+  }
+
+  async function replaceSelectedImageFromFile(file) {
+    if (readOnly) return;
+    if (type !== "stickers" && type !== "cutout") return;
+    const selected = getSelected();
+    if (!selected || !isStickerItem(selected) || isExternalSticker(selected)) return;
+    if (!isImageFile(file)) return;
+    const nextAssetId = uid("asset");
+    const tempUrl = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const i = new Image();
+        i.onload = () => resolve(i);
+        i.onerror = () => reject(new Error("image load failed"));
+        i.src = tempUrl;
+      });
+      imageCache.set(nextAssetId, img);
+      const uploaded = await uploadStickerAssetFile(file, String(file.name || nextAssetId));
+      state.assets[nextAssetId] = uploaded;
+      selected.asset_id = nextAssetId;
+      selected.vFOV_deg = computeStickerVFov(
+        Number(selected.hFOV_deg || 30),
+        Number(img.naturalWidth || img.width || 1),
+        Number(img.naturalHeight || img.height || 1),
+      );
+      selected.crop = { x0: 0, y0: 0, x1: 1, y1: 1 };
+      pruneUnusedAssets();
+      markObjectVisualsDirty();
+      pushHistory();
+      commitAndRefreshNode();
+      updateSidePanel();
+      updateSelectionMenu();
+      requestDraw();
+    } catch (err) {
+      console.error("[PanoramaSuite] failed to replace sticker asset", err);
+      delete state.assets[nextAssetId];
+      imageCache.delete(nextAssetId);
+    } finally {
+      URL.revokeObjectURL(tempUrl);
+    }
+  }
+
+  function replaceSelectedImage() {
+    if (readOnly) return;
+    const selected = getSelected();
+    if (!selected || !isStickerItem(selected) || isExternalSticker(selected)) return;
+    pickImageFile((file) => {
+      void replaceSelectedImageFromFile(file);
+    });
   }
 
   async function migrateLegacyEmbeddedAssets() {
@@ -8020,7 +8182,7 @@ function showEditor(node, type, options = {}) {
         selectionMenu.innerHTML = `
           <button class="pano-btn pano-btn-icon" data-action="bring-front" aria-label="Bring to Front" data-tip="Bring to front">${ICON.bring_front}</button>
           <button class="pano-btn pano-btn-icon" data-action="send-back" aria-label="Send to Back" data-tip="Send to back">${ICON.send_back}</button>
-          ${isExternalSticker(selected) ? "" : `<button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button>`}
+          ${isExternalSticker(selected) ? "" : `<button class="pano-btn pano-btn-icon" data-action="duplicate" aria-label="Duplicate" data-tip="Duplicate">${ICON.duplicate}</button><button class="pano-btn pano-btn-icon" data-action="replace-image" aria-label="Replace Image" data-tip="Replace image">${ICON.replace_image}</button>`}
           ${isExternalSticker(selected) ? `<button class="pano-btn pano-btn-icon" data-action="back-initial" aria-label="Back to Initial" data-tip="Back to initial position">${ICON.back_initial}</button>` : ""}
           <button class="pano-btn pano-btn-icon" data-action="toggle-lock" aria-label="${selectedLocked ? "Unlock" : "Lock"}" data-tip="${selectedLocked ? "Unlock" : "Lock"}">${selectedLocked ? ICON.lock_open : ICON.lock_closed}</button>
           ${isExternalSticker(selected)
@@ -9328,6 +9490,10 @@ function showEditor(node, type, options = {}) {
     }
     if (action === "duplicate") {
       duplicateSelected();
+      return;
+    }
+    if (action === "replace-image") {
+      replaceSelectedImage();
       return;
     }
     if (action === "toggle-lock") {

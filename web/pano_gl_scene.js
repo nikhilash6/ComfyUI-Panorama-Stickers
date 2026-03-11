@@ -17,7 +17,9 @@ function normalizeCrop(crop) {
 
 export function normalizeStickerItem(rawSticker) {
   if (!rawSticker || typeof rawSticker !== "object") return null;
-  const assetId = String(rawSticker.asset_id || rawSticker.assetId || "").trim();
+  const explicitAssetId = String(rawSticker.asset_id || rawSticker.assetId || "").trim();
+  const external = rawSticker.type === "external_image" || rawSticker.source_kind === "external_image";
+  const assetId = explicitAssetId || (external ? String(rawSticker.id || "").trim() : "");
   return {
     id: String(rawSticker.id || ""),
     assetId,
@@ -30,7 +32,7 @@ export function normalizeStickerItem(rawSticker) {
     crop: normalizeCrop(rawSticker.crop),
     opacity: clamp(Number(rawSticker.opacity ?? 1), 0, 1),
     visible: rawSticker.visible !== false,
-    external: rawSticker.type === "external_image" || rawSticker.source_kind === "external_image",
+    external,
   };
 }
 
@@ -60,18 +62,19 @@ export function buildStickerTexturesFromState(state, assetLoader, options = {}) 
   const seen = new Set();
   scene.stickers.forEach((item) => {
     const assetId = String(item?.assetId || "").trim();
-    if (!assetId || seen.has(assetId)) return;
-    const asset = assets[assetId];
-    const source = assetLoader(assetId, asset, item);
+    const textureId = assetId || (item?.external ? String(item?.id || "").trim() : "");
+    if (!textureId || seen.has(textureId)) return;
+    const asset = assetId ? assets[assetId] : null;
+    const source = assetLoader(textureId, asset, item);
     const width = Number(source?.naturalWidth || source?.videoWidth || source?.width || 0);
     const height = Number(source?.naturalHeight || source?.videoHeight || source?.height || 0);
     if (!source || width <= 0 || height <= 0) return;
-    seen.add(assetId);
+    seen.add(textureId);
     textures.push({
-      assetId,
+      assetId: textureId,
       source,
-      revision: String(options.revisionFor?.(assetId, asset, source) ?? [
-        assetId,
+      revision: String(options.revisionFor?.(textureId, asset, source) ?? [
+        textureId,
         Number(source.naturalWidth || source.videoWidth || source.width || 0),
         Number(source.naturalHeight || source.videoHeight || source.height || 0),
         String(source.currentSrc || source.src || ""),
