@@ -596,15 +596,9 @@ class PanoramaCutoutNode(io.ComfyNode):
         output_megapixels = max(0.01, finite_float(output_megapixels, 1.0))
         state = merge_state(state_in=None, internal_state=state_json)
         shots = state.get("shots", []) if isinstance(state, dict) else []
-        shot = shots[0] if shots else {
-            "yaw_deg": 0.0,
-            "pitch_deg": 0.0,
-            "hFOV_deg": 90.0,
-            "vFOV_deg": 60.0,
-            "roll_deg": 0.0,
-            "out_w": 1024,
-            "out_h": 1024,
-        }
+        if not shots:
+            raise ValueError("Panorama Cutout requires at least one frame.")
+        shot = shots[0]
 
         yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
         pitch = finite_float(shot.get("pitch_deg", 0.0), 0.0)
