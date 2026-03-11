@@ -52,6 +52,13 @@
   - 外部入力画像を表示するには、`PanoramaStickers` ノード自身の実行結果が必要になる。
   - 上流ノードの出力形式に依存した「その場の即時表示」は優先しない。
 
+## Amendment 2026-03-11
+
+- `PanoramaStickers.execute()` が `bg_erp` を受け取った場合も、現在ノード自身の `pano_input_images` を modal 背景 preview の一次ソースとして扱う。
+- これは external sticker 専用経路を背景へ広げるという意味ではなく、既存の panorama input preview を modal が正しく再利用する、という整理である。
+- linked `IMAGE` 解決は従来どおり維持するが、linked output が `nodeOutputs.images` ではなく `nodeOutputs.ui.images` に出るノードもあるため、同一 output slot の候補として `ui.images` も解決対象に含める。
+- ただし `sticker_image` と `bg_erp` を相互代用してはならず、preview key の責務は分離したままにする。
+
 ## Non-Goals
 
 - 上流ノードのあらゆる `IMAGE` 出力形式をフロントエンドだけで一般解決すること。

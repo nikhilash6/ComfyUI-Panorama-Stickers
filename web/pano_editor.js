@@ -1127,6 +1127,52 @@ function imageSourceFromCandidate(candidate) {
   return comfyImageEntryToUrl(candidate);
 }
 
+function orderedLinkedOutputImageCandidates(outputEntry, preferredSlot = -1) {
+  const groups = [];
+  if (Array.isArray(outputEntry?.images) && outputEntry.images.length) groups.push(outputEntry.images);
+  if (Array.isArray(outputEntry?.ui?.images) && outputEntry.ui.images.length) groups.push(outputEntry.ui.images);
+  const ordered = [];
+  for (const group of groups) {
+    if (!Array.isArray(group) || !group.length) continue;
+    if (preferredSlot >= 0 && preferredSlot < group.length) ordered.push(group[preferredSlot]);
+    ordered.push(...group);
+  }
+  return ordered;
+}
+
+function resolveImageSourceCandidates(candidates) {
+  const out = [];
+  const seen = new Set();
+  for (const cand of candidates || []) {
+    const src = imageSourceFromCandidate(cand);
+    if (!src || seen.has(src)) continue;
+    seen.add(src);
+    out.push(src);
+  }
+  return out;
+}
+
+function getFirstNodeUiImage(node, key, imageCache, onLoad = null) {
+  const outputs = lookupNodeOutputEntry(node?.id);
+  const list = Array.isArray(outputs?.ui?.[key]) ? outputs.ui[key]
+    : Array.isArray(outputs?.[key]) ? outputs[key]
+      : [];
+  const first = Array.isArray(list) && list.length ? list[0] : null;
+  const src = imageSourceFromCandidate(first);
+  if (!src) return null;
+  const cacheKey = `__ui__${key}`;
+  const cached = imageCache.get(cacheKey);
+  if (cached && cached.__panoSrc === src) return cached;
+  const img = new Image();
+  img.__panoSrc = src;
+  img.onload = () => {
+    if (typeof onLoad === "function") onLoad(img);
+  };
+  img.src = src;
+  imageCache.set(cacheKey, img);
+  return img;
+}
+
 function findLinkedInputImageSource(node, preferredInputNames = []) {
   const inputs = Array.isArray(node?.inputs) ? node.inputs : [];
   if (!inputs.length) return { src: "", sourceType: "", inputName: "" };
@@ -1160,26 +1206,17 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       const ordered = [];
       if (resolvedOriginSlot >= 0 && resolvedOriginSlot < appNodeImageUrls.length) ordered.push(appNodeImageUrls[resolvedOriginSlot]);
       ordered.push(...appNodeImageUrls);
-      for (const cand of ordered) {
-        const src = imageSourceFromCandidate(cand);
-        if (src) {
-          return { src, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
-        }
+      const srcCandidates = resolveImageSourceCandidates(ordered);
+      if (srcCandidates.length) {
+        return { src: srcCandidates[0], srcCandidates, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
       }
     }
 
     const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
-    const outImgs = Array.isArray(outputs?.images) ? outputs.images : [];
-    if (outImgs.length) {
-      const ordered = [];
-      if (resolvedOriginSlot >= 0 && resolvedOriginSlot < outImgs.length) ordered.push(outImgs[resolvedOriginSlot]);
-      ordered.push(...outImgs);
-      for (const cand of ordered) {
-        const src = imageSourceFromCandidate(cand);
-        if (src) {
-          return { src, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
-        }
-      }
+    const outputCandidates = orderedLinkedOutputImageCandidates(outputs, resolvedOriginSlot);
+    const outputSrcCandidates = resolveImageSourceCandidates(outputCandidates);
+    if (outputSrcCandidates.length) {
+      return { src: outputSrcCandidates[0], srcCandidates: outputSrcCandidates, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
     }
 
     const nodeImgs = Array.isArray(originNode?.imgs) ? originNode.imgs : [];
@@ -1187,11 +1224,9 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
       const ordered = [];
       if (resolvedOriginSlot >= 0 && resolvedOriginSlot < nodeImgs.length) ordered.push(nodeImgs[resolvedOriginSlot]);
       ordered.push(...nodeImgs);
-      for (const cand of ordered) {
-        const src = imageSourceFromCandidate(cand);
-        if (src) {
-          return { src, sourceType: "nodeImgs", inputName: String(input?.name || "") };
-        }
+      const srcCandidates = resolveImageSourceCandidates(ordered);
+      if (srcCandidates.length) {
+        return { src: srcCandidates[0], srcCandidates, sourceType: "nodeImgs", inputName: String(input?.name || "") };
       }
     }
 
@@ -1253,33 +1288,22 @@ function findExactLinkedInputImageSource(node, inputName) {
     const ordered = [];
     if (resolvedOriginSlot >= 0 && resolvedOriginSlot < appNodeImageUrls.length) ordered.push(appNodeImageUrls[resolvedOriginSlot]);
     ordered.push(...appNodeImageUrls);
-    for (const cand of ordered) {
-      const src = imageSourceFromCandidate(cand);
-      if (src) return { src, sourceType: "appNodeImageUrls", inputName: wanted };
-    }
+    const srcCandidates = resolveImageSourceCandidates(ordered);
+    if (srcCandidates.length) return { src: srcCandidates[0], srcCandidates, sourceType: "appNodeImageUrls", inputName: wanted };
   }
 
   const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
-  const outImgs = Array.isArray(outputs?.images) ? outputs.images : [];
-  if (outImgs.length) {
-    const ordered = [];
-    if (resolvedOriginSlot >= 0 && resolvedOriginSlot < outImgs.length) ordered.push(outImgs[resolvedOriginSlot]);
-    ordered.push(...outImgs);
-    for (const cand of ordered) {
-      const src = imageSourceFromCandidate(cand);
-      if (src) return { src, sourceType: "nodeOutputs", inputName: wanted };
-    }
-  }
+  const outputCandidates = orderedLinkedOutputImageCandidates(outputs, resolvedOriginSlot);
+  const outputSrcCandidates = resolveImageSourceCandidates(outputCandidates);
+  if (outputSrcCandidates.length) return { src: outputSrcCandidates[0], srcCandidates: outputSrcCandidates, sourceType: "nodeOutputs", inputName: wanted };
 
   const nodeImgs = Array.isArray(originNode?.imgs) ? originNode.imgs : [];
   if (nodeImgs.length) {
     const ordered = [];
     if (resolvedOriginSlot >= 0 && resolvedOriginSlot < nodeImgs.length) ordered.push(nodeImgs[resolvedOriginSlot]);
     ordered.push(...nodeImgs);
-    for (const cand of ordered) {
-      const src = imageSourceFromCandidate(cand);
-      if (src) return { src, sourceType: "nodeImgs", inputName: wanted };
-    }
+    const srcCandidates = resolveImageSourceCandidates(ordered);
+    if (srcCandidates.length) return { src: srcCandidates[0], srcCandidates, sourceType: "nodeImgs", inputName: wanted };
   }
 
   const imageWidget = originNode?.widgets?.find((w) => String(w?.name || "").toLowerCase() === "image");
@@ -1334,11 +1358,66 @@ function loadLinkedInputImageFromSource(node, cacheKey, srcRaw, onLoad = null) {
   return img;
 }
 
+function loadLinkedInputImageFromCandidates(node, cacheKey, srcCandidates, onLoad = null) {
+  const rawCandidates = Array.isArray(srcCandidates)
+    ? srcCandidates.map((entry) => String(entry || "").trim()).filter(Boolean)
+    : [];
+  if (!rawCandidates.length) return null;
+  if (!node.__panoLinkedInputImageCache) node.__panoLinkedInputImageCache = new Map();
+  const key = String(cacheKey || "image");
+  const cacheKeyText = rawCandidates.join("\n");
+  const cached = node.__panoLinkedInputImageCache.get(key);
+  if (cached && cached.srcRaw === cacheKeyText && cached.img) return cached.img;
+
+  const candidates = [];
+  const seen = new Set();
+  rawCandidates.forEach((raw) => {
+    buildImageSrcCandidates(raw).forEach((candidate) => {
+      const s = String(candidate || "").trim();
+      if (!s || seen.has(s)) return;
+      seen.add(s);
+      candidates.push(s);
+    });
+  });
+  if (!candidates.length) return null;
+
+  const img = new Image();
+  const cacheEntry = { srcRaw: cacheKeyText, resolvedSrc: "", img };
+  node.__panoLinkedInputImageCache.set(key, cacheEntry);
+  let attempt = -1;
+  const tryLoadNext = () => {
+    attempt += 1;
+    if (attempt >= candidates.length) {
+      try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
+      return;
+    }
+    const nextSrc = candidates[attempt];
+    cacheEntry.resolvedSrc = nextSrc;
+    img.src = nextSrc;
+  };
+
+  img.onload = () => {
+    onLoad?.();
+    node.setDirtyCanvas?.(true, true);
+  };
+  img.onerror = () => {
+    if (attempt + 1 < candidates.length) {
+      tryLoadNext();
+      return;
+    }
+    try { node.__panoLinkedInputImageCache?.delete?.(key); } catch { }
+  };
+  tryLoadNext();
+  return img;
+}
+
 function getLinkedInputImage(node, preferredInputNames = [], onLoad = null) {
   const resolved = findLinkedInputImageSource(node, preferredInputNames);
+  const srcCandidates = Array.isArray(resolved?.srcCandidates) ? resolved.srcCandidates : [];
+  const key = preferredInputNames.join("|") || "image";
+  if (srcCandidates.length) return loadLinkedInputImageFromCandidates(node, key, srcCandidates, onLoad);
   const srcRaw = String(resolved?.src || "").trim();
   if (!srcRaw) return null;
-  const key = preferredInputNames.join("|") || "image";
   return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
 }
 
@@ -1354,9 +1433,11 @@ function findPreferredExactLinkedImageSource(node, inputNames = []) {
 function getPreferredExactLinkedInputImage(node, inputNames = [], onLoad = null, cacheKey = "") {
   const orderedNames = Array.isArray(inputNames) ? inputNames : [inputNames];
   const resolved = findPreferredExactLinkedImageSource(node, orderedNames);
+  const key = String(cacheKey || orderedNames.join("|") || "image_exact");
+  const srcCandidates = Array.isArray(resolved?.srcCandidates) ? resolved.srcCandidates : [];
+  if (srcCandidates.length) return loadLinkedInputImageFromCandidates(node, key, srcCandidates, onLoad);
   const srcRaw = String(resolved?.src || "").trim();
   if (!srcRaw) return null;
-  const key = String(cacheKey || orderedNames.join("|") || "image_exact");
   return loadLinkedInputImageFromSource(node, key, srcRaw, onLoad);
 }
 
@@ -3650,6 +3731,8 @@ function showEditor(node, type, options = {}) {
   }
 
   function getConnectedErpImage() {
+    const uiImg = getFirstNodeUiImage(node, "pano_input_images", imageCache, () => requestDraw());
+    if (uiImg) return uiImg;
     const inputNames = Array.isArray(node?.inputs)
       ? node.inputs.map((i) => String(i?.name || ""))
       : [];
@@ -6472,7 +6555,8 @@ function showEditor(node, type, options = {}) {
       node,
       panoramaInputNames.includes("erp_image") ? ["erp_image", "bg_erp"] : ["bg_erp", "erp_image"],
     );
-    const hasPanoramaLayer = !!String(linkedPanoramaSource?.src || "").trim();
+    const hasPanoramaLayer = !!String(linkedPanoramaSource?.src || "").trim()
+      || getNodeUiList("pano_input_images").length > 0;
     const hasObjectLayer = (Array.isArray(getList()) && getList().length > 0) || paintStrokeCount > 0;
     const hasMaskLayer = maskStrokeCount > 0;
     const isVisibilityEnabled = (key) => {
