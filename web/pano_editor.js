@@ -2622,8 +2622,20 @@ function showEditor(node, type, options = {}) {
     return !!(item && typeof item === "object" && item.visible === false);
   }
   function getStickerDisplayAlpha(item) {
-    if (isExternalSticker(item) && isStickerHidden(item)) return 0.2;
+    if (isExternalSticker(item) && isStickerHidden(item)) return 0.7;
     return 1;
+  }
+  function toggleSelectedExternalStickerVisibility() {
+    if (readOnly || type !== "stickers") return;
+    const selected = getSelected();
+    if (!selected || !isExternalSticker(selected)) return;
+    selected.visible = isStickerHidden(selected);
+    markObjectVisualsDirty();
+    pushHistory();
+    commitAndRefreshNode();
+    updateSidePanel();
+    updateSelectionMenu();
+    requestDraw();
   }
   function restoreSelectedToInitialPose() {
     if (readOnly || type !== "stickers") return;
@@ -6980,6 +6992,17 @@ function showEditor(node, type, options = {}) {
     requestDraw();
   }
 
+  function collectExternalStickersForClearAll() {
+    const stickers = Array.isArray(state.stickers) ? state.stickers : [];
+    const kept = [];
+    for (const item of stickers) {
+      if (!isExternalSticker(item)) continue;
+      item.visible = false;
+      kept.push(item);
+    }
+    return kept;
+  }
+
   function showCanvasConfirm(title, text, confirmLabel = "Clear") {
     return new Promise((resolve) => {
       const layer = document.createElement("div");
@@ -7022,20 +7045,21 @@ function showEditor(node, type, options = {}) {
     if (!ok) return;
     state.painting = normalizePaintingState(null);
     markPaintStrokeVisualsDirty();
+    const keptExternalStickers = collectExternalStickersForClearAll();
     if (type === "stickers") {
-      state.stickers = [];
+      state.stickers = keptExternalStickers;
       state.assets = {};
-      editor.selectedId = null;
+      editor.selectedId = keptExternalStickers[0]?.id || null;
       editor.selectedIds = [];
-      state.active.selected_sticker_id = null;
+      state.active.selected_sticker_id = keptExternalStickers[0]?.id || null;
       pruneUnusedAssets();
     } else {
-      state.stickers = [];
+      state.stickers = keptExternalStickers;
       state.assets = {};
       state.shots = [];
       editor.selectedId = null;
       editor.selectedIds = [];
-      state.active.selected_sticker_id = null;
+      state.active.selected_sticker_id = keptExternalStickers[0]?.id || null;
       state.active.selected_shot_id = null;
       if (editor.mode === "frame") editor.mode = "pano";
       editor.cutoutAspectOpen = false;
@@ -7172,7 +7196,8 @@ function showEditor(node, type, options = {}) {
     }
     if (type === "stickers" || isStickerItem(selected)) {
       if (isExternalSticker(selected)) {
-        selected.visible = isStickerHidden(selected);
+        if (isStickerHidden(selected)) return;
+        selected.visible = false;
         markObjectVisualsDirty();
         pushHistory();
         commitAndRefreshNode();
@@ -9752,7 +9777,7 @@ function showEditor(node, type, options = {}) {
       return;
     }
     if (action === "toggle-visible") {
-      deleteSelected();
+      toggleSelectedExternalStickerVisibility();
       return;
     }
     if (action === "delete") {
