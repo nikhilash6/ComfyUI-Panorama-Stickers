@@ -7152,7 +7152,12 @@ function showEditor(node, type, options = {}) {
       }
       if (stickerIds.size > 0) {
         state.stickers = (Array.isArray(state.stickers) ? state.stickers : [])
-          .filter((item) => !stickerIds.has(String(item?.id || "")));
+          .filter((item) => {
+            if (!stickerIds.has(String(item?.id || ""))) return true;
+            if (!isExternalSticker(item)) return false;
+            if (!isStickerHidden(item)) item.visible = false;
+            return true;
+          });
         pruneUnusedAssets();
         markObjectVisualsDirty();
       }
