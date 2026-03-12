@@ -7050,7 +7050,7 @@ function showEditor(node, type, options = {}) {
       state.stickers = keptExternalStickers;
       state.assets = {};
       editor.selectedId = keptExternalStickers[0]?.id || null;
-      editor.selectedIds = [];
+      editor.selectedIds = editor.selectedId ? [editor.selectedId] : [];
       state.active.selected_sticker_id = keptExternalStickers[0]?.id || null;
       pruneUnusedAssets();
     } else {
@@ -7059,7 +7059,7 @@ function showEditor(node, type, options = {}) {
       state.shots = [];
       editor.selectedId = null;
       editor.selectedIds = [];
-      state.active.selected_sticker_id = keptExternalStickers[0]?.id || null;
+      state.active.selected_sticker_id = null;
       state.active.selected_shot_id = null;
       if (editor.mode === "frame") editor.mode = "pano";
       editor.cutoutAspectOpen = false;
