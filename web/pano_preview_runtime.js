@@ -2071,6 +2071,29 @@ function attachLegacyStickersPreview(node) {
 
 // Returns the display paint canvas for a node's paint state, or null if there are no strokes.
 // Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
+function getDesiredPreviewPaintDescriptor(node, state) {
+  const connected = getLinkedInputImageForPreview(
+    node,
+    ["erp_image", "bg_erp"],
+    () => node.__panoDomPreview?.requestDraw?.(),
+  );
+  const connectedWidth = Number(connected?.naturalWidth || connected?.width || 0);
+  const connectedHeight = Number(connected?.naturalHeight || connected?.height || 0);
+  if (connectedWidth > 1 && connectedHeight > 1) {
+    return {
+      kind: "ERP_GLOBAL",
+      width: Math.max(1, Math.round(connectedWidth)),
+      height: Math.max(1, Math.round(connectedHeight)),
+    };
+  }
+  const presetWidth = Math.max(1, Number(state?.output_preset || 2048));
+  return {
+    kind: "ERP_GLOBAL",
+    width: presetWidth,
+    height: Math.max(1, Math.round(presetWidth * 0.5)),
+  };
+}
+
 function getNodePreviewPaintEngine(node, state) {
   const strokes = state?.painting?.paint?.strokes;
   const maskStrokes = state?.painting?.mask?.strokes;
@@ -2078,8 +2101,11 @@ function getNodePreviewPaintEngine(node, state) {
   const hasMask = Array.isArray(maskStrokes) && maskStrokes.length > 0;
   if (!hasPaint && !hasMask) return null;
 
-  if (!node.__panoPreviewPaintEngine) {
-    node.__panoPreviewPaintEngine = createPaintEngineManager();
+  const descriptor = getDesiredPreviewPaintDescriptor(node, state);
+  const descriptorKey = `${descriptor.width}x${descriptor.height}`;
+  if (!node.__panoPreviewPaintEngine || node.__panoPreviewPaintDescriptorKey !== descriptorKey) {
+    node.__panoPreviewPaintEngine = createPaintEngineManager(descriptor);
+    node.__panoPreviewPaintDescriptorKey = descriptorKey;
     node.__panoPreviewPaintRevision = null;
     node.__panoPreviewPaintRevisionKey = "";
   }

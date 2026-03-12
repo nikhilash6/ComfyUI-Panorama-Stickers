@@ -301,6 +301,51 @@ def _render_raster_layer_from_state(item: dict | None, width: int, height: int):
     return layer
 
 
+def _build_remaining_flat_painting_state(painting: dict | None) -> dict | None:
+    if not isinstance(painting, dict):
+        return None
+    paint_layer = painting.get("paint") if isinstance(painting.get("paint"), dict) else {}
+    all_paint_strokes = paint_layer.get("strokes") if isinstance(paint_layer.get("strokes"), list) else []
+    if not all_paint_strokes:
+        return None
+    known_group_ids = set()
+    for group in painting.get("groups", []):
+        if not isinstance(group, dict):
+            continue
+        gid = str(group.get("actionGroupId") or group.get("id") or "").strip()
+        if gid:
+            known_group_ids.add(gid)
+    strokes = []
+    for stroke in all_paint_strokes:
+        if not isinstance(stroke, dict):
+            continue
+        stroke_gid = str(stroke.get("actionGroupId") or "").strip()
+        tool_kind = str(stroke.get("toolKind") or stroke.get("tool") or stroke.get("mode") or "").strip().lower()
+        eraser_flag = stroke.get("eraser") is True or tool_kind in {"eraser", "erase"}
+        # Group display-list composition already applies group-owned paint. Keep only legacy or
+        # ungrouped flat paint here, and avoid replaying ungrouped erasers over every group twice.
+        if eraser_flag:
+            continue
+        if not stroke_gid or stroke_gid not in known_group_ids:
+            strokes.append(stroke)
+    if not strokes:
+        return None
+    return {
+        "paint": {"strokes": strokes},
+        "mask": {"strokes": []},
+        "groups": [],
+        "raster_objects": [],
+    }
+
+
+def _render_remaining_flat_paint_layer_from_state(painting: dict | None, width: int, height: int):
+    remainder = _build_remaining_flat_painting_state(painting)
+    if remainder is None:
+        return None
+    layer, _mask = render_painting_to_erp(remainder, width, height)
+    return layer
+
+
 def _compose_display_list_to_erp(
     state: dict,
     base_rgb: np.ndarray,
@@ -522,7 +567,10 @@ class PanoramaStickersNode(io.ComfyNode):
             quality="export",
         )
         painting_state = state.get("painting")
-        if not used_group_layers:
+        paint_rgba = None
+        if used_group_layers:
+            paint_rgba = _render_remaining_flat_paint_layer_from_state(painting_state, out_w, out_h)
+        else:
             paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
             if paint_rgba is None:
                 if painting_state_has_renderables(painting_state):
@@ -532,6 +580,7 @@ class PanoramaStickersNode(io.ComfyNode):
                         "Paint export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
                     )
                 paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), out_w, out_h)
+        if paint_rgba is not None:
             out = alpha_composite_over_rgb(out, paint_rgba)
         mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
         if mask_bw is None:
@@ -642,7 +691,10 @@ class PanoramaCutoutNode(io.ComfyNode):
                 quality="export",
             )
             painting_state = state.get("painting")
-            if not used_group_layers:
+            paint_rgba = None
+            if used_group_layers:
+                paint_rgba = _render_remaining_flat_paint_layer_from_state(painting_state, ow, oh)
+            else:
                 paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
                 if paint_rgba is None:
                     if painting_state_has_renderables(painting_state):
@@ -652,6 +704,7 @@ class PanoramaCutoutNode(io.ComfyNode):
                             "Cutout passthrough fell back to backend stroke rendering because uploaded paint layers were unavailable.",
                         )
                     paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), ow, oh)
+            if paint_rgba is not None:
                 out = alpha_composite_over_rgb(out, paint_rgba)
             mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
             if mask_bw is None:
@@ -713,18 +766,18 @@ class PanoramaCutoutNode(io.ComfyNode):
                     )
             if painting_state_has_renderables(painting_state):
                 paint_rgba, mask_bw = render_painting_to_cutout(
-                    state.get("painting"),
+                    _build_remaining_flat_painting_state(painting_state) if used_group_layers else state.get("painting"),
                     shot,
                     ow,
                     oh,
                     erp_width=src.shape[1],
                     erp_height=src.shape[0],
-                    painting_layer_payload=painting_payload,
+                    painting_layer_payload=None if used_group_layers else painting_payload,
                 )
             else:
                 paint_rgba = np.zeros((oh, ow, 4), dtype=np.float32)
                 mask_bw = np.zeros((oh, ow), dtype=np.float32)
-            if not used_group_layers:
+            if paint_rgba is not None:
                 out = alpha_composite_over_rgb(out, paint_rgba)
             out_t = torch.from_numpy(out)[None, ...]
             mask_t = torch.from_numpy(mask_bw.astype(np.float32))[None, ...]
