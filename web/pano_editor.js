@@ -174,6 +174,19 @@ function colorToCss(color, alphaOverride = null) {
 function svgToDataUrl(svg) {
   return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
+let lassoCursorSvgCache = { fillStyle: "", url: "" };
+function getLassoCursorBackground(fillStyle, borderColorOuter, borderColorInner) {
+  if (lassoCursorSvgCache.url && lassoCursorSvgCache.fillStyle === String(fillStyle || "")) {
+    return lassoCursorSvgCache.url;
+  }
+  const url = svgToDataUrl(`
+<svg xmlns="http://www.w3.org/2000/svg" width="${LASSO_CURSOR_SIZE}" height="${LASSO_CURSOR_SIZE}" viewBox="0 0 24 24" fill="none">
+  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${fillStyle}" stroke="${borderColorOuter}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${fillStyle}" stroke="${borderColorInner}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`);
+  lassoCursorSvgCache = { fillStyle: String(fillStyle || ""), url };
+  return url;
+}
 function colorsApproximatelyEqual(a, b, eps = 0.015) {
   if (!a || !b) return false;
   return Math.abs(Number(a.r ?? 0) - Number(b.r ?? 0)) <= eps
@@ -1534,8 +1547,8 @@ function showEditor(node, type, options = {}) {
       <div class="pano-paint-dock is-hidden" data-paint-dock>
         <div class="pano-paint-pane" data-paint-pane="paint">
           <div class="pano-paint-color-float" data-paint-color-row hidden>
-            ${PAINT_COLOR_SWATCHES.map((swatch) => `<button class="pano-paint-color-dot" type="button" data-paint-color-swatch="${swatch.id}" aria-label="${swatch.label}" data-tip="${swatch.label}" style="--swatch:${colorToCss(swatch.color, 1)}"></button>`).join("")}
-            <button class="pano-paint-color-dot pano-paint-color-dot-rainbow" type="button" data-paint-color-custom aria-label="Custom color" data-tip="Custom color"></button>
+              ${PAINT_COLOR_SWATCHES.map((swatch) => `<button class="pano-paint-color-dot" type="button" data-paint-color-swatch="${swatch.id}" aria-label="${swatch.label}" style="--swatch:${colorToCss(swatch.color, 1)}"></button>`).join("")}
+              <button class="pano-paint-color-dot pano-paint-color-dot-rainbow" type="button" data-paint-color-custom aria-label="Custom color"></button>
             <div class="pano-paint-color-pop" data-paint-color-pop hidden>
               <div class="pano-paint-color-pop-head">
                 <span class="pano-paint-color-preview" data-paint-color-preview></span>
@@ -1698,7 +1711,7 @@ function showEditor(node, type, options = {}) {
       cloneColor(editor.customPaintColor),
       ...editor.customPaintHistory.filter((item) => !colorsApproximatelyEqual(item, editor.customPaintColor)),
     ];
-    editor.customPaintHistory = next.slice(0, 7);
+    editor.customPaintHistory = next.slice(0, 8);
     editor.customPaintSessionStart = null;
   };
   const closePaintColorPop = (commitHistory = false) => {
@@ -6111,6 +6124,10 @@ function showEditor(node, type, options = {}) {
       setPaintDockVisible(showFooter);
     }
     if (!showFooter) {
+      paintPanes.forEach((pane) => {
+        pane.classList.remove("is-active");
+      });
+      paintColorPop.hidden = true;
       visiblePaintPaneMode = "";
       return;
     }
@@ -6179,7 +6196,7 @@ function showEditor(node, type, options = {}) {
         paintHueHandle.style.left = `${clamp(hsv.h, 0, 1) * 100}%`;
       }
       if (paintColorHistoryWrap && paintColorHistory) {
-        const slots = Array.from({ length: 7 }, (_, index) => editor.customPaintHistory[index] || null);
+        const slots = Array.from({ length: 8 }, (_, index) => editor.customPaintHistory[index] || null);
         paintColorHistory.innerHTML = slots.map((color, index) => `
           <button class="pano-paint-color-history-dot${color ? "" : " empty"}" type="button" data-paint-history-index="${index}" ${color ? `style="--swatch:${colorToCss(color, 1)}"` : ""} aria-label="Recent color ${index + 1}" ${color ? "" : "disabled"}></button>
         `).join("");
@@ -7635,11 +7652,7 @@ function showEditor(node, type, options = {}) {
       boxShadow = "none";
       hotspotX = LASSO_CURSOR_HOTSPOT_X;
       hotspotY = LASSO_CURSOR_HOTSPOT_Y;
-      background = svgToDataUrl(`
-<svg xmlns="http://www.w3.org/2000/svg" width="${LASSO_CURSOR_SIZE}" height="${LASSO_CURSOR_SIZE}" viewBox="0 0 24 24" fill="none">
-  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${cursor.fillStyle}" stroke="${borderColorOuter}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${cursor.fillStyle}" stroke="${borderColorInner}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>`);
+      background = getLassoCursorBackground(cursor.fillStyle, borderColorOuter, borderColorInner);
     } else if (cursor.layerKind === "mask") {
       background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.72) 0px, rgba(18,18,18,0.72) 4px, rgba(18,18,18,0.16) 4px, rgba(18,18,18,0.16) 8px)`;
     } else if (cursor.toolKind === "marker") {
@@ -8693,6 +8706,9 @@ function showEditor(node, type, options = {}) {
       }
       return;
     }
+    if (paintColorPop && !paintColorPop.hidden) {
+      return;
+    }
 
     if ((editor.primaryTool === "paint" || editor.primaryTool === "mask") && (supportsErpPainting() || supportsFramePainting())) {
       const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
@@ -9511,7 +9527,7 @@ function showEditor(node, type, options = {}) {
         if (readOnly) return;
         const newTool = String(btn.getAttribute("data-tool-mode") || "cursor");
         editor.primaryTool = newTool;
-        if (newTool === "mask") {
+        if (newTool === "paint" || newTool === "mask") {
           clearSelection({ preservePanelValues: true });
         }
         syncPaintUi();
@@ -9556,9 +9572,7 @@ function showEditor(node, type, options = {}) {
       editor.primaryTool = "paint";
       const tool = String(btn.getAttribute("data-paint-tool") || "pen");
       editor.paintTool = tool;
-      if (tool !== "eraser") {
-        clearSelection({ preservePanelValues: true });
-      }
+      clearSelection({ preservePanelValues: true });
       if (BRUSH_PRESETS[tool]) editor.activeBrushPresetId = tool;
       syncPaintUi();
       updateSidePanel();
