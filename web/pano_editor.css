@@ -590,6 +590,7 @@
   transition: opacity 220ms ease;
 }
 .pano-paint-dock.is-hidden {
+  visibility: hidden;
   pointer-events: none;
   opacity: 0;
 }
@@ -811,6 +812,8 @@
   display: flex;
   flex-wrap: nowrap;
   gap: 8px;
+  justify-content: center;
+  width: 100%;
 }
 .pano-paint-color-history-dot {
   width: 15px;
