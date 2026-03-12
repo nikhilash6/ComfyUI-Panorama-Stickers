@@ -667,7 +667,7 @@ class PanoramaCutoutNode(io.ComfyNode):
             _push_ui_warning(
                 ui_ret,
                 "pano_cutout_warnings",
-                "Panorama Cutout has no frame, so the ERP image was returned unchanged.",
+                "Panorama Cutout has no frame, so the ERP geometry was passed through unchanged while display-list layers, paint, and mask output were still applied.",
             )
             out_t = torch.from_numpy(out.astype(np.float32, copy=False))[None, ...]
             mask_t = torch.from_numpy(np.clip(mask_bw.astype(np.float32), 0.0, 1.0))[None, ...]

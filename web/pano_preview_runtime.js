@@ -1419,6 +1419,25 @@ function containRect(outer, aspect) {
   };
 }
 
+function drawContainedImagePreview(ctx, img, outerRect, dimAlpha = 0) {
+  if (!ctx || !img || !outerRect) return false;
+  const iw = Math.max(1, Number(img.naturalWidth || img.width || 0));
+  const ih = Math.max(1, Number(img.naturalHeight || img.height || 0));
+  if (iw <= 1 || ih <= 1) return false;
+  const drawRect = containRect(outerRect, iw / ih);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "low";
+  ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+  const alpha = Math.max(0, Math.min(1, Number(dimAlpha) || 0));
+  if (alpha > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+  }
+  ctx.restore();
+  return true;
+}
+
 function getCutoutContainRect(baseRect, shot) {
   const w = Math.max(1, Number(baseRect?.w || 0));
   const h = Math.max(1, Number(baseRect?.h || 0));
@@ -2280,6 +2299,12 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
 
   if (mode === "cutout") {
     const shot = getActiveShot(state);
+    const bgImg = getLinkedInputImageForPreview(
+      node,
+      ["erp_image", "bg_erp"],
+      () => node.__panoDomPreview?.requestDraw?.(),
+    );
+    const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
     if (canvas.width !== surfW || canvas.height !== surfH) {
       canvas.width = surfW;
       canvas.height = surfH;
@@ -2287,7 +2312,9 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     const rect = { x: 0, y: 0, w: surfW, h: surfH };
     const ownAspect = ownOutReady
       ? clamp(Number((ownOut.naturalWidth || ownOut.width) / Math.max(1, Number(ownOut.naturalHeight || ownOut.height || 1))), 0.05, 20.0)
-      : 1;
+      : (bgReady
+        ? clamp(Number((bgImg.naturalWidth || bgImg.width) / Math.max(1, Number(bgImg.naturalHeight || bgImg.height || 1))), 0.05, 20.0)
+        : 1);
     const cutoutView = shot ? buildCutoutViewParamsFromShot(shot) : null;
     const aspect = clamp(Number(cutoutView?.aspect || ownAspect || 1), 0.05, 20.0);
     const contain = containRect(rect, aspect);
@@ -2315,14 +2342,15 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     if (ownOutReady) {
       ctx.drawImage(ownOut, contain.x, contain.y, contain.w, contain.h);
     } else {
-      const bgImg = getLinkedInputImageForPreview(
-        node,
-        ["erp_image", "bg_erp"],
-        () => node.__panoDomPreview?.requestDraw?.(),
-      );
-      const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
       loadingSrc = String(bgImg?.src || "");
       if (!shot) {
+        if (bgReady) {
+          const paintSurface = getNodePreviewPaintSurface(node, state);
+          const previewSource = (paintSurface?.source)
+            ? buildBgPaintCanvas(node, bgImg, paintSurface.source, paintSurface.revision || "")
+            : bgImg;
+          drawContainedImagePreview(ctx, previewSource, rect, 0);
+        }
         statusType = "empty";
         hintText = "Open editor and add frame";
       } else if (bgImg && !bgReady) {
