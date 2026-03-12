@@ -250,8 +250,27 @@ function deriveCutoutAspectFromFov(item) {
   const vf = clamp(Number(item?.vFOV_deg || 60), 1, 179) * DEG2RAD;
   return Math.max(0.05, Math.min(20, Math.tan(hf * 0.5) / Math.max(1e-6, Math.tan(vf * 0.5))));
 }
+function getCanonicalCutoutAspectId(aspect) {
+  const value = Number(aspect);
+  if (!Number.isFinite(value) || value <= 0) return "1:1";
+  const presets = [
+    ["1:1", 1],
+    ["4:3", 4 / 3],
+    ["3:2", 3 / 2],
+    ["16:9", 16 / 9],
+    ["9:16", 9 / 16],
+    ["2:3", 2 / 3],
+    ["3:4", 3 / 4],
+  ];
+  const epsilon = 0.015;
+  for (const [label, preset] of presets) {
+    if (Math.abs(value - preset) <= epsilon) return label;
+  }
+  return "";
+}
 function deriveCutoutAspectLabelFromFov(item) {
-  return ratioTextFromPair(deriveCutoutAspectFromFov(item), 1);
+  const aspect = deriveCutoutAspectFromFov(item);
+  return getCanonicalCutoutAspectId(aspect) || ratioTextFromPair(aspect, 1);
 }
 function normalizeCutoutShotItem(raw) {
   if (!raw || typeof raw !== "object") return raw;

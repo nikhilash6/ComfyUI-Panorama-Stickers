@@ -2208,49 +2208,53 @@ function compositeScaledOverlayOntoOpaqueCanvas(owner, targetCtx, overlaySource,
     targetCtx.drawImage(overlaySource, 0, 0, dstW, dstH);
     return;
   }
-  scratchCtx.clearRect(0, 0, srcSize.width, srcSize.height);
-  scratchCtx.drawImage(overlaySource, 0, 0, srcSize.width, srcSize.height);
-  const srcData = scratchCtx.getImageData(0, 0, srcSize.width, srcSize.height).data;
-  const dstImage = targetCtx.getImageData(0, 0, dstW, dstH);
-  const dstData = dstImage.data;
-  const maxSrcX = Math.max(0, srcSize.width - 1);
-  const maxSrcY = Math.max(0, srcSize.height - 1);
-  for (let y = 0; y < dstH; y += 1) {
-    const sy = ((y + 0.5) * srcSize.height) / dstH - 0.5;
-    const y0 = clamp(Math.floor(sy), 0, maxSrcY);
-    const y1 = clamp(y0 + 1, 0, maxSrcY);
-    const ty = clamp(sy - y0, 0, 1);
-    for (let x = 0; x < dstW; x += 1) {
-      const sx = ((x + 0.5) * srcSize.width) / dstW - 0.5;
-      const x0 = clamp(Math.floor(sx), 0, maxSrcX);
-      const x1 = clamp(x0 + 1, 0, maxSrcX);
-      const tx = clamp(sx - x0, 0, 1);
-      let srcA = 0;
-      let srcR = 0;
-      let srcG = 0;
-      let srcB = 0;
-      const sample = (px, py, weight) => {
-        const idx = (py * srcSize.width + px) * 4;
-        const a = (srcData[idx + 3] || 0) / 255;
-        srcA += a * weight;
-        srcR += ((srcData[idx] || 0) / 255) * a * weight;
-        srcG += ((srcData[idx + 1] || 0) / 255) * a * weight;
-        srcB += ((srcData[idx + 2] || 0) / 255) * a * weight;
-      };
-      sample(x0, y0, (1 - tx) * (1 - ty));
-      sample(x1, y0, tx * (1 - ty));
-      sample(x0, y1, (1 - tx) * ty);
-      sample(x1, y1, tx * ty);
-      if (srcA <= 1e-6) continue;
-      const dstIdx = (y * dstW + x) * 4;
-      const invA = 1 - srcA;
-      dstData[dstIdx] = Math.round(clamp((srcR + (dstData[dstIdx] / 255) * invA) * 255, 0, 255));
-      dstData[dstIdx + 1] = Math.round(clamp((srcG + (dstData[dstIdx + 1] / 255) * invA) * 255, 0, 255));
-      dstData[dstIdx + 2] = Math.round(clamp((srcB + (dstData[dstIdx + 2] / 255) * invA) * 255, 0, 255));
-      dstData[dstIdx + 3] = 255;
+  try {
+    scratchCtx.clearRect(0, 0, srcSize.width, srcSize.height);
+    scratchCtx.drawImage(overlaySource, 0, 0, srcSize.width, srcSize.height);
+    const srcData = scratchCtx.getImageData(0, 0, srcSize.width, srcSize.height).data;
+    const dstImage = targetCtx.getImageData(0, 0, dstW, dstH);
+    const dstData = dstImage.data;
+    const maxSrcX = Math.max(0, srcSize.width - 1);
+    const maxSrcY = Math.max(0, srcSize.height - 1);
+    for (let y = 0; y < dstH; y += 1) {
+      const sy = ((y + 0.5) * srcSize.height) / dstH - 0.5;
+      const y0 = clamp(Math.floor(sy), 0, maxSrcY);
+      const y1 = clamp(y0 + 1, 0, maxSrcY);
+      const ty = clamp(sy - y0, 0, 1);
+      for (let x = 0; x < dstW; x += 1) {
+        const sx = ((x + 0.5) * srcSize.width) / dstW - 0.5;
+        const x0 = clamp(Math.floor(sx), 0, maxSrcX);
+        const x1 = clamp(x0 + 1, 0, maxSrcX);
+        const tx = clamp(sx - x0, 0, 1);
+        let srcA = 0;
+        let srcR = 0;
+        let srcG = 0;
+        let srcB = 0;
+        const sample = (px, py, weight) => {
+          const idx = (py * srcSize.width + px) * 4;
+          const a = (srcData[idx + 3] || 0) / 255;
+          srcA += a * weight;
+          srcR += ((srcData[idx] || 0) / 255) * a * weight;
+          srcG += ((srcData[idx + 1] || 0) / 255) * a * weight;
+          srcB += ((srcData[idx + 2] || 0) / 255) * a * weight;
+        };
+        sample(x0, y0, (1 - tx) * (1 - ty));
+        sample(x1, y0, tx * (1 - ty));
+        sample(x0, y1, (1 - tx) * ty);
+        sample(x1, y1, tx * ty);
+        if (srcA <= 1e-6) continue;
+        const dstIdx = (y * dstW + x) * 4;
+        const invA = 1 - srcA;
+        dstData[dstIdx] = Math.round(clamp((srcR + (dstData[dstIdx] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 1] = Math.round(clamp((srcG + (dstData[dstIdx + 1] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 2] = Math.round(clamp((srcB + (dstData[dstIdx + 2] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 3] = 255;
+      }
     }
+    targetCtx.putImageData(dstImage, 0, 0);
+  } catch {
+    targetCtx.drawImage(overlaySource, 0, 0, dstW, dstH);
   }
-  targetCtx.putImageData(dstImage, 0, 0);
 }
 
 // Returns a canvas with bgImg and the paint layer pre-composited (ERP space).
@@ -2349,7 +2353,7 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
           const previewSource = (paintSurface?.source)
             ? buildBgPaintCanvas(node, bgImg, paintSurface.source, paintSurface.revision || "")
             : bgImg;
-          drawContainedImagePreview(ctx, previewSource, rect, 0);
+          drawContainedImagePreview(ctx, previewSource, rect, 0.32);
         }
         statusType = "empty";
         hintText = "Open editor and add frame";

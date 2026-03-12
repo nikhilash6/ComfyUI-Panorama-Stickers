@@ -62,7 +62,7 @@ function clearSurface(surface) {
 
 // ─── Mask Hatch Overlay ───────────────────────────────────────────────────────
 
-// Shared temp canvas for drawMaskTint — resized lazily, never shrunk.
+// Shared temp canvas for drawMaskTint.
 let _maskTintTmp = null;
 // Cached small tile canvas for the diagonal stripe pattern.
 let _maskHatchTile = null;
@@ -109,14 +109,9 @@ function drawMaskTint(displayCtx, maskCanvas) {
   if (!displayCtx || !maskCanvas) return;
   const w = maskCanvas.width;
   const h = maskCanvas.height;
-  if (!_maskTintTmp || _maskTintTmp.canvas.width < w || _maskTintTmp.canvas.height < h) {
-    _maskTintTmp = createCanvasSurface(
-      Math.max(w, _maskTintTmp?.canvas.width || 0),
-      Math.max(h, _maskTintTmp?.canvas.height || 0),
-    );
-  }
+  _maskTintTmp = resizeSurface(_maskTintTmp, w, h);
   const tmp = _maskTintTmp;
-  tmp.ctx.clearRect(0, 0, w, h);
+  clearSurface(tmp);
   tmp.ctx.drawImage(maskCanvas, 0, 0);
   tmp.ctx.globalCompositeOperation = "source-in";
   if (_maskHatchPatternCtx !== tmp.ctx) {
@@ -128,7 +123,7 @@ function drawMaskTint(displayCtx, maskCanvas) {
   tmp.ctx.globalCompositeOperation = "source-over";
   displayCtx.save();
   displayCtx.globalCompositeOperation = "source-over";
-  displayCtx.drawImage(tmp.canvas, 0, 0, w, h);
+  displayCtx.drawImage(tmp.canvas, 0, 0);
   displayCtx.restore();
 }
 
@@ -672,14 +667,12 @@ function drawStrokeToSurface(ctx, stroke, descriptor) {
   } else {
     // Two-step composite: draw stamps at full flow into a shared temp surface,
     // then composite at stroke opacity. Ensures correct flat/accumulate behaviour on rebuild.
-    if (!_strokeOpacityTmp || _strokeOpacityTmp.canvas.width < descriptor.width || _strokeOpacityTmp.canvas.height < descriptor.height) {
-      _strokeOpacityTmp = createCanvasSurface(descriptor.width, descriptor.height);
-    }
+    _strokeOpacityTmp = resizeSurface(_strokeOpacityTmp, descriptor.width, descriptor.height);
     clearSurface(_strokeOpacityTmp);
     drawStampStroke(_strokeOpacityTmp.ctx, stroke, descriptor);
     ctx.save();
     ctx.globalAlpha = opacity;
-    ctx.drawImage(_strokeOpacityTmp.canvas, 0, 0, descriptor.width, descriptor.height);
+    ctx.drawImage(_strokeOpacityTmp.canvas, 0, 0);
     ctx.restore();
   }
 }
