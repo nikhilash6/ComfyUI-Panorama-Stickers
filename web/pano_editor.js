@@ -36,6 +36,9 @@ const PAINT_COLOR_SWATCHES = [
 ];
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
+const LASSO_CURSOR_SIZE = 24;
+const LASSO_CURSOR_HOTSPOT_X = 4;
+const LASSO_CURSOR_HOTSPOT_Y = 4;
 
 // Global registry: nodeId → Promise for in-flight paint layer uploads.
 // beforeQueuePrompt waits for all pending promises before sending the graph.
@@ -167,6 +170,9 @@ function lerp(a, b, t) {
 function colorToCss(color, alphaOverride = null) {
   const alpha = alphaOverride == null ? Number(color?.a ?? 1) : Number(alphaOverride);
   return `rgba(${Math.round(clamp(Number(color?.r ?? 0), 0, 1) * 255)}, ${Math.round(clamp(Number(color?.g ?? 0), 0, 1) * 255)}, ${Math.round(clamp(Number(color?.b ?? 0), 0, 1) * 255)}, ${clamp(alpha, 0, 1)})`;
+}
+function svgToDataUrl(svg) {
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
 }
 function colorsApproximatelyEqual(a, b, eps = 0.015) {
   if (!a || !b) return false;
@@ -2625,6 +2631,12 @@ function showEditor(node, type, options = {}) {
   function getStickerDisplayAlpha(item) {
     if (isExternalSticker(item) && isStickerHidden(item)) return HIDDEN_PREVIEW_OPACITY;
     return 1;
+  }
+  function getActivePaintToolKind() {
+    return editor.primaryTool === "mask" ? editor.maskTool : editor.paintTool;
+  }
+  function isActiveLassoTool() {
+    return String(getActivePaintToolKind() || "") === "lasso_fill";
   }
   function toggleSelectedExternalStickerVisibility() {
     if (readOnly || type !== "stickers") return;
@@ -6185,10 +6197,13 @@ function showEditor(node, type, options = {}) {
     }
     const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
     const currentSize = editor.brushSizes[sizePresetId] ?? 10;
+    const lassoToolActive = isActiveLassoTool();
+    if (paintSizeRow) paintSizeRow.classList.toggle("disabled", lassoToolActive);
     if (paintSizeSlider) {
       paintSizeSlider.value = String(currentSize);
       const pct = ((currentSize - 1) / 119) * 100;
       paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
+      paintSizeSlider.disabled = lassoToolActive;
     }
     if (paintSizeValue) paintSizeValue.textContent = String(currentSize);
   }
@@ -7587,6 +7602,8 @@ function showEditor(node, type, options = {}) {
       strokeStyle: colorToCss(baseColor, strokeAlpha),
       x: Number(editor.pointerPos?.x || 0),
       y: Number(editor.pointerPos?.y || 0),
+      hotspotX: radius,
+      hotspotY: radius,
     };
   }
 
@@ -7603,10 +7620,27 @@ function showEditor(node, type, options = {}) {
     let borderRadius = "999px";
     let rotateDeg = 0;
     let background = cursor.fillStyle;
+    let border = `1px solid rgba(222, 222, 222, 0.72)`;
+    let boxShadow = `0 0 0 1px rgba(52, 52, 52, 0.72)`;
     const borderColorInner = "rgba(222, 222, 222, 0.72)";
     const borderColorOuter = "rgba(52, 52, 52, 0.72)";
+    let hotspotX = Number(cursor.hotspotX ?? width * 0.5);
+    let hotspotY = Number(cursor.hotspotY ?? height * 0.5);
 
-    if (cursor.layerKind === "mask") {
+    if (cursor.toolKind === "lasso_fill") {
+      width = LASSO_CURSOR_SIZE;
+      height = LASSO_CURSOR_SIZE;
+      borderRadius = "0";
+      border = "0";
+      boxShadow = "none";
+      hotspotX = LASSO_CURSOR_HOTSPOT_X;
+      hotspotY = LASSO_CURSOR_HOTSPOT_Y;
+      background = svgToDataUrl(`
+<svg xmlns="http://www.w3.org/2000/svg" width="${LASSO_CURSOR_SIZE}" height="${LASSO_CURSOR_SIZE}" viewBox="0 0 24 24" fill="none">
+  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${cursor.fillStyle}" stroke="${borderColorOuter}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" fill="${cursor.fillStyle}" stroke="${borderColorInner}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>`);
+    } else if (cursor.layerKind === "mask") {
       background = `repeating-linear-gradient(135deg, rgba(18,18,18,0.72) 0px, rgba(18,18,18,0.72) 4px, rgba(18,18,18,0.16) 4px, rgba(18,18,18,0.16) 8px)`;
     } else if (cursor.toolKind === "marker") {
       const aspect = Math.max(1, Number(cursor.preset?.aspect ?? 1));
@@ -7616,10 +7650,6 @@ function showEditor(node, type, options = {}) {
       rotateDeg = Number(cursor.preset?.angle?.value || 0) * RAD2DEG;
     } else if (cursor.toolKind === "brush") {
       background = `radial-gradient(circle at 50% 50%, ${cursor.strokeStyle} 0%, ${cursor.fillStyle} 45%, rgba(0,0,0,0) 100%)`;
-    } else if (cursor.toolKind === "lasso_fill") {
-      width = Math.max(12, cursor.radius * 1.5);
-      height = width;
-      background = `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 45%, ${cursor.strokeStyle} 46%, ${cursor.strokeStyle} 60%, rgba(0,0,0,0) 61%)`;
     } else if (cursor.toolKind === "eraser") {
       background = "rgba(255,255,255,0.14)";
     }
@@ -7628,16 +7658,20 @@ function showEditor(node, type, options = {}) {
     paintCursorEl.style.width = `${Math.round(width)}px`;
     paintCursorEl.style.height = `${Math.round(height)}px`;
     paintCursorEl.style.borderRadius = borderRadius;
-    paintCursorEl.style.border = `1px solid ${borderColorInner}`;
-    paintCursorEl.style.boxShadow = `0 0 0 1px ${borderColorOuter}`;
+    paintCursorEl.style.border = border;
+    paintCursorEl.style.boxShadow = boxShadow;
     paintCursorEl.style.background = background;
-    paintCursorEl.style.transform = `translate(${Math.round(cursor.x - width * 0.5)}px, ${Math.round(cursor.y - height * 0.5)}px) rotate(${rotateDeg}deg)`;
+    paintCursorEl.style.backgroundRepeat = "no-repeat";
+    paintCursorEl.style.backgroundPosition = "center";
+    paintCursorEl.style.backgroundSize = "contain";
+    paintCursorEl.style.transform = `translate(${Math.round(cursor.x - hotspotX)}px, ${Math.round(cursor.y - hotspotY)}px) rotate(${rotateDeg}deg)`;
   }
 
   function showPaintSizePreview() {
     if (!paintSizePreviewEl || !paintSizePreviewSampleEl) return;
     const layerKind = editor.primaryTool === "mask" ? "mask" : "paint";
     const toolKind = layerKind === "mask" ? editor.maskTool : editor.paintTool;
+    if (toolKind === "lasso_fill") return;
     const presetId = getBrushPresetIdForTool(toolKind);
     const preset = BRUSH_PRESETS[presetId] || BRUSH_PRESETS[DEFAULT_BRUSH_PRESET_ID];
     const rawSize = Number(editor.brushSizes[presetId] ?? 10);
@@ -9551,6 +9585,7 @@ function showEditor(node, type, options = {}) {
   });
   if (paintSizeSlider) {
     paintSizeSlider.oninput = () => {
+      if (paintSizeSlider.disabled) return;
       const v = Math.max(1, Math.min(120, Math.round(Number(paintSizeSlider.value))));
       const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
       editor.brushSizes[sizePresetId] = v;
