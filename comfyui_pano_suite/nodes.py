@@ -323,8 +323,8 @@ def _build_remaining_flat_painting_state(painting: dict | None) -> dict | None:
         tool_kind = str(stroke.get("toolKind") or stroke.get("tool") or stroke.get("mode") or "").strip().lower()
         eraser_flag = stroke.get("eraser") is True or tool_kind in {"eraser", "erase"}
         # Group display-list composition already applies group-owned paint. Keep only legacy or
-        # ungrouped flat paint here, and avoid replaying ungrouped erasers over every group twice.
-        if eraser_flag:
+        # ungrouped flat paint here, and avoid replaying group-owned erasers twice.
+        if eraser_flag and stroke_gid and stroke_gid in known_group_ids:
             continue
         if not stroke_gid or stroke_gid not in known_group_ids:
             strokes.append(stroke)
@@ -765,15 +765,35 @@ class PanoramaCutoutNode(io.ComfyNode):
                         "Cutout export fell back to backend stroke rendering because uploaded paint layers were unavailable.",
                     )
             if painting_state_has_renderables(painting_state):
-                paint_rgba, mask_bw = render_painting_to_cutout(
-                    _build_remaining_flat_painting_state(painting_state) if used_group_layers else state.get("painting"),
-                    shot,
-                    ow,
-                    oh,
-                    erp_width=src.shape[1],
-                    erp_height=src.shape[0],
-                    painting_layer_payload=None if used_group_layers else painting_payload,
-                )
+                if used_group_layers:
+                    paint_rgba, _paint_mask_unused = render_painting_to_cutout(
+                        _build_remaining_flat_painting_state(painting_state),
+                        shot,
+                        ow,
+                        oh,
+                        erp_width=src.shape[1],
+                        erp_height=src.shape[0],
+                        painting_layer_payload=None,
+                    )
+                    _paint_unused, mask_bw = render_painting_to_cutout(
+                        state.get("painting"),
+                        shot,
+                        ow,
+                        oh,
+                        erp_width=src.shape[1],
+                        erp_height=src.shape[0],
+                        painting_layer_payload=painting_payload,
+                    )
+                else:
+                    paint_rgba, mask_bw = render_painting_to_cutout(
+                        state.get("painting"),
+                        shot,
+                        ow,
+                        oh,
+                        erp_width=src.shape[1],
+                        erp_height=src.shape[0],
+                        painting_layer_payload=painting_payload,
+                    )
             else:
                 paint_rgba = np.zeros((oh, ow, 4), dtype=np.float32)
                 mask_bw = np.zeros((oh, ow), dtype=np.float32)
