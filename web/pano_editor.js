@@ -16,6 +16,7 @@ import { createPaintEngineManager } from "./pano_paint_engine.js";
 import { normalizePaintingState } from "./pano_paint_types.js";
 import {
   buildCutoutViewParamsFromShot,
+  HIDDEN_PREVIEW_OPACITY,
   buildPanoramaViewParamsFromEditor,
   buildStickerSceneFromState,
   buildStickerTexturesFromState,
@@ -2622,7 +2623,7 @@ function showEditor(node, type, options = {}) {
     return !!(item && typeof item === "object" && item.visible === false);
   }
   function getStickerDisplayAlpha(item) {
-    if (isExternalSticker(item) && isStickerHidden(item)) return 0.7;
+    if (isExternalSticker(item) && isStickerHidden(item)) return HIDDEN_PREVIEW_OPACITY;
     return 1;
   }
   function toggleSelectedExternalStickerVisibility() {

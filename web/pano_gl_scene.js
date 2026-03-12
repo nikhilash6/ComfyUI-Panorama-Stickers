@@ -1,7 +1,7 @@
 import { getCutoutShotParams } from "./pano_cutout_projection.js";
 import { clamp } from "./pano_math.js";
 
-const HIDDEN_EXTERNAL_PREVIEW_OPACITY = 0.28;
+export const HIDDEN_PREVIEW_OPACITY = 0.28;
 
 function normalizeCrop(crop) {
   const raw = (crop && typeof crop === "object") ? crop : {};
@@ -35,7 +35,7 @@ export function normalizeStickerItem(rawSticker, options = {}) {
     hFovDeg: clamp(Number(rawSticker.hFOV_deg || rawSticker.hFovDeg || 30), 1, 179),
     vFovDeg: clamp(Number(rawSticker.vFOV_deg || rawSticker.vFovDeg || 30), 1, 179),
     crop: normalizeCrop(rawSticker.crop),
-    opacity: hiddenExternalPreview ? HIDDEN_EXTERNAL_PREVIEW_OPACITY : clamp(Number(rawSticker.opacity ?? 1), 0, 1),
+    opacity: hiddenExternalPreview ? HIDDEN_PREVIEW_OPACITY : clamp(Number(rawSticker.opacity ?? 1), 0, 1),
     visible: hiddenExternalPreview ? true : rawSticker.visible !== false,
     external,
   };
