@@ -870,11 +870,10 @@ function appendStrokePoint(target, x, y, stroke) {
 //     .committedMask.canvas — raw mask ERP (for WebGL setMaskErp)
 //     .descriptor
 
-const ERP_DESC = { kind: "ERP_GLOBAL", width: 2048, height: 1024 };
-const ERP_W = 2048;
-const ERP_H = 1024;
-
-export function createPaintEngineManager() {
+export function createPaintEngineManager(options = {}) {
+  const ERP_W = Math.max(1, Math.round(Number(options?.width || 2048)));
+  const ERP_H = Math.max(1, Math.round(Number(options?.height || 1024)));
+  const ERP_DESC = { kind: "ERP_GLOBAL", width: ERP_W, height: ERP_H };
   // Per-actionGroup paint surfaces.  Keyed by String(actionGroupId).
   const groupTargets = new Map();
 
@@ -984,7 +983,7 @@ export function createPaintEngineManager() {
 
       if (activePaintEraser) {
         // Paint eraser preview: apply current eraser stroke to every existing paint group.
-        if (!_eraserTmp) _eraserTmp = createCanvasSurface(ERP_W, ERP_H);
+        _eraserTmp = resizeSurface(_eraserTmp, ERP_W, ERP_H);
         clearSurface(_eraserTmp);
         _eraserTmp.ctx.drawImage(group.committedPaint.canvas, 0, 0);
         applyEraserToSurface(_eraserTmp.ctx, sharedCurrentStroke.canvas);
@@ -1009,7 +1008,7 @@ export function createPaintEngineManager() {
 
     if (isMaskActive && maskAs?.isEraser) {
       // Mask eraser preview: show committed minus current eraser stroke.
-      if (!_eraserTmp) _eraserTmp = createCanvasSurface(ERP_W, ERP_H);
+      _eraserTmp = resizeSurface(_eraserTmp, ERP_W, ERP_H);
       clearSurface(_eraserTmp);
       _eraserTmp.ctx.drawImage(maskTarget.committedMask.canvas, 0, 0);
       applyEraserToSurface(_eraserTmp.ctx, sharedCurrentStroke.canvas);
@@ -1056,9 +1055,7 @@ export function createPaintEngineManager() {
       if (layerKind === "mask") {
         const desc = maskTarget.descriptor;
         if (isEraser) {
-          if (!_eraserTmp || _eraserTmp.canvas.width < desc.width || _eraserTmp.canvas.height < desc.height) {
-            _eraserTmp = createCanvasSurface(desc.width, desc.height);
-          }
+          _eraserTmp = resizeSurface(_eraserTmp, desc.width, desc.height);
           clearSurface(_eraserTmp);
           drawStrokeToSurface(_eraserTmp.ctx, stroke, desc);
           applyEraserToSurface(maskTarget.committedMask.ctx, _eraserTmp.canvas);
@@ -1069,9 +1066,7 @@ export function createPaintEngineManager() {
       }
 
       if (isEraser) {
-        if (!_eraserTmp || _eraserTmp.canvas.width < ERP_DESC.width || _eraserTmp.canvas.height < ERP_DESC.height) {
-          _eraserTmp = createCanvasSurface(ERP_DESC.width, ERP_DESC.height);
-        }
+        _eraserTmp = resizeSurface(_eraserTmp, ERP_DESC.width, ERP_DESC.height);
         clearSurface(_eraserTmp);
         drawStrokeToSurface(_eraserTmp.ctx, stroke, ERP_DESC);
         for (const group of groupTargets.values()) {
@@ -1253,9 +1248,7 @@ export function createPaintEngineManager() {
       ? ((activeGroupId ? groupTargets.get(activeGroupId) : paintScratchTarget)?.activeStroke || null)
       : null;
     if (activePaintStroke?.isEraser) {
-      if (!_groupPreviewTmp || _groupPreviewTmp.canvas.width < ERP_W || _groupPreviewTmp.canvas.height < ERP_H) {
-        _groupPreviewTmp = createCanvasSurface(ERP_W, ERP_H);
-      }
+      _groupPreviewTmp = resizeSurface(_groupPreviewTmp, ERP_W, ERP_H);
       clearSurface(_groupPreviewTmp);
       _groupPreviewTmp.ctx.drawImage(group.committedPaint.canvas, 0, 0);
       applyEraserToSurface(_groupPreviewTmp.ctx, sharedCurrentStroke.canvas);
@@ -1263,9 +1256,7 @@ export function createPaintEngineManager() {
     }
     const as = isActive ? group.activeStroke : null;
     if (!as) return group.committedPaint.canvas;
-    if (!_groupPreviewTmp || _groupPreviewTmp.canvas.width < ERP_W || _groupPreviewTmp.canvas.height < ERP_H) {
-      _groupPreviewTmp = createCanvasSurface(ERP_W, ERP_H);
-    }
+    _groupPreviewTmp = resizeSurface(_groupPreviewTmp, ERP_W, ERP_H);
     clearSurface(_groupPreviewTmp);
     _groupPreviewTmp.ctx.drawImage(group.committedPaint.canvas, 0, 0);
     if (as.isEraser) {
@@ -1283,16 +1274,12 @@ export function createPaintEngineManager() {
   }
 
   function getMaskDisplayCanvas() {
-    if (!_maskPreviewTmp || _maskPreviewTmp.canvas.width < ERP_W || _maskPreviewTmp.canvas.height < ERP_H) {
-      _maskPreviewTmp = createCanvasSurface(ERP_W, ERP_H);
-    }
+    _maskPreviewTmp = resizeSurface(_maskPreviewTmp, ERP_W, ERP_H);
     clearSurface(_maskPreviewTmp);
     drawMaskTint(_maskPreviewTmp.ctx, maskTarget.committedMask.canvas);
     if (activeLayerKind === "mask" && maskTarget.activeStroke) {
       if (maskTarget.activeStroke.isEraser) {
-        if (!_eraserTmp || _eraserTmp.canvas.width < ERP_W || _eraserTmp.canvas.height < ERP_H) {
-          _eraserTmp = createCanvasSurface(ERP_W, ERP_H);
-        }
+        _eraserTmp = resizeSurface(_eraserTmp, ERP_W, ERP_H);
         clearSurface(_eraserTmp);
         _eraserTmp.ctx.drawImage(maskTarget.committedMask.canvas, 0, 0);
         applyEraserToSurface(_eraserTmp.ctx, sharedCurrentStroke.canvas);

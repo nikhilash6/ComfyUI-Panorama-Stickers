@@ -428,15 +428,19 @@ class PanoramaStickersNode(io.ComfyNode):
         out_h = max(1, out_w // 2)
         bg_hex = cls._normalize_hex_color(bg_color)
         state = merge_state(state_in=None, internal_state=state_json, fallback_preset=out_w, fallback_bg=bg_hex)
-        state["output_preset"] = out_w
-        state["bg_color"] = bg_hex
         warnings = []
 
         bg_np = None
         if bg_erp is not None:
-            bg_np = bg_erp[0].detach().cpu().numpy().astype(np.float32)
+            bg_np = _single_image_to_numpy(bg_erp, warnings)
         if bg_np is None:
             bg_np = np.broadcast_to(_hex_color_to_rgb01(bg_hex), (out_h, out_w, 3)).copy()
+        else:
+            out_h = int(bg_np.shape[0])
+            out_w = int(bg_np.shape[1])
+
+        state["output_preset"] = out_w
+        state["bg_color"] = bg_hex
 
         render_stickers = []
         for sticker in state.get("stickers", []):
@@ -640,17 +644,9 @@ class PanoramaCutoutNode(io.ComfyNode):
         hfov = float(np.clip(finite_float(shot.get("hFOV_deg", 90.0), 90.0), 1.0, 179.0))
         vfov = float(np.clip(finite_float(shot.get("vFOV_deg", 60.0), 60.0), 1.0, 179.0))
         roll = finite_float(shot.get("roll_deg", 0.0), 0.0)
-        ow_raw = finite_int(shot.get("out_w"), 0)
-        oh_raw = finite_int(shot.get("out_h"), 0)
-
-        use_megapixels = "out_w" not in shot or "out_h" not in shot or ow_raw <= 0 or oh_raw <= 0
-        if use_megapixels:
-            ow, oh = calculate_dimensions_from_megapixels(
-                output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE
-            )
-        else:
-            ow = int(np.clip(ow_raw, 8, cls.MAX_OUTPUT_SIDE))
-            oh = int(np.clip(oh_raw, 8, cls.MAX_OUTPUT_SIDE))
+        ow, oh = calculate_dimensions_from_megapixels(
+            output_megapixels, hfov, vfov, max_side=cls.MAX_OUTPUT_SIDE
+        )
 
         sticker_state_json = _build_sticker_state_json(shot, ow, oh)
         empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
