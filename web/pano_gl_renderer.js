@@ -196,11 +196,11 @@ void main() {
   vec4 mask = u_hasMask == 1 ? texture(u_mask, sampleUv) : vec4(0.0);
 
   float bgAlpha = clamp(bg.a * u_opacity, 0.0, 1.0);
-  vec3 premul = bg.rgb * bgAlpha;
+  vec3 premul = bg.rgb * u_opacity;
   float alpha = bgAlpha;
   if (u_hasPaint == 1) {
     float paintAlpha = clamp(paint.a * u_paintOpacity, 0.0, 1.0);
-    premul = paint.rgb * paintAlpha + premul * (1.0 - paintAlpha);
+    premul = paint.rgb * u_paintOpacity + premul * (1.0 - paintAlpha);
     alpha = paintAlpha + alpha * (1.0 - paintAlpha);
   }
   if (u_hasMask == 1 && u_showMaskTint == 1) {
@@ -266,7 +266,7 @@ void main() {
   vec2 texUv = vec2((fullU - u_crop.x) / cropSize.x, (fullV - u_crop.y) / cropSize.y);
   vec4 texel = texture(u_texture, texUv);
   float alpha = clamp(texel.a * u_opacity, 0.0, 1.0);
-  outColor = vec4(texel.rgb * alpha, alpha);
+  outColor = vec4(texel.rgb * u_opacity, alpha);
 }`;
 
 function getViewAngles(view, width, height) {
@@ -451,17 +451,19 @@ export function createPanoGlRenderer() {
     }
   }
 
-  function uploadPartialTexture(texture, source, rects = [], meta = { width: 0, height: 0 }) {
+  function uploadPartialTexture(texture, source, rects = [], meta = { width: 0, height: 0 }, premultiplyAlpha = false) {
     if (!gl || !texture || !source) return false;
     const sourceWidth = Math.max(1, Number(source.width || source.videoWidth || source.naturalWidth || 0));
     const sourceHeight = Math.max(1, Number(source.height || source.videoHeight || source.naturalHeight || 0));
     const validRects = Array.isArray(rects) ? rects.filter((rect) => rect && rect.w > 0 && rect.h > 0) : [];
     if (!validRects.length) return false;
     gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiplyAlpha ? 1 : 0);
     if (meta.width !== sourceWidth || meta.height !== sourceHeight) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       meta.width = sourceWidth;
       meta.height = sourceHeight;
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
       return true;
     }
     if (!uploadScratchCanvas) {
@@ -470,6 +472,7 @@ export function createPanoGlRenderer() {
     }
     if (!uploadScratchCtx) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
       return true;
     }
     for (const rect of validRects) {
@@ -484,6 +487,7 @@ export function createPanoGlRenderer() {
         uploadScratchCtx = uploadScratchCanvas.getContext("2d");
         if (!uploadScratchCtx) {
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+          gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
           return true;
         }
       } else {
@@ -492,10 +496,11 @@ export function createPanoGlRenderer() {
       uploadScratchCtx.drawImage(source, rx, ry, rw, rh, 0, 0, rw, rh);
       gl.texSubImage2D(gl.TEXTURE_2D, 0, rx, ry, gl.RGBA, gl.UNSIGNED_BYTE, uploadScratchCanvas);
     }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     return true;
   }
 
-  function setLayerTexture(which, texture, source, revision, dirtyRects = null) {
+  function setLayerTexture(which, texture, source, revision, dirtyRects = null, premultiplyAlpha = false) {
     if (!init()) return false;
     if (!source) {
       if (which === "background") backgroundRevision = null;
@@ -511,14 +516,16 @@ export function createPanoGlRenderer() {
     const sizeChanged = meta.width !== sourceWidth || meta.height !== sourceHeight;
     if (prevRevision === nextRevision && !sizeChanged && !(Array.isArray(dirtyRects) && dirtyRects.length)) return true;
     gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiplyAlpha ? 1 : 0);
     const didPartial = Array.isArray(dirtyRects) && dirtyRects.length
-      ? uploadPartialTexture(texture, source, dirtyRects, meta)
+      ? uploadPartialTexture(texture, source, dirtyRects, meta, premultiplyAlpha)
       : false;
     if (!didPartial) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       meta.width = sourceWidth;
       meta.height = sourceHeight;
     }
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
     if (which === "background") backgroundRevision = nextRevision;
     else if (which === "paint") paintRevision = nextRevision;
     else maskRevision = nextRevision;
@@ -526,15 +533,15 @@ export function createPanoGlRenderer() {
   }
 
   function setBackgroundErp(source, revision) {
-    return setLayerTexture("background", backgroundTexture, source, revision, null);
+    return setLayerTexture("background", backgroundTexture, source, revision, null, true);
   }
 
   function setPaintErp(source, revision, dirtyRects = null) {
-    return setLayerTexture("paint", paintTexture, source, revision, dirtyRects);
+    return setLayerTexture("paint", paintTexture, source, revision, dirtyRects, true);
   }
 
   function setMaskErp(source, revision, dirtyRects = null) {
-    return setLayerTexture("mask", maskTexture, source, revision, dirtyRects);
+    return setLayerTexture("mask", maskTexture, source, revision, dirtyRects, true);
   }
 
   function disposeStickerTextureEntry(entry) {
@@ -561,7 +568,9 @@ export function createPanoGlRenderer() {
     }
     if (entry.revision !== revision || entry.width !== width || entry.height !== height) {
       gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
       entry.revision = revision;
       entry.width = width;
       entry.height = height;

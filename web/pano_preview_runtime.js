@@ -1419,6 +1419,25 @@ function containRect(outer, aspect) {
   };
 }
 
+function drawContainedImagePreview(ctx, img, outerRect, dimAlpha = 0) {
+  if (!ctx || !img || !outerRect) return false;
+  const iw = Math.max(1, Number(img.naturalWidth || img.width || 0));
+  const ih = Math.max(1, Number(img.naturalHeight || img.height || 0));
+  if (iw <= 1 || ih <= 1) return false;
+  const drawRect = containRect(outerRect, iw / ih);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "low";
+  ctx.drawImage(img, drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+  const alpha = Math.max(0, Math.min(1, Number(dimAlpha) || 0));
+  if (alpha > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${alpha})`;
+    ctx.fillRect(drawRect.x, drawRect.y, drawRect.w, drawRect.h);
+  }
+  ctx.restore();
+  return true;
+}
+
 function getCutoutContainRect(baseRect, shot) {
   const w = Math.max(1, Number(baseRect?.w || 0));
   const h = Math.max(1, Number(baseRect?.h || 0));
@@ -2052,6 +2071,29 @@ function attachLegacyStickersPreview(node) {
 
 // Returns the display paint canvas for a node's paint state, or null if there are no strokes.
 // Creates and caches a lightweight paint engine per node; rebuilds only when the stroke list changes.
+function getDesiredPreviewPaintDescriptor(node, state) {
+  const connected = getLinkedInputImageForPreview(
+    node,
+    ["erp_image", "bg_erp"],
+    () => node.__panoDomPreview?.requestDraw?.(),
+  );
+  const connectedWidth = Number(connected?.naturalWidth || connected?.width || 0);
+  const connectedHeight = Number(connected?.naturalHeight || connected?.height || 0);
+  if (connectedWidth > 1 && connectedHeight > 1) {
+    return {
+      kind: "ERP_GLOBAL",
+      width: Math.max(1, Math.round(connectedWidth)),
+      height: Math.max(1, Math.round(connectedHeight)),
+    };
+  }
+  const presetWidth = Math.max(1, Number(state?.output_preset || 2048));
+  return {
+    kind: "ERP_GLOBAL",
+    width: presetWidth,
+    height: Math.max(1, Math.round(presetWidth * 0.5)),
+  };
+}
+
 function getNodePreviewPaintEngine(node, state) {
   const strokes = state?.painting?.paint?.strokes;
   const maskStrokes = state?.painting?.mask?.strokes;
@@ -2059,8 +2101,11 @@ function getNodePreviewPaintEngine(node, state) {
   const hasMask = Array.isArray(maskStrokes) && maskStrokes.length > 0;
   if (!hasPaint && !hasMask) return null;
 
-  if (!node.__panoPreviewPaintEngine) {
-    node.__panoPreviewPaintEngine = createPaintEngineManager();
+  const descriptor = getDesiredPreviewPaintDescriptor(node, state);
+  const descriptorKey = `${descriptor.width}x${descriptor.height}`;
+  if (!node.__panoPreviewPaintEngine || node.__panoPreviewPaintDescriptorKey !== descriptorKey) {
+    node.__panoPreviewPaintEngine = createPaintEngineManager(descriptor);
+    node.__panoPreviewPaintDescriptorKey = descriptorKey;
     node.__panoPreviewPaintRevision = null;
     node.__panoPreviewPaintRevisionKey = "";
   }
@@ -2158,6 +2203,86 @@ function getNodePreviewPaintSurface(node, state) {
   return null;
 }
 
+function getSourcePixelSize(source) {
+  return {
+    width: Math.max(1, Number(source?.naturalWidth || source?.videoWidth || source?.width || 0)),
+    height: Math.max(1, Number(source?.naturalHeight || source?.videoHeight || source?.height || 0)),
+  };
+}
+
+function getOrCreateSizedCanvas(owner, key, width, height) {
+  let surface = owner?.[key] || null;
+  if (!surface || surface.width !== width || surface.height !== height) {
+    surface = document.createElement("canvas");
+    surface.width = width;
+    surface.height = height;
+    owner[key] = surface;
+  }
+  return surface;
+}
+
+function compositeScaledOverlayOntoOpaqueCanvas(owner, targetCtx, overlaySource, dstW, dstH, scratchKey) {
+  if (!targetCtx || !overlaySource || !(dstW > 0) || !(dstH > 0)) return;
+  const srcSize = getSourcePixelSize(overlaySource);
+  if (srcSize.width === dstW && srcSize.height === dstH) {
+    targetCtx.drawImage(overlaySource, 0, 0, dstW, dstH);
+    return;
+  }
+  const scratch = getOrCreateSizedCanvas(owner, scratchKey, srcSize.width, srcSize.height);
+  const scratchCtx = scratch.getContext("2d", { willReadFrequently: true });
+  if (!scratchCtx) {
+    targetCtx.drawImage(overlaySource, 0, 0, dstW, dstH);
+    return;
+  }
+  try {
+    scratchCtx.clearRect(0, 0, srcSize.width, srcSize.height);
+    scratchCtx.drawImage(overlaySource, 0, 0, srcSize.width, srcSize.height);
+    const srcData = scratchCtx.getImageData(0, 0, srcSize.width, srcSize.height).data;
+    const dstImage = targetCtx.getImageData(0, 0, dstW, dstH);
+    const dstData = dstImage.data;
+    const maxSrcX = Math.max(0, srcSize.width - 1);
+    const maxSrcY = Math.max(0, srcSize.height - 1);
+    for (let y = 0; y < dstH; y += 1) {
+      const sy = ((y + 0.5) * srcSize.height) / dstH - 0.5;
+      const y0 = clamp(Math.floor(sy), 0, maxSrcY);
+      const y1 = clamp(y0 + 1, 0, maxSrcY);
+      const ty = clamp(sy - y0, 0, 1);
+      for (let x = 0; x < dstW; x += 1) {
+        const sx = ((x + 0.5) * srcSize.width) / dstW - 0.5;
+        const x0 = clamp(Math.floor(sx), 0, maxSrcX);
+        const x1 = clamp(x0 + 1, 0, maxSrcX);
+        const tx = clamp(sx - x0, 0, 1);
+        let srcA = 0;
+        let srcR = 0;
+        let srcG = 0;
+        let srcB = 0;
+        const sample = (px, py, weight) => {
+          const idx = (py * srcSize.width + px) * 4;
+          const a = (srcData[idx + 3] || 0) / 255;
+          srcA += a * weight;
+          srcR += ((srcData[idx] || 0) / 255) * a * weight;
+          srcG += ((srcData[idx + 1] || 0) / 255) * a * weight;
+          srcB += ((srcData[idx + 2] || 0) / 255) * a * weight;
+        };
+        sample(x0, y0, (1 - tx) * (1 - ty));
+        sample(x1, y0, tx * (1 - ty));
+        sample(x0, y1, (1 - tx) * ty);
+        sample(x1, y1, tx * ty);
+        if (srcA <= 1e-6) continue;
+        const dstIdx = (y * dstW + x) * 4;
+        const invA = 1 - srcA;
+        dstData[dstIdx] = Math.round(clamp((srcR + (dstData[dstIdx] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 1] = Math.round(clamp((srcG + (dstData[dstIdx + 1] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 2] = Math.round(clamp((srcB + (dstData[dstIdx + 2] / 255) * invA) * 255, 0, 255));
+        dstData[dstIdx + 3] = 255;
+      }
+    }
+    targetCtx.putImageData(dstImage, 0, 0);
+  } catch {
+    targetCtx.drawImage(overlaySource, 0, 0, dstW, dstH);
+  }
+}
+
 // Returns a canvas with bgImg and the paint layer pre-composited (ERP space).
 // Cached and invalidated when either bg or paint changes.
 function buildBgPaintCanvas(node, bgImg, paintCanvas, paintRev) {
@@ -2178,7 +2303,7 @@ function buildBgPaintCanvas(node, bgImg, paintCanvas, paintRev) {
     const compCtx = comp.getContext("2d");
     compCtx.clearRect(0, 0, bgW, bgH);
     compCtx.drawImage(bgImg, 0, 0, bgW, bgH);
-    compCtx.drawImage(paintCanvas, 0, 0, bgW, bgH);
+    compositeScaledOverlayOntoOpaqueCanvas(node, compCtx, paintCanvas, bgW, bgH, "__panoPreviewOverlayScratch");
     comp.__revKey = revKey;
   }
   return comp;
@@ -2204,6 +2329,12 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
 
   if (mode === "cutout") {
     const shot = getActiveShot(state);
+    const bgImg = getLinkedInputImageForPreview(
+      node,
+      ["erp_image", "bg_erp"],
+      () => node.__panoDomPreview?.requestDraw?.(),
+    );
+    const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
     if (canvas.width !== surfW || canvas.height !== surfH) {
       canvas.width = surfW;
       canvas.height = surfH;
@@ -2211,7 +2342,9 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     const rect = { x: 0, y: 0, w: surfW, h: surfH };
     const ownAspect = ownOutReady
       ? clamp(Number((ownOut.naturalWidth || ownOut.width) / Math.max(1, Number(ownOut.naturalHeight || ownOut.height || 1))), 0.05, 20.0)
-      : 1;
+      : (bgReady
+        ? clamp(Number((bgImg.naturalWidth || bgImg.width) / Math.max(1, Number(bgImg.naturalHeight || bgImg.height || 1))), 0.05, 20.0)
+        : 1);
     const cutoutView = shot ? buildCutoutViewParamsFromShot(shot) : null;
     const aspect = clamp(Number(cutoutView?.aspect || ownAspect || 1), 0.05, 20.0);
     const contain = containRect(rect, aspect);
@@ -2239,14 +2372,15 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
     if (ownOutReady) {
       ctx.drawImage(ownOut, contain.x, contain.y, contain.w, contain.h);
     } else {
-      const bgImg = getLinkedInputImageForPreview(
-        node,
-        ["erp_image", "bg_erp"],
-        () => node.__panoDomPreview?.requestDraw?.(),
-      );
-      const bgReady = !!(bgImg && bgImg.complete && (bgImg.naturalWidth || bgImg.width));
       loadingSrc = String(bgImg?.src || "");
       if (!shot) {
+        if (bgReady) {
+          const paintSurface = getNodePreviewPaintSurface(node, state);
+          const previewSource = (paintSurface?.source)
+            ? buildBgPaintCanvas(node, bgImg, paintSurface.source, paintSurface.revision || "")
+            : bgImg;
+          drawContainedImagePreview(ctx, previewSource, rect, 0.44);
+        }
         statusType = "empty";
         hintText = "Open editor and add frame";
       } else if (bgImg && !bgReady) {

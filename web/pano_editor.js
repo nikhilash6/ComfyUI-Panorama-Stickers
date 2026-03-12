@@ -245,18 +245,46 @@ function ratioTextFromPair(w, h) {
   const rh = Math.max(1, Math.round(hi / g));
   return `${rw}:${rh}`;
 }
+function deriveCutoutAspectFromFov(item) {
+  const hf = clamp(Number(item?.hFOV_deg || 90), 1, 179) * DEG2RAD;
+  const vf = clamp(Number(item?.vFOV_deg || 60), 1, 179) * DEG2RAD;
+  return Math.max(0.05, Math.min(20, Math.tan(hf * 0.5) / Math.max(1e-6, Math.tan(vf * 0.5))));
+}
+function getCanonicalCutoutAspectId(aspect) {
+  const value = Number(aspect);
+  if (!Number.isFinite(value) || value <= 0) return "1:1";
+  const presets = [
+    ["1:1", 1],
+    ["4:3", 4 / 3],
+    ["3:2", 3 / 2],
+    ["16:9", 16 / 9],
+    ["9:16", 9 / 16],
+    ["2:3", 2 / 3],
+    ["3:4", 3 / 4],
+  ];
+  const epsilon = 0.015;
+  for (const [label, preset] of presets) {
+    if (Math.abs(value - preset) <= epsilon) return label;
+  }
+  return "";
+}
+function deriveCutoutAspectLabelFromFov(item) {
+  const aspect = deriveCutoutAspectFromFov(item);
+  return getCanonicalCutoutAspectId(aspect) || ratioTextFromPair(aspect, 1);
+}
+function normalizeCutoutShotItem(raw) {
+  if (!raw || typeof raw !== "object") return raw;
+  const next = { ...raw, locked: raw.locked === true };
+  delete next.out_w;
+  delete next.out_h;
+  next.aspect_id = deriveCutoutAspectLabelFromFov(next);
+  return next;
+}
 function getCutoutAspectLabel(item) {
   if (!item || typeof item !== "object") return "1:1";
   const stored = String(item.aspect_id || "").trim();
-  if (stored) return stored;
-  const ow = toPositiveFinite(item.out_w, 0);
-  const oh = toPositiveFinite(item.out_h, 0);
-  if (ow > 0 && oh > 0) return ratioTextFromPair(ow, oh);
-  const hf = clamp(Number(item.hFOV_deg || 90), 1, 179) * DEG2RAD;
-  const vf = clamp(Number(item.vFOV_deg || 60), 1, 179) * DEG2RAD;
-  const rw = Math.max(1e-6, Math.tan(hf * 0.5));
-  const rh = Math.max(1e-6, Math.tan(vf * 0.5));
-  return ratioTextFromPair(rw, rh);
+  if (/^\d+:\d+$/.test(stored)) return stored;
+  return deriveCutoutAspectLabelFromFov(item);
 }
 function expandTri(d0, d1, d2, px = 1.1) {
   const cx = (d0.x + d1.x + d2.x) / 3;
@@ -435,7 +463,7 @@ function cloneShotList(raw) {
   if (!Array.isArray(raw)) return [];
   return raw.map((item) => {
     if (!item || typeof item !== "object") return item;
-    return { ...item, locked: item.locked === true };
+    return normalizeCutoutShotItem(item);
   });
 }
 
@@ -1734,6 +1762,7 @@ function showEditor(node, type, options = {}) {
     outputPreviewRect: null,
     frameView: { zoom: 1, panX: 0, panY: 0 },
     paintEngine: createPaintEngineManager(),
+    paintEngineDescriptorKey: "",
     paintEngineRevisionKey: "",
     paintStrokeRevision: 0,
     paintCompositeRevision: 0,
@@ -2771,14 +2800,11 @@ function showEditor(node, type, options = {}) {
     }
   }
   function buildCanonicalCutoutStickerState(item) {
-    const widthRaw = Number(item?.out_w);
-    const heightRaw = Number(item?.out_h);
-    const width = Math.max(1, Number.isFinite(widthRaw) ? widthRaw : 1024);
-    const height = Math.max(1, Number.isFinite(heightRaw) ? heightRaw : 1024);
     const yawRaw = Number(item?.yaw_deg);
     const pitchRaw = Number(item?.pitch_deg);
     const rollRaw = Number(item?.roll_deg ?? item?.rot_deg);
     const hFovRaw = Number(item?.hFOV_deg);
+    const sourceAspect = deriveCutoutAspectFromFov(item);
     return {
       kind: "pano_sticker_state",
       version: 1,
@@ -2788,7 +2814,7 @@ function showEditor(node, type, options = {}) {
         roll_deg: Number.isFinite(rollRaw) ? rollRaw : 0,
         hFOV_deg: clamp(Number.isFinite(hFovRaw) ? hFovRaw : 90, 0.1, 179),
       },
-      source_aspect: width / height,
+      source_aspect: sourceAspect,
     };
   }
   function buildCanonicalSelectedStickerState(item) {
@@ -2969,8 +2995,6 @@ function showEditor(node, type, options = {}) {
         vFOV_deg: Number(selectedBeforeClear.vFOV_deg || (type === "stickers" ? 30 : 60)),
         rot_deg: Number(selectedBeforeClear.rot_deg || 0),
         roll_deg: Number(selectedBeforeClear.roll_deg || 0),
-        out_w: Number(selectedBeforeClear.out_w || 1024),
-        out_h: Number(selectedBeforeClear.out_h || 1024),
         aspect_id: getCutoutAspectLabel(selectedBeforeClear),
       };
     }
@@ -4051,8 +4075,7 @@ function showEditor(node, type, options = {}) {
       Number(item?.vFOV_deg || 0).toFixed(4),
       Number(item?.rot_deg || 0).toFixed(4),
       Number(item?.roll_deg || 0).toFixed(4),
-      Number(item?.out_w || 0),
-      Number(item?.out_h || 0),
+      getCutoutAspectLabel(item),
     ].join(":");
     if (editor.mode === "frame") {
       const shot = getActiveCutoutShot();
@@ -5222,11 +5245,13 @@ function showEditor(node, type, options = {}) {
 
   function getPaintingRevisionKey() {
     // Tracks stroke changes (commit, undo/redo, clear all).
-    return String(editor.paintStrokeRevision);
+    const descriptor = getDesiredPaintTargetDescriptor();
+    return `${String(editor.paintStrokeRevision)}:${descriptor.width}x${descriptor.height}`;
   }
 
   function getPaintingCompositeRevisionKey() {
-    return `${String(editor.paintStrokeRevision)}:${String(editor.paintCompositeRevision)}`;
+    const descriptor = getDesiredPaintTargetDescriptor();
+    return `${String(editor.paintStrokeRevision)}:${String(editor.paintCompositeRevision)}:${descriptor.width}x${descriptor.height}`;
   }
 
   function bumpPaintingStrokeRevision() {
@@ -5268,14 +5293,36 @@ function showEditor(node, type, options = {}) {
   }
 
   function rebuildPaintEngineIfNeeded() {
+    const descriptor = getDesiredPaintTargetDescriptor();
+    const descriptorKey = `${descriptor.width}x${descriptor.height}`;
+    if (editor.paintEngineDescriptorKey !== descriptorKey) {
+      editor.paintEngine = createPaintEngineManager(descriptor);
+      editor.paintEngineDescriptorKey = descriptorKey;
+      editor.paintEngineRevisionKey = "";
+    }
     const key = getPaintingRevisionKey();
     if (editor.paintEngineRevisionKey === key) return;
     editor.paintEngineRevisionKey = key;
     editor.paintEngine?.rebuildCommitted(state);
   }
 
+  function getDesiredPaintTargetDescriptor() {
+    const connected = getConnectedErpImage();
+    const width = Number(connected?.naturalWidth || connected?.width || 0);
+    const height = Number(connected?.naturalHeight || connected?.height || 0);
+    if (width > 1 && height > 1) {
+      return { kind: "ERP_GLOBAL", width, height };
+    }
+    const presetWidth = Math.max(1, Number(state?.output_preset || 2048));
+    return {
+      kind: "ERP_GLOBAL",
+      width: presetWidth,
+      height: Math.max(1, Math.round(presetWidth * 0.5)),
+    };
+  }
+
   function getActivePaintTargetDescriptor() {
-    return { kind: "ERP_GLOBAL", width: 2048, height: 1024 };
+    return getDesiredPaintTargetDescriptor();
   }
 
   function getSourcePoint2D(stroke, point) {
@@ -6157,6 +6204,9 @@ function showEditor(node, type, options = {}) {
       out = clamp(out, min, max);
       if (key === "yaw_deg") out = wrapYaw(out);
       selected[key] = out;
+      if (type === "cutout" && (key === "hFOV_deg" || key === "vFOV_deg")) {
+        selected.aspect_id = deriveCutoutAspectLabelFromFov(selected);
+      }
       rng.value = String(out);
       num.value = formatParamValue(out);
       setRangeFill();
@@ -6180,8 +6230,6 @@ function showEditor(node, type, options = {}) {
       vFOV_deg: Number(selected.vFOV_deg || (type === "stickers" ? 30 : 60)),
       rot_deg: Number(selected.rot_deg || 0),
       roll_deg: Number(selected.roll_deg || 0),
-      out_w: Number(selected.out_w || 1024),
-      out_h: Number(selected.out_h || 1024),
       aspect_id: getCutoutAspectLabel(selected),
     };
     const rows = side.querySelectorAll(".pano-field[data-key]");
@@ -6377,15 +6425,13 @@ function showEditor(node, type, options = {}) {
           vFOV_deg: Number(selected.vFOV_deg || (selectedKind === "image" ? 30 : 60)),
           rot_deg: Number(selected.rot_deg || 0),
           roll_deg: Number(selected.roll_deg || 0),
-          out_w: Number(selected.out_w || 1024),
-          out_h: Number(selected.out_h || 1024),
           aspect_id: getCutoutAspectLabel(selected),
         };
       }
     }
     const fallback = editor.panelLastValues || ((type === "stickers" || selectedKind === "image")
       ? { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 30, vFOV_deg: 30, rot_deg: 0 }
-      : { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 90, vFOV_deg: 60, roll_deg: 0, out_w: 1024, out_h: 1024, aspect_id: "1:1" });
+      : { yaw_deg: 0, pitch_deg: 0, hFOV_deg: 90, vFOV_deg: 60, roll_deg: 0, aspect_id: "1:1" });
     const inspectorSelected = selectedKind === "stroke" ? null : selected;
     const effective = inspectorSelected || fallback;
     const enabled = !!inspectorSelected;
@@ -6909,9 +6955,7 @@ function showEditor(node, type, options = {}) {
       hFOV_deg: 64,
       vFOV_deg: 40,
       roll_deg: 0,
-      out_w: 1024,
-      out_h: 1024,
-      aspect_id: "1:1",
+      aspect_id: ratioTextFromPair(64, 40),
     }];
     setSelectedItem(state.shots[0]);
     editor.cutoutAspectOpen = false;
@@ -7162,10 +7206,15 @@ function showEditor(node, type, options = {}) {
       "16:9": [16, 9],
     };
     const currentLandscape = (() => {
+      const stored = String(selected.aspect_id || "").trim();
+      if (/^\d+:\d+$/.test(stored)) {
+        const [sw, sh] = stored.split(":").map((value) => Number(value));
+        if (Number.isFinite(sw) && Number.isFinite(sh)) return sw >= sh;
+      }
       const hf = Number(selected.hFOV_deg || 64);
       const vf = Number(selected.vFOV_deg || 40);
       if (Math.abs(hf - vf) > 1e-6) return hf >= vf;
-      return Number(selected.out_w || 1024) >= Number(selected.out_h || 1024);
+      return deriveCutoutAspectFromFov(selected) >= 1;
     })();
     let [aw, ah] = pairs[String(aspect)] || pairs["1:1"];
     if ((aw >= ah) !== currentLandscape) [aw, ah] = [ah, aw];
@@ -7177,12 +7226,6 @@ function showEditor(node, type, options = {}) {
     const targetVF = clamp(span / Math.sqrt(ratio), 1, 179);
     selected.hFOV_deg = targetHF;
     selected.vFOV_deg = targetVF;
-    const base = Math.max(512, Number(selected.out_w || 1024), Number(selected.out_h || 1024));
-    const scale = base / Math.max(aw, ah);
-    const ow = Math.max(256, Math.round((aw * scale) / 8) * 8);
-    const oh = Math.max(256, Math.round((ah * scale) / 8) * 8);
-    selected.out_w = ow;
-    selected.out_h = oh;
     selected.aspect_id = String(aspect);
   }
 
@@ -7192,10 +7235,15 @@ function showEditor(node, type, options = {}) {
     const rh = Math.max(1, Number(h));
     if (!Number.isFinite(rw) || !Number.isFinite(rh)) return false;
     const currentLandscape = (() => {
+      const stored = String(selected.aspect_id || "").trim();
+      if (/^\d+:\d+$/.test(stored)) {
+        const [sw, sh] = stored.split(":").map((value) => Number(value));
+        if (Number.isFinite(sw) && Number.isFinite(sh)) return sw >= sh;
+      }
       const hf = Number(selected.hFOV_deg || 64);
       const vf = Number(selected.vFOV_deg || 40);
       if (Math.abs(hf - vf) > 1e-6) return hf >= vf;
-      return Number(selected.out_w || 1024) >= Number(selected.out_h || 1024);
+      return deriveCutoutAspectFromFov(selected) >= 1;
     })();
     let aw = rw;
     let ah = rh;
@@ -7206,24 +7254,17 @@ function showEditor(node, type, options = {}) {
     const span = Math.sqrt(Math.max(1, hf * vf));
     selected.hFOV_deg = clamp(span * Math.sqrt(ratio), 1, 179);
     selected.vFOV_deg = clamp(span / Math.sqrt(ratio), 1, 179);
-    const base = Math.max(512, Number(selected.out_w || 1024), Number(selected.out_h || 1024));
-    const scale = base / Math.max(aw, ah);
-    selected.out_w = Math.max(256, Math.round((aw * scale) / 8) * 8);
-    selected.out_h = Math.max(256, Math.round((ah * scale) / 8) * 8);
     selected.aspect_id = `${Math.round(rw)}:${Math.round(rh)}`;
     return true;
   }
 
   function rotateCutoutAspect90(selected) {
     if (!selected) return;
-    const ow = Math.max(8, Number(selected.out_w || 1024));
-    const oh = Math.max(8, Number(selected.out_h || 1024));
-    selected.out_w = oh;
-    selected.out_h = ow;
     const hf = Math.max(1, Number(selected.hFOV_deg || 90));
     const vf = Math.max(1, Number(selected.vFOV_deg || 60));
     selected.hFOV_deg = vf;
     selected.vFOV_deg = hf;
+    selected.aspect_id = deriveCutoutAspectLabelFromFov(selected);
   }
 
   function normalizeDisplayZIndices() {
@@ -9109,6 +9150,7 @@ function showEditor(node, type, options = {}) {
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      it.item.aspect_id = deriveCutoutAspectLabelFromFov(it.item);
       requestDraw({ localOnly: true });
       return;
     }
@@ -9117,6 +9159,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.hFOV_deg = clamp(it.startHFOV * ratio, 1, 179);
+      it.item.aspect_id = deriveCutoutAspectLabelFromFov(it.item);
       requestDraw({ localOnly: true });
       return;
     }
@@ -9125,6 +9168,7 @@ function showEditor(node, type, options = {}) {
       const d = Math.max(1, Math.hypot(p.x - it.center.x, p.y - it.center.y));
       const ratio = d / it.startDist;
       it.item.vFOV_deg = clamp(it.startVFOV * ratio, 1, 179);
+      it.item.aspect_id = deriveCutoutAspectLabelFromFov(it.item);
       requestDraw({ localOnly: true });
       return;
     }
