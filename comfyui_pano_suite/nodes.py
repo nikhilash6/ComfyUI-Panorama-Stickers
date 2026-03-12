@@ -629,14 +629,49 @@ class PanoramaCutoutNode(io.ComfyNode):
         if not shots:
             oh = int(src.shape[0])
             ow = int(src.shape[1])
-            empty_mask = torch.zeros((1, oh, ow), dtype=torch.float32)
+            painting_payload = resolve_painting_layer_payload(
+                state.get("painting_layer"),
+                erp_width=ow,
+                erp_height=oh,
+            )
+            out, used_group_layers = _compose_display_list_to_erp(
+                state,
+                src,
+                painting_payload=painting_payload,
+                base_dir=Path.cwd(),
+                quality="export",
+            )
+            painting_state = state.get("painting")
+            if not used_group_layers:
+                paint_rgba = painting_payload.get("paint") if isinstance(painting_payload, dict) else None
+                if paint_rgba is None:
+                    if painting_state_has_renderables(painting_state):
+                        _push_ui_warning(
+                            ui_ret,
+                            "pano_cutout_warnings",
+                            "Cutout passthrough fell back to backend stroke rendering because uploaded paint layers were unavailable.",
+                        )
+                    paint_rgba, _mask_bw = render_painting_to_erp(state.get("painting"), ow, oh)
+                out = alpha_composite_over_rgb(out, paint_rgba)
+            mask_bw = painting_payload.get("mask") if isinstance(painting_payload, dict) else None
+            if mask_bw is None:
+                if painting_state_has_renderables(painting_state):
+                    _push_ui_warning(
+                        ui_ret,
+                        "pano_cutout_warnings",
+                        "Cutout passthrough mask fell back to backend stroke rendering because uploaded mask layers were unavailable.",
+                    )
+                _paint_rgba, mask_bw = render_painting_to_erp(state.get("painting"), ow, oh)
+            if mask_bw is None:
+                mask_bw = np.zeros((oh, ow), dtype=np.float32)
             _push_ui_warning(
                 ui_ret,
                 "pano_cutout_warnings",
                 "Panorama Cutout has no frame, so the ERP image was returned unchanged.",
             )
-            out_t = torch.from_numpy(src.astype(np.float32, copy=False))[None, ...]
-            return io.NodeOutput(out_t, '{"stickers":[],"version":1}', empty_mask, ui=ui_ret)
+            out_t = torch.from_numpy(out.astype(np.float32, copy=False))[None, ...]
+            mask_t = torch.from_numpy(np.clip(mask_bw.astype(np.float32), 0.0, 1.0))[None, ...]
+            return io.NodeOutput(out_t, '{"stickers":[],"version":1}', mask_t, ui=ui_ret)
 
         shot = shots[0]
         yaw = finite_float(shot.get("yaw_deg", 0.0), 0.0)
