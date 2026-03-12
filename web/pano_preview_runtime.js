@@ -1048,6 +1048,25 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
     if (!originNode) continue;
     const resolvedOriginSlot = Number(originSlot || 0);
 
+    const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
+    const outImgs = Array.isArray(outputs?.images) ? outputs.images : [];
+    if (outImgs.length) {
+      const ordered = [];
+      if (resolvedOriginSlot >= 0 && resolvedOriginSlot < outImgs.length) ordered.push(outImgs[resolvedOriginSlot]);
+      ordered.push(...outImgs);
+      for (const cand of ordered) {
+        const src = imageSourceFromCandidate(cand);
+        if (src) {
+          panoPreviewLog(node, "image-resolve", {
+            inputName: String(input?.name || ""),
+            sourceType: "nodeOutputs",
+            stage: "hit",
+          });
+          return { src, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
+        }
+      }
+    }
+
     let appNodeImageUrls = [];
     try {
       appNodeImageUrls = typeof app?.getNodeImageUrls === "function" ? (app.getNodeImageUrls(originNode) || []) : [];
@@ -1067,25 +1086,6 @@ function findLinkedInputImageSource(node, preferredInputNames = []) {
             stage: "hit",
           });
           return { src, sourceType: "appNodeImageUrls", inputName: String(input?.name || "") };
-        }
-      }
-    }
-
-    const outputs = lookupNodeOutputEntry(originNode?.id ?? originId);
-    const outImgs = Array.isArray(outputs?.images) ? outputs.images : [];
-    if (outImgs.length) {
-      const ordered = [];
-      if (resolvedOriginSlot >= 0 && resolvedOriginSlot < outImgs.length) ordered.push(outImgs[resolvedOriginSlot]);
-      ordered.push(...outImgs);
-      for (const cand of ordered) {
-        const src = imageSourceFromCandidate(cand);
-        if (src) {
-          panoPreviewLog(node, "image-resolve", {
-            inputName: String(input?.name || ""),
-            sourceType: "nodeOutputs",
-            stage: "hit",
-          });
-          return { src, sourceType: "nodeOutputs", inputName: String(input?.name || "") };
         }
       }
     }

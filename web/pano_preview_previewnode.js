@@ -115,11 +115,11 @@ function getLinkedImageUrl(node, imageInputName = "erp_image") {
   const outputs = lookupNodeOutputEntry(originId);
   const selfOutput = lookupNodeOutputEntry(node?.id);
   const candidateGroups = [
+    outputs?.images,
     outputs?.ui?.pano_input_images,
     outputs?.pano_input_images,
     selfOutput?.ui?.pano_input_images,
     selfOutput?.pano_input_images,
-    outputs?.images,
   ];
   for (const group of candidateGroups) {
     if (!Array.isArray(group)) continue;
