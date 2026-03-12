@@ -1,6 +1,8 @@
 import { getCutoutShotParams } from "./pano_cutout_projection.js";
 import { clamp } from "./pano_math.js";
 
+export const HIDDEN_PREVIEW_OPACITY = 0.28;
+
 function normalizeCrop(crop) {
   const raw = (crop && typeof crop === "object") ? crop : {};
   const x0 = clamp(Number(raw.x0 ?? 0), 0, 1);
@@ -15,11 +17,14 @@ function normalizeCrop(crop) {
   };
 }
 
-export function normalizeStickerItem(rawSticker) {
+export function normalizeStickerItem(rawSticker, options = {}) {
   if (!rawSticker || typeof rawSticker !== "object") return null;
   const explicitAssetId = String(rawSticker.asset_id || rawSticker.assetId || "").trim();
   const external = rawSticker.type === "external_image" || rawSticker.source_kind === "external_image";
   const assetId = explicitAssetId || (external ? String(rawSticker.id || "").trim() : "");
+  const includeHidden = options.includeHidden === true;
+  const hidden = rawSticker.visible === false;
+  const hiddenExternalPreview = includeHidden && external && hidden;
   return {
     id: String(rawSticker.id || ""),
     assetId,
@@ -30,8 +35,8 @@ export function normalizeStickerItem(rawSticker) {
     hFovDeg: clamp(Number(rawSticker.hFOV_deg || rawSticker.hFovDeg || 30), 1, 179),
     vFovDeg: clamp(Number(rawSticker.vFOV_deg || rawSticker.vFovDeg || 30), 1, 179),
     crop: normalizeCrop(rawSticker.crop),
-    opacity: clamp(Number(rawSticker.opacity ?? 1), 0, 1),
-    visible: rawSticker.visible !== false,
+    opacity: hiddenExternalPreview ? HIDDEN_PREVIEW_OPACITY : clamp(Number(rawSticker.opacity ?? 1), 0, 1),
+    visible: hiddenExternalPreview ? true : rawSticker.visible !== false,
     external,
   };
 }
@@ -42,7 +47,7 @@ export function buildStickerSceneFromState(state, options = {}) {
     : Array.isArray(state?.stickers) ? state.stickers : [];
   const includeHidden = options.includeHidden === true;
   const normalized = stickers
-    .map((item) => normalizeStickerItem(item))
+    .map((item) => normalizeStickerItem(item, { includeHidden }))
     .filter((item) => item && (includeHidden || item.visible !== false))
     .sort((a, b) => Number(a.zIndex || 0) - Number(b.zIndex || 0));
   return {

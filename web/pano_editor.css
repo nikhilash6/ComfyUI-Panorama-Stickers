@@ -851,6 +851,9 @@
   border-left: 1px solid rgba(255,255,255,0.12);
   border-right: 1px solid rgba(255,255,255,0.12);
 }
+.pano-paint-size-row.disabled {
+  opacity: 0.45;
+}
 .pano-paint-size-slider {
   width: 88px;
   cursor: pointer;
@@ -860,6 +863,9 @@
   height: 3px;
   border-radius: 999px;
   padding: 0;
+}
+.pano-paint-size-row.disabled .pano-paint-size-slider {
+  cursor: default;
 }
 .pano-paint-size-slider::-webkit-slider-runnable-track {
   height: 3px;
