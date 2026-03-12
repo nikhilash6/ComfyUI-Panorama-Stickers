@@ -6127,7 +6127,7 @@ function showEditor(node, type, options = {}) {
       paintPanes.forEach((pane) => {
         pane.classList.remove("is-active");
       });
-      paintColorPop.hidden = true;
+      if (paintColorPop) paintColorPop.hidden = true;
       visiblePaintPaneMode = "";
       return;
     }
