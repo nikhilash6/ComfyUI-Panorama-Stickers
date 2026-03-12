@@ -2639,7 +2639,7 @@ function showEditor(node, type, options = {}) {
     return String(getActivePaintToolKind() || "") === "lasso_fill";
   }
   function toggleSelectedExternalStickerVisibility() {
-    if (readOnly || type !== "stickers") return;
+    if (readOnly) return;
     const selected = getSelected();
     if (!selected || !isExternalSticker(selected)) return;
     selected.visible = isStickerHidden(selected);
