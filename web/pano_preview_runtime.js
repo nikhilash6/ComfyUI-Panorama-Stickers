@@ -2353,7 +2353,7 @@ function drawCanvas(node, canvas, fovBtn, interaction = null) {
           const previewSource = (paintSurface?.source)
             ? buildBgPaintCanvas(node, bgImg, paintSurface.source, paintSurface.revision || "")
             : bgImg;
-          drawContainedImagePreview(ctx, previewSource, rect, 0.32);
+          drawContainedImagePreview(ctx, previewSource, rect, 0.44);
         }
         statusType = "empty";
         hintText = "Open editor and add frame";
