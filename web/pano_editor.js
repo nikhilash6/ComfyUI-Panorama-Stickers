@@ -1599,6 +1599,10 @@ function showEditor(node, type, options = {}) {
               <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="eraser" aria-label="Mask Eraser" data-tip="Mask eraser">${ICON.eraser_tool}</button>
               <button class="pano-btn pano-btn-icon" type="button" data-mask-tool="lasso_fill" aria-label="Mask Lasso" data-tip="Mask lasso">${ICON.lasso_tool}</button>
             </div>
+            <div class="pano-paint-size-row" data-paint-size-row hidden>
+              <input class="pano-paint-size-slider" data-paint-size-slider type="range" min="1" max="120" step="1" value="10">
+              <span class="pano-paint-size-value" data-paint-size-value>10</span>
+            </div>
             <div class="pano-paint-clear-row" data-paint-clear-row>
               <button class="pano-btn pano-btn-icon pano-paint-layer-clear" type="button" data-paint-layer-clear-current="mask" aria-label="Clear mask" data-tip="Clear mask">${ICON.clear}</button>
             </div>
@@ -1679,11 +1683,11 @@ function showEditor(node, type, options = {}) {
   const paintAlphaValue = root.querySelector("[data-paint-alpha-value]");
   const paintColorHistoryWrap = root.querySelector("[data-paint-color-history-wrap]");
   const paintColorHistory = root.querySelector("[data-paint-color-history]");
-  const paintSizeRow = root.querySelector("[data-paint-size-row]");
+  const paintSizeRows = Array.from(root.querySelectorAll("[data-paint-size-row]"));
   const paintClearRows = Array.from(root.querySelectorAll("[data-paint-clear-row]"));
   const paintLayerClearCurrentBtns = Array.from(root.querySelectorAll("[data-paint-layer-clear-current]"));
-  const paintSizeSlider = root.querySelector("[data-paint-size-slider]");
-  const paintSizeValue = root.querySelector("[data-paint-size-value]");
+  const paintSizeSliders = Array.from(root.querySelectorAll("[data-paint-size-slider]"));
+  const paintSizeValues = Array.from(root.querySelectorAll("[data-paint-size-value]"));
   let paintSizePreviewTimer = 0;
   let paintPaneFadeTimer = 0;
   let visiblePaintPaneMode = "";
@@ -5469,7 +5473,9 @@ function showEditor(node, type, options = {}) {
       targetCtx.fillStyle = "rgba(0,0,0,1)";
       return;
     }
-    const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
+    const c = String(stroke?.layerKind || "") === "mask"
+      ? { r: 0, g: 0, b: 0, a: 1 }
+      : (stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 });
     const alpha = preview ? Math.max(0.28, Number(c.a ?? 1) * 0.88) : Math.max(0.12, Number(c.a ?? 1));
     targetCtx.fillStyle = `rgba(${Math.round(Number(c.r || 0) * 255)}, ${Math.round(Number(c.g || 0) * 255)}, ${Math.round(Number(c.b || 0) * 255)}, ${alpha})`;
   }
@@ -5900,6 +5906,7 @@ function showEditor(node, type, options = {}) {
     }
     if (!Array.isArray(projected) || projected.length < 3) return;
 
+    const isMaskLasso = String(stroke?.layerKind || "") === "mask";
     const c = stroke?.color || { r: 1, g: 0.25, b: 0.25, a: 1 };
     const cr = Math.round(Number(c.r || 0) * 255);
     const cg = Math.round(Number(c.g || 0) * 255);
@@ -5910,11 +5917,24 @@ function showEditor(node, type, options = {}) {
     ctx.moveTo(Number(projected[0].x || 0), Number(projected[0].y || 0));
     for (let i = 1; i < projected.length; i++) ctx.lineTo(Number(projected[i].x || 0), Number(projected[i].y || 0));
     ctx.closePath();
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
-    ctx.strokeStyle = `rgba(${cr},${cg},${cb},1)`;
-    ctx.stroke();
-    ctx.setLineDash([]);
+    if (isMaskLasso) {
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 6]);
+      ctx.lineDashOffset = 0;
+      ctx.strokeStyle = "rgba(0,0,0,0.96)";
+      ctx.stroke();
+      ctx.lineDashOffset = -6;
+      ctx.strokeStyle = "rgba(255,255,255,0.96)";
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+    } else {
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.strokeStyle = `rgba(${cr},${cg},${cb},1)`;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     ctx.restore();
   }
 
@@ -6137,7 +6157,9 @@ function showEditor(node, type, options = {}) {
       pane.classList.toggle("is-active", pane === nextPane);
     });
     visiblePaintPaneMode = nextMode;
-    if (paintSizeRow) paintSizeRow.hidden = false;
+    paintSizeRows.forEach((row) => {
+      row.hidden = false;
+    });
     paintClearRows.forEach((row) => {
       row.hidden = false;
     });
@@ -6215,14 +6237,18 @@ function showEditor(node, type, options = {}) {
     const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
     const currentSize = editor.brushSizes[sizePresetId] ?? 10;
     const lassoToolActive = isActiveLassoTool();
-    if (paintSizeRow) paintSizeRow.classList.toggle("disabled", lassoToolActive);
-    if (paintSizeSlider) {
-      paintSizeSlider.value = String(currentSize);
+    paintSizeRows.forEach((row) => {
+      row.classList.toggle("disabled", lassoToolActive);
+    });
+    paintSizeSliders.forEach((slider) => {
+      slider.value = String(currentSize);
       const pct = ((currentSize - 1) / 119) * 100;
-      paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
-      paintSizeSlider.disabled = lassoToolActive;
-    }
-    if (paintSizeValue) paintSizeValue.textContent = String(currentSize);
+      slider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
+      slider.disabled = lassoToolActive;
+    });
+    paintSizeValues.forEach((valueEl) => {
+      valueEl.textContent = String(currentSize);
+    });
   }
 
   function addParamRow(container, selected, key, label, min, max, step, enabled = true) {
@@ -7602,10 +7628,12 @@ function showEditor(node, type, options = {}) {
     const size = Math.max(1, rawSize) * Math.max(0.1, Number(preset.sizeScale ?? 1));
     const radius = Math.max(3, size * 0.5);
     const baseColor = layerKind === "mask"
-      ? { r: 34 / 255, g: 197 / 255, b: 94 / 255, a: 0.8 }
+      ? (toolKind === "lasso_fill"
+        ? { r: 0, g: 0, b: 0, a: 1 }
+        : { r: 34 / 255, g: 197 / 255, b: 94 / 255, a: 0.8 })
       : (toolKind === "eraser" ? { r: 1, g: 1, b: 1, a: 0.2 } : cloneColor(editor.paintColor));
     const fillAlpha = layerKind === "mask"
-      ? 0.2
+      ? (toolKind === "lasso_fill" ? 0.18 : 0.2)
       : (toolKind === "eraser" ? 0.06 : clamp(Math.max(0.16, Number(baseColor.a ?? 1) * 0.3), 0.16, 0.52));
     const strokeAlpha = layerKind === "mask"
       ? 0.95
@@ -7773,7 +7801,7 @@ function showEditor(node, type, options = {}) {
       toolKind,
       size,
       createdAt: Date.now(),
-      color: layerKind === "paint" ? { ...editor.paintColor } : null,
+      color: layerKind === "paint" ? { ...editor.paintColor } : { r: 0, g: 0, b: 0, a: 1 },
       radiusModel: radiusSpec.radiusModel,
       radiusValue: radiusSpec.radiusValue,
       geometry: {
@@ -7803,7 +7831,7 @@ function showEditor(node, type, options = {}) {
       toolKind,
       size: 10,
       createdAt: Date.now(),
-      color: layerKind === "paint" ? { ...editor.paintColor } : null,
+      color: layerKind === "paint" ? { ...editor.paintColor } : { r: 0, g: 0, b: 0, a: 1 },
       radiusModel: null,
       radiusValue: null,
       geometry: {
@@ -9597,22 +9625,27 @@ function showEditor(node, type, options = {}) {
       clearPaintingLayer(layerKind);
     };
   });
-  if (paintSizeSlider) {
-    paintSizeSlider.oninput = () => {
-      if (paintSizeSlider.disabled) return;
-      const v = Math.max(1, Math.min(120, Math.round(Number(paintSizeSlider.value))));
+  paintSizeSliders.forEach((slider) => {
+    slider.oninput = () => {
+      if (slider.disabled) return;
+      const v = Math.max(1, Math.min(120, Math.round(Number(slider.value))));
       const sizePresetId = getBrushPresetIdForTool(editor.primaryTool === "paint" ? editor.paintTool : editor.maskTool);
       editor.brushSizes[sizePresetId] = v;
       const pct = ((v - 1) / 119) * 100;
-      paintSizeSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
-      if (paintSizeValue) paintSizeValue.textContent = String(v);
+      paintSizeSliders.forEach((otherSlider) => {
+        otherSlider.value = String(v);
+        otherSlider.style.setProperty("--v", `${clamp(pct, 0, 100)}%`);
+      });
+      paintSizeValues.forEach((valueEl) => {
+        valueEl.textContent = String(v);
+      });
       showPaintSizePreview();
     };
-    paintSizeSlider.onchange = () => hidePaintSizePreview();
-    paintSizeSlider.addEventListener("pointerup", hidePaintSizePreview);
-    paintSizeSlider.addEventListener("pointercancel", hidePaintSizePreview);
-    paintSizeSlider.addEventListener("blur", hidePaintSizePreview);
-  }
+    slider.onchange = () => hidePaintSizePreview();
+    slider.addEventListener("pointerup", hidePaintSizePreview);
+    slider.addEventListener("pointercancel", hidePaintSizePreview);
+    slider.addEventListener("blur", hidePaintSizePreview);
+  });
   if (paintColorRow) {
     paintColorRow.querySelectorAll("[data-paint-color-swatch]").forEach((btn) => {
       btn.onclick = () => {
