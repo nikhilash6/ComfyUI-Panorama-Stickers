@@ -42,6 +42,10 @@ https://github.com/user-attachments/assets/bf74e953-8ceb-4c7f-afa2-1c805f12c7af
 
 ## Changelog
 
+### 1.2.0
+
+- Added Paint / Mask tools to the modal panorama editor.
+
 ### 1.1.0
 
 - Switched panorama rendering to a WebGL-first pipeline.
@@ -49,8 +53,9 @@ https://github.com/user-attachments/assets/bf74e953-8ceb-4c7f-afa2-1c805f12c7af
 
 ## ToDo
 
-- Enable painting directly inside the modal UI.
-- Merge the `Panorama Stickers` node and the `Panorama Cutout` node into a unified workflow.
+- Add tools to split panoramas into multiple images for external upscaling and merge them back afterward.
+- Estimate camera intrinsics automatically from input images.
+- Add video workflow support.
 - Add integration with Hugin.
 
 ## License
